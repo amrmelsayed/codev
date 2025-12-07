@@ -169,7 +169,8 @@
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border);
       min-height: 40px;
-      overflow: hidden;
+      overflow: visible;  /* Allow overflow menu dropdown to be visible */
+      position: relative;  /* Position context for overflow menu */
     }
 
     .tabs-scroll {
@@ -640,7 +641,7 @@
 
     <!-- Right pane: Tabbed interface -->
     <div class="right-pane">
-      <div class="tab-bar" style="position: relative;">
+      <div class="tab-bar">
         <div class="tabs-scroll" id="tabs-container"></div>
         <button class="overflow-btn" id="overflow-btn" onclick="toggleOverflowMenu()" aria-haspopup="true" aria-expanded="false" title="Show all tabs">
           <span>...</span>
@@ -743,6 +744,8 @@
 
     // Set up overflow detection for the tab bar
     function setupOverflowDetection() {
+      const container = document.getElementById('tabs-container');
+
       // Check on load
       checkTabOverflow();
 
@@ -753,9 +756,17 @@
         resizeTimeout = setTimeout(checkTabOverflow, 100);
       });
 
+      // Check on scroll (debounced) - updates +N count when user scrolls tabs
+      if (container) {
+        let scrollTimeout;
+        container.addEventListener('scroll', () => {
+          clearTimeout(scrollTimeout);
+          scrollTimeout = setTimeout(checkTabOverflow, 50);
+        });
+      }
+
       // Also use ResizeObserver for the tabs container if available
       if (typeof ResizeObserver !== 'undefined') {
-        const container = document.getElementById('tabs-container');
         if (container) {
           const observer = new ResizeObserver(() => {
             checkTabOverflow();
@@ -1076,15 +1087,19 @@
       overflowBtn.style.display = isOverflowing ? 'flex' : 'none';
 
       if (isOverflowing) {
-        // Count hidden tabs (those that are partially or fully outside the visible area)
+        // Count hidden tabs (those partially or fully outside visible area - both sides)
         const tabElements = container.querySelectorAll('.tab');
         const containerRect = container.getBoundingClientRect();
         let hiddenCount = 0;
 
         tabElements.forEach(tab => {
           const rect = tab.getBoundingClientRect();
-          // Tab is hidden if its right edge is beyond the container's right edge
+          // Tab is hidden if scrolled off the right edge
           if (rect.right > containerRect.right + 1) {
+            hiddenCount++;
+          }
+          // Tab is hidden if scrolled off the left edge
+          else if (rect.left < containerRect.left - 1) {
             hiddenCount++;
           }
         });
@@ -1373,9 +1388,10 @@
           name: result.name,
           port: result.port
         };
-        localTabs.push(newTab);
-        selectedTabId = newTab.id;
+        tabs.push(newTab);
+        activeTabId = newTab.id;
         renderTabs();
+        renderTabContent();
         showToast(`Builder ${result.name} spawned`, 'success');
       } catch (err) {
         showToast('Failed to spawn builder: ' + err.message, 'error');
@@ -1492,7 +1508,6 @@
       // Escape to close dialogs and menus
       if (e.key === 'Escape') {
         hideFileDialog();
-        hideBuilderDialog();
         hideCloseDialog();
         hideContextMenu();
         hideOverflowMenu();
@@ -1502,8 +1517,6 @@
       if (e.key === 'Enter') {
         if (!document.getElementById('file-dialog').classList.contains('hidden')) {
           openFile();
-        } else if (!document.getElementById('builder-dialog').classList.contains('hidden')) {
-          spawnBuilder();
         }
       }
 
