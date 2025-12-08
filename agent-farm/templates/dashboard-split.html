@@ -318,29 +318,6 @@
       color: #ef4444;
     }
 
-    /* Open in new tab button */
-    .tab .open-external {
-      opacity: 0.4;
-      cursor: pointer;
-      padding: 2px 6px;
-      margin-right: 2px;
-      font-size: 12px;
-      border-radius: 3px;
-      color: var(--text-secondary);
-    }
-
-    .tab:hover .open-external {
-      opacity: 0.7;
-    }
-
-    .tab .open-external:hover,
-    .tab .open-external:focus {
-      opacity: 1;
-      background: rgba(59, 130, 246, 0.2);  /* Blue tint on hover */
-      color: var(--accent);
-      outline: none;
-    }
-
     /* Add buttons */
     .add-buttons {
       display: flex;
@@ -462,10 +439,12 @@
       opacity: 0.7;
     }
 
-    .overflow-menu-item .overflow-open-btn:hover {
+    .overflow-menu-item .overflow-open-btn:hover,
+    .overflow-menu-item .overflow-open-btn:focus {
       opacity: 1;
       background: rgba(59, 130, 246, 0.2);
       color: var(--accent);
+      outline: none;
     }
 
     /* Tab content */
@@ -662,8 +641,14 @@
       font-size: 13px;
     }
 
-    .context-menu-item:hover {
+    .context-menu-item:hover,
+    .context-menu-item:focus {
       background: var(--tab-hover);
+      outline: none;
+    }
+
+    .context-menu-item:focus {
+      box-shadow: inset 2px 0 0 var(--accent);
     }
 
     .context-menu-item.danger {
@@ -751,11 +736,19 @@
   </div>
 
   <!-- Context menu -->
-  <div class="context-menu hidden" id="context-menu">
-    <div class="context-menu-item" onclick="openContextTab()">Open in New Tab</div>
-    <div class="context-menu-item" onclick="closeActiveTab()">Close</div>
-    <div class="context-menu-item" onclick="closeOtherTabs()">Close Others</div>
-    <div class="context-menu-item danger" onclick="closeAllTabs()">Close All</div>
+  <div class="context-menu hidden" id="context-menu" role="menu">
+    <div class="context-menu-item" role="menuitem" tabindex="0"
+         onclick="openContextTab()"
+         onkeydown="handleContextMenuKeydown(event, 'openContextTab')">Open in New Tab</div>
+    <div class="context-menu-item" role="menuitem" tabindex="-1"
+         onclick="closeActiveTab()"
+         onkeydown="handleContextMenuKeydown(event, 'closeActiveTab')">Close</div>
+    <div class="context-menu-item" role="menuitem" tabindex="-1"
+         onclick="closeOtherTabs()"
+         onkeydown="handleContextMenuKeydown(event, 'closeOtherTabs')">Close Others</div>
+    <div class="context-menu-item danger" role="menuitem" tabindex="-1"
+         onclick="closeAllTabs()"
+         onkeydown="handleContextMenuKeydown(event, 'closeAllTabs')">Close All</div>
   </div>
 
   <!-- Toast container -->
@@ -987,7 +980,7 @@
         const isActive = tab.id === activeTabId;
         const icon = getTabIcon(tab.type);
         const statusDot = tab.type === 'builder' ? getStatusDot(tab.status) : '';
-        const tooltip = getTabTooltip(tab).replace(/"/g, '&quot;');
+        const tooltip = escapeHtml(getTabTooltip(tab));
 
         return `
           <div class="tab ${isActive ? 'active' : ''}"
@@ -998,13 +991,6 @@
             <span class="icon">${icon}</span>
             <span class="name">${tab.name}</span>
             ${statusDot}
-            <span class="open-external"
-                  onclick="event.stopPropagation(); openInNewTab('${tab.id}')"
-                  title="Open in new tab"
-                  role="button"
-                  tabindex="0"
-                  aria-label="Open ${tab.name} in new tab"
-                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openInNewTab('${tab.id}');}">↗</span>
             <span class="close" onclick="event.stopPropagation(); closeTab('${tab.id}', event)">&times;</span>
           </div>
         `;
@@ -1198,9 +1184,11 @@
             <span class="name">${tab.name}</span>
             <span class="overflow-open-btn"
                   onclick="event.stopPropagation(); openInNewTab('${tab.id}'); hideOverflowMenu();"
-                  title="Open in new tab"
+                  title="Open in new tab (press 'o')"
                   role="button"
-                  aria-label="Open ${tab.name} in new tab">↗</span>
+                  tabindex="0"
+                  aria-label="Open ${tab.name} in new tab"
+                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openInNewTab('${tab.id}');hideOverflowMenu();}">↗</span>
           </div>
         `;
       }).join('');
@@ -1263,6 +1251,13 @@
         case ' ':
           event.preventDefault();
           selectTabFromMenu(tabId);
+          break;
+        case 'o':
+        case 'O':
+          // 'o' opens in new tab
+          event.preventDefault();
+          openInNewTab(tabId);
+          hideOverflowMenu();
           break;
         case 'Escape':
           event.preventDefault();
@@ -1358,6 +1353,10 @@
       menu.style.top = event.clientY + 'px';
       menu.classList.remove('hidden');
 
+      // Focus first item for keyboard navigation
+      const firstItem = menu.querySelector('.context-menu-item');
+      if (firstItem) firstItem.focus();
+
       // Close on click outside
       setTimeout(() => {
         document.addEventListener('click', hideContextMenu, { once: true });
@@ -1367,6 +1366,39 @@
     function hideContextMenu() {
       document.getElementById('context-menu').classList.add('hidden');
       contextMenuTabId = null;
+    }
+
+    // Handle keyboard navigation in context menu
+    function handleContextMenuKeydown(event, action) {
+      const menu = document.getElementById('context-menu');
+      const items = Array.from(menu.querySelectorAll('.context-menu-item'));
+      const currentIndex = items.findIndex(item => item === document.activeElement);
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex].focus();
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex].focus();
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          window[action]();  // Call the action function
+          break;
+        case 'Escape':
+          event.preventDefault();
+          hideContextMenu();
+          break;
+        case 'Tab':
+          // Allow Tab to close menu
+          hideContextMenu();
+          break;
+      }
     }
 
     function closeActiveTab() {
@@ -1423,6 +1455,13 @@
     }
 
     // Generate tooltip text for a tab
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     function getTabTooltip(tab) {
       const lines = [tab.name];
 
