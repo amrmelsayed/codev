@@ -469,3 +469,57 @@ This is Phase 1 of the consult tool. Phase 2 (0023) will add stateful sessions v
 
 After this is implemented and validated, the zen MCP server can be removed from configuration, significantly reducing context overhead.
 The consultant role is intentionally different from both Architect and Builder - it provides perspective rather than orchestrating or implementing.
+
+---
+
+## Amendments
+
+This section tracks all TICK amendments to this specification.
+
+### TICK-001: Architect-Mediated PR Reviews (2025-12-08)
+
+**Summary**: PR reviews are now architect-mediated - consultants receive a prepared overview instead of exploring the filesystem.
+
+**Problem Addressed**:
+The original design had consultants running in autonomous mode (`--yolo`, `--full-auto`) with full filesystem access. This led to:
+1. **Slow reviews**: Codex took 200-250s as it ran 10-15 sequential shell commands
+2. **Redundant exploration**: Each consultant independently explored the same files
+3. **Inconsistent coverage**: Different consultants examined different aspects
+4. **Cost overhead**: Tool calls multiply tokens used
+
+**Spec Changes**:
+
+1. **New workflow for PR reviews**:
+   - Architect prepares comprehensive PR overview (diff, context, key changes)
+   - Architect passes overview to `consult` via stdin or `--context` flag
+   - Consultant analyzes the provided context and gives feedback
+   - Consultant does NOT access the filesystem
+
+2. **Updated CLI interface** (PR subcommand):
+   ```bash
+   # Before: Consultant explores filesystem
+   consult --model gemini pr 68
+
+   # After: Architect provides context
+   consult --model gemini pr 68 --context overview.md
+   # Or via stdin:
+   cat overview.md | consult --model gemini pr 68
+   ```
+
+3. **New Success Criteria**:
+   - [ ] `consult pr` accepts `--context` flag or stdin for overview
+   - [ ] When context provided, consultant runs without filesystem tools
+   - [ ] PR reviews complete in <60s per consultant (vs 200s+ before)
+
+4. **Updated consultant role** for PR reviews:
+   - Analyze the provided overview
+   - Focus on design, architecture, and spec compliance
+   - Ask clarifying questions rather than exploring files
+   - Provide verdict: APPROVE or REQUEST_CHANGES
+
+**Plan Changes**:
+- Added Phase 6: Architect-Mediated PR Reviews
+- Updated Phase 2 to add `--context` flag handling
+- Added context passthrough to consultant role
+
+**Review**: See `reviews/0022-consult-tool-stateless-tick-001.md`

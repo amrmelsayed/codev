@@ -164,3 +164,70 @@ Phase 3 (Deps) ──┘
 - Keep it simple - CLIs handle their own context management
 - Phase 2 is the bulk of the work
 - Can spawn a builder for this if desired, but simple enough to do directly
+
+---
+
+## Amendment History
+
+This section tracks all TICK amendments to this plan.
+
+### TICK-001: Architect-Mediated PR Reviews (2025-12-08)
+
+**Changes**:
+
+1. **New Phase 6: Architect-Mediated PR Reviews**
+
+   **Goal**: Implement context-passing for PR reviews so consultants analyze provided overviews instead of exploring the filesystem.
+
+   **Tasks**:
+
+   - [ ] Add `--context` flag to `pr` subcommand
+   - [ ] Support stdin for context input (when `--context` is `-` or omitted with piped input)
+   - [ ] When context is provided, modify CLI invocation to disable filesystem tools:
+     - gemini: Add `--sandbox` flag (no shell access)
+     - codex: Use `codex exec` instead of `codex` (no tool use)
+     - claude: Add `--print` flag (no interactive tools)
+   - [ ] Update consultant role to handle provided context vs self-exploration
+   - [ ] Add context template for PR reviews (what the architect should include)
+
+   **Exit Criteria**:
+   - `consult --model gemini pr 68 --context overview.md` runs without filesystem access
+   - `cat overview.md | consult --model gemini pr 68` works equivalently
+   - Review completes in <60s (vs 200s+ with exploration)
+
+2. **Updates to Phase 2 (CLI)**:
+   - Add `--context` optional flag to `pr` subcommand
+   - Detect stdin when not a TTY
+   - Pass context content to the consultant as part of the query
+
+3. **Updates to Phase 4 (Documentation)**:
+   - Add section on architect-mediated reviews to CLAUDE.md
+   - Document the `--context` flag usage
+   - Add template for PR overview format
+
+4. **New file: `codev/templates/pr-overview.md`**:
+   ```markdown
+   # PR Overview Template
+
+   ## PR Info
+   - **Number**: #NNN
+   - **Title**: [Title]
+   - **Branch**: [branch-name]
+   - **Spec**: [link to spec if applicable]
+
+   ## Summary
+   [1-2 sentence summary of what this PR does]
+
+   ## Key Changes
+   - [File 1]: [what changed and why]
+   - [File 2]: [what changed and why]
+
+   ## Diff (condensed)
+   [Key portions of the diff, or full diff if small]
+
+   ## Questions for Reviewer
+   1. [Specific question 1]
+   2. [Specific question 2]
+   ```
+
+**Review**: See `reviews/0022-consult-tool-stateless-tick-001.md`
