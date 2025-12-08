@@ -772,7 +772,7 @@ Projects that are paused or canceled.
   - id: "0042"
     title: "Namespace Builder Sessions"
     summary: "Add project namespace to tmux sessions and builder IDs to prevent cross-project collisions"
-    status: conceived
+    status: committed
     priority: high
     release: null
     files:
@@ -781,7 +781,7 @@ Projects that are paused or canceled.
       review: null
     dependencies: []
     tags: [agent-farm, multi-project, bug-fix]
-    notes: "TICK protocol. Currently tmux sessions are named 'builder-{spec_id}' which collides across projects. Need 'builder-{project}-{spec_id}' pattern."
+    notes: "TICK protocol (hotfix). Changed session naming from 'builder-{spec_id}' to 'builder-{project}-{spec_id}'. PR #75."
 
 ## Next Available Number
 
