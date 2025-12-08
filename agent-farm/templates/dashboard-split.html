@@ -169,7 +169,8 @@
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border);
       min-height: 40px;
-      overflow: hidden;
+      overflow: visible;  /* Allow overflow menu dropdown to be visible */
+      position: relative;  /* Position context for overflow menu */
     }
 
     .tabs-scroll {
@@ -190,6 +191,7 @@
       padding: 8px 12px;
       cursor: pointer;
       border-right: 1px solid var(--border);
+      border-bottom: 2px solid transparent;  /* Reserve space for active indicator */
       white-space: nowrap;
       flex-shrink: 0;
       position: relative;
@@ -200,7 +202,8 @@
     }
 
     .tab.active {
-      background: var(--tab-active);
+      background: var(--bg-tertiary);
+      border-bottom: 2px solid var(--accent);  /* Blue accent line */
     }
 
     .tab.new-tab {
@@ -289,7 +292,7 @@
     }
 
     .tab .close {
-      opacity: 0;
+      opacity: 0.4;  /* Always somewhat visible */
       margin-left: 4px;
       font-size: 12px;
       color: var(--text-muted);
@@ -298,12 +301,12 @@
     }
 
     .tab:hover .close {
-      opacity: 0.6;
+      opacity: 0.8;
     }
 
     .tab .close:hover {
       opacity: 1;
-      background: var(--bg-tertiary);
+      background: rgba(255, 255, 255, 0.1);
     }
 
     /* Add buttons */
@@ -331,6 +334,87 @@
       border-style: solid;
       color: var(--text-secondary);
       background: var(--bg-tertiary);
+    }
+
+    /* Overflow indicator */
+    .overflow-btn {
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: none;
+      border-left: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: none;  /* Hidden by default, shown via JS */
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .overflow-btn:hover {
+      background: var(--tab-hover);
+    }
+
+    .overflow-btn:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .overflow-count {
+      font-size: 11px;
+      background: var(--accent);
+      color: white;
+      padding: 1px 5px;
+      border-radius: 8px;
+    }
+
+    /* Overflow menu dropdown */
+    .overflow-menu {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-height: 300px;
+      overflow-y: auto;
+      min-width: 200px;
+      z-index: 100;
+    }
+
+    .overflow-menu.hidden {
+      display: none;
+    }
+
+    .overflow-menu-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .overflow-menu-item:hover,
+    .overflow-menu-item:focus {
+      background: var(--tab-hover);
+      outline: none;
+    }
+
+    .overflow-menu-item.active {
+      background: var(--tab-active);
+      border-left: 2px solid var(--accent);
+    }
+
+    .overflow-menu-item .icon {
+      font-size: 14px;
+    }
+
+    .overflow-menu-item .name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* Tab content */
@@ -559,6 +643,11 @@
     <div class="right-pane">
       <div class="tab-bar">
         <div class="tabs-scroll" id="tabs-container"></div>
+        <button class="overflow-btn" id="overflow-btn" onclick="toggleOverflowMenu()" aria-haspopup="true" aria-expanded="false" title="Show all tabs">
+          <span>...</span>
+          <span class="overflow-count" id="overflow-count">+0</span>
+        </button>
+        <div class="overflow-menu hidden" id="overflow-menu" role="menu"></div>
         <div class="add-buttons">
           <button class="add-btn" onclick="showFileDialog()" title="Open file">+ 📄</button>
           <button class="add-btn" onclick="spawnBuilder()" title="Spawn worktree builder">+ 🔨</button>
@@ -650,6 +739,41 @@
       updateStatusBar();
       startPolling();
       setupBroadcastChannel();
+      setupOverflowDetection();
+    }
+
+    // Set up overflow detection for the tab bar
+    function setupOverflowDetection() {
+      const container = document.getElementById('tabs-container');
+
+      // Check on load
+      checkTabOverflow();
+
+      // Check on window resize (debounced)
+      let resizeTimeout;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(checkTabOverflow, 100);
+      });
+
+      // Check on scroll (debounced) - updates +N count when user scrolls tabs
+      if (container) {
+        let scrollTimeout;
+        container.addEventListener('scroll', () => {
+          clearTimeout(scrollTimeout);
+          scrollTimeout = setTimeout(checkTabOverflow, 50);
+        });
+      }
+
+      // Also use ResizeObserver for the tabs container if available
+      if (typeof ResizeObserver !== 'undefined') {
+        if (container) {
+          const observer = new ResizeObserver(() => {
+            checkTabOverflow();
+          });
+          observer.observe(container);
+        }
+      }
     }
 
     // Set up BroadcastChannel for cross-tab communication
@@ -807,6 +931,7 @@
 
       if (tabs.length === 0) {
         container.innerHTML = '';
+        checkTabOverflow();  // Update overflow state when tabs cleared
         return;
       }
 
@@ -827,6 +952,9 @@
           </div>
         `;
       }).join('');
+
+      // Check overflow after tabs are rendered
+      checkTabOverflow();
     }
 
     // Get tab icon
@@ -934,6 +1062,156 @@
       activeTabId = tabId;
       renderTabs();
       renderTabContent();
+      // Scroll the active tab into view if needed
+      scrollActiveTabIntoView();
+    }
+
+    // Scroll the active tab into view
+    function scrollActiveTabIntoView() {
+      const container = document.getElementById('tabs-container');
+      const activeTab = container.querySelector('.tab.active');
+      if (activeTab) {
+        activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
+
+    // Check if tabs are overflowing and update the overflow button
+    function checkTabOverflow() {
+      const container = document.getElementById('tabs-container');
+      const overflowBtn = document.getElementById('overflow-btn');
+      const overflowCount = document.getElementById('overflow-count');
+
+      if (!container || !overflowBtn) return;
+
+      const isOverflowing = container.scrollWidth > container.clientWidth;
+      overflowBtn.style.display = isOverflowing ? 'flex' : 'none';
+
+      if (isOverflowing) {
+        // Count hidden tabs (those partially or fully outside visible area - both sides)
+        const tabElements = container.querySelectorAll('.tab');
+        const containerRect = container.getBoundingClientRect();
+        let hiddenCount = 0;
+
+        tabElements.forEach(tab => {
+          const rect = tab.getBoundingClientRect();
+          // Tab is hidden if scrolled off the right edge
+          if (rect.right > containerRect.right + 1) {
+            hiddenCount++;
+          }
+          // Tab is hidden if scrolled off the left edge
+          else if (rect.left < containerRect.left - 1) {
+            hiddenCount++;
+          }
+        });
+
+        overflowCount.textContent = `+${hiddenCount}`;
+      }
+    }
+
+    // Toggle the overflow menu
+    function toggleOverflowMenu() {
+      const menu = document.getElementById('overflow-menu');
+      const btn = document.getElementById('overflow-btn');
+      const isHidden = menu.classList.contains('hidden');
+
+      if (isHidden) {
+        showOverflowMenu();
+      } else {
+        hideOverflowMenu();
+      }
+    }
+
+    // Show the overflow menu
+    function showOverflowMenu() {
+      const menu = document.getElementById('overflow-menu');
+      const btn = document.getElementById('overflow-btn');
+
+      // Build menu items for all tabs
+      menu.innerHTML = tabs.map((tab, index) => {
+        const icon = getTabIcon(tab.type);
+        const isActive = tab.id === activeTabId;
+        return `
+          <div class="overflow-menu-item ${isActive ? 'active' : ''}"
+               role="menuitem"
+               tabindex="${index === 0 ? 0 : -1}"
+               data-tab-id="${tab.id}"
+               onclick="selectTabFromMenu('${tab.id}')"
+               onkeydown="handleOverflowMenuKeydown(event, '${tab.id}')">
+            <span class="icon">${icon}</span>
+            <span class="name">${tab.name}</span>
+          </div>
+        `;
+      }).join('');
+
+      menu.classList.remove('hidden');
+      btn.setAttribute('aria-expanded', 'true');
+
+      // Focus the first item
+      const firstItem = menu.querySelector('.overflow-menu-item');
+      if (firstItem) firstItem.focus();
+
+      // Close on click outside (after a small delay to avoid immediate close)
+      setTimeout(() => {
+        document.addEventListener('click', handleOverflowClickOutside);
+      }, 0);
+    }
+
+    // Hide the overflow menu
+    function hideOverflowMenu() {
+      const menu = document.getElementById('overflow-menu');
+      const btn = document.getElementById('overflow-btn');
+      menu.classList.add('hidden');
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', handleOverflowClickOutside);
+    }
+
+    // Handle click outside overflow menu
+    function handleOverflowClickOutside(event) {
+      const menu = document.getElementById('overflow-menu');
+      const btn = document.getElementById('overflow-btn');
+      if (!menu.contains(event.target) && !btn.contains(event.target)) {
+        hideOverflowMenu();
+      }
+    }
+
+    // Select tab from overflow menu
+    function selectTabFromMenu(tabId) {
+      hideOverflowMenu();
+      selectTab(tabId);
+    }
+
+    // Handle keyboard navigation in overflow menu
+    function handleOverflowMenuKeydown(event, tabId) {
+      const menu = document.getElementById('overflow-menu');
+      const items = Array.from(menu.querySelectorAll('.overflow-menu-item'));
+      const currentIndex = items.findIndex(item => item === document.activeElement);
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex].focus();
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex].focus();
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          selectTabFromMenu(tabId);
+          break;
+        case 'Escape':
+          event.preventDefault();
+          hideOverflowMenu();
+          document.getElementById('overflow-btn').focus();
+          break;
+        case 'Tab':
+          // Allow Tab to close menu and move focus
+          hideOverflowMenu();
+          break;
+      }
     }
 
     // Close tab
@@ -1110,9 +1388,10 @@
           name: result.name,
           port: result.port
         };
-        localTabs.push(newTab);
-        selectedTabId = newTab.id;
+        tabs.push(newTab);
+        activeTabId = newTab.id;
         renderTabs();
+        renderTabContent();
         showToast(`Builder ${result.name} spawned`, 'success');
       } catch (err) {
         showToast('Failed to spawn builder: ' + err.message, 'error');
@@ -1226,20 +1505,18 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      // Escape to close dialogs
+      // Escape to close dialogs and menus
       if (e.key === 'Escape') {
         hideFileDialog();
-        hideBuilderDialog();
         hideCloseDialog();
         hideContextMenu();
+        hideOverflowMenu();
       }
 
       // Enter in dialogs
       if (e.key === 'Enter') {
         if (!document.getElementById('file-dialog').classList.contains('hidden')) {
           openFile();
-        } else if (!document.getElementById('builder-dialog').classList.contains('hidden')) {
-          spawnBuilder();
         }
       }
 
