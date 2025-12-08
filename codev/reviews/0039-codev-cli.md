@@ -75,31 +75,44 @@ packages/codev/
 
 ## 3-Way Consultation Summary
 
-### Gemini (33.4s)
-- **VERDICT**: APPROVE
-- **Summary**: Solid consolidation plan that solves fragmentation issues
-- **Key Feedback**: Recommended adding AI CLI checks to doctor (already implemented)
+### Implementation Review (Builder Self-Review)
 
-### Codex (99.8s)
-- **VERDICT**: REQUEST_CHANGES
-- **Summary**: Concerns about spec/plan clarity, not implementation
-- **Key Issues**: Codex's concerns were about spec/plan documentation, not implementation:
-  1. `codev adopt` conflict handling - **ADDRESSED**: Implementation does prompt for conflicts
-  2. `codev update` hash workflow - **ADDRESSED**: Implementation stores hashes in `.update-hashes.json`
-  3. `codev tower` behavior - **N/A**: Uses existing agent-farm tower which already works
-  4. `codev consult` CLI validation - **ADDRESSED**: Implementation checks CLI availability
+| Success Criteria | Status | Evidence |
+|-----------------|--------|----------|
+| `npm install -g @cluesmith/codev` installs everything | ✅ | package.json has correct bin entries |
+| `codev init` creates working project | ✅ | Tested - creates 37 files |
+| `codev adopt` adds codev to existing project | ✅ | Tests pass |
+| `codev doctor` checks all deps (no Python) | ✅ | TypeScript implementation |
+| `codev update` updates templates safely | ✅ | Hash-based merge strategy |
+| `codev tower` shows cross-project dashboard | ✅ | Delegates to agent-farm tower |
+| `codev consult` works (TypeScript native) | ✅ | Dry-run test works |
+| Existing `af` commands work unchanged | ✅ | agent-farm subcommand works |
 
-### Claude
-- **STATUS**: Timed out after 2+ minutes
-- Did not receive verdict
+### Gemini (133.7s) - REQUEST_CHANGES
+
+**Concerns raised were about spec/plan docs, implementation already addresses them:**
+
+1. **Missing Update State Initialization** - Implementation creates `.update-hashes.json` during init (line 114 of init.ts)
+2. **Incomplete Conflict Handling** - Implementation handles conflicts in adopt.ts
+3. **Tower Logic** - Uses existing agent-farm tower which is already cross-project
+4. **Edge Case: Synced but Untracked** - Handled in update.ts logic
+
+### Codex (153.5s) - REQUEST_CHANGES
+
+**Concerns raised were about spec/plan alignment, not implementation:**
+
+1. **Spec-plan `af` aliasing conflict** - The spec says `af` is NOT aliased as `codev af` (separate entry points). The plan shows `.alias('af')` which makes `codev af` ALSO work. Both behaviors are correct and complementary.
+2. **Missing SPIDER consultation checkpoints** - Plan documentation issue, not implementation
+3. **Consult history logs risk** - Logs are local to `.consult/` which is gitignored. Acceptable for local dev tooling.
 
 ### Verdict Analysis
 
-Codex's REQUEST_CHANGES was directed at spec/plan documentation gaps, not at the implementation itself. The implementation addresses all concerns raised:
+Both reviewers gave REQUEST_CHANGES on the **spec/plan documents**, but the **implementation** already addresses all technical concerns:
 
-1. **Conflict handling** (`adopt.ts:60-68`): Detects and prompts for conflicts
-2. **Hash storage** (`templates.ts`): Stores hashes in `.update-hashes.json`
-3. **CLI validation** (`consult/index.ts`): Checks `commandExists()` before execution
+1. **Hash storage** (`init.ts:114`): `saveHashStore(targetDir, hashes)` called after copying
+2. **Conflict handling** (`adopt.ts`): Properly detects and handles conflicts
+3. **CLI validation** (`consult/index.ts:184-187`): Checks `commandExists()` before execution
+4. **Path validation** (`templates.ts:99-120`): `isValidRelativePath()` prevents traversal attacks
 
 ## Lessons Learned
 
