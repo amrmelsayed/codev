@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Annotate: {{FILE}}</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      min-height: 100vh;
+    }
+    .header {
+      padding: 15px 20px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #333;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header h1.path { font-size: 14px; font-weight: 500; font-family: monospace; color: #fff; }
+    .header .subtitle { color: #888; font-size: 12px; margin-top: 4px; }
+    .header .actions { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+    .header .btn {
+      padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer;
+      font-size: 12px;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-secondary { background: #444; color: #fff; }
+    .btn-success { background: #22c55e; color: #fff; }
+    .btn:hover { opacity: 0.9; }
+
+    /* Unsaved indicator */
+    #unsavedIndicator {
+      color: #fbbf24;
+      font-size: 12px;
+      display: none;
+    }
+    #unsavedIndicator::before {
+      content: '●';
+      margin-right: 4px;
+    }
+
+    /* Grid layout: each row has line number + code, guaranteeing alignment */
+    .content {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      padding: 15px 0;
+    }
+    .line-num {
+      background: #252525;
+      color: #666;
+      text-align: right;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 13px;
+      user-select: none;
+      border-right: 1px solid #333;
+      padding: 0 12px 0 8px;
+      cursor: pointer;
+      line-height: 1.5;
+      min-width: 50px;
+      position: sticky;
+      left: 0;
+    }
+    .line-num:hover { background: #333; color: #fff; }
+    .line-num.has-review {
+      background: rgba(250, 204, 21, 0.2);
+      color: #facc15;
+    }
+    .code-line {
+      background: #1a1a1a;
+      padding: 0 15px;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    /* Hybrid markdown: syntax visible but muted, content styled */
+    /* All text uses same font size for consistent line heights in annotation view */
+    .md-syntax { color: #555; }  /* Muted syntax markers */
+    .md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { font-weight: bold; color: #c678dd; }
+    .md-bold { font-weight: bold; color: #e5c07b; }
+    .md-italic { font-style: italic; color: #98c379; }
+    .md-code { color: #e06c75; background: #2c313a; padding: 1px 4px; border-radius: 3px; }
+    .md-link-text { color: #61afef; text-decoration: underline; }
+    .md-link-url { color: #555; font-size: 0.9em; }
+    .md-bullet { color: #56b6c2; }
+    .md-blockquote { color: #abb2bf; border-left: 3px solid #555; padding-left: 10px; }
+    .md-fence { color: #555; }
+    .md-codeblock { color: #98c379; background: #2c313a; display: block; }
+
+    /* Editor textarea */
+    #editor {
+      display: none;
+      width: 100%;
+      height: calc(100vh - 80px);
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 15px;
+      border: none;
+      resize: none;
+      background: #1a1a1a;
+      color: #d4d4d4;
+      outline: none;
+      tab-size: 2;
+    }
+    #editor:focus {
+      outline: none;
+    }
+
+    /* Notification toast */
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: #22c55e;
+      color: white;
+      border-radius: 6px;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 300;
+      animation: slideIn 0.3s ease;
+    }
+    .notification.error {
+      background: #ef4444;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .review-line {
+      background: rgba(250, 204, 21, 0.1);
+      display: block;
+      border-left: 3px solid #facc15;
+      padding-left: 5px;
+      margin-left: -8px;
+    }
+
+    /* Comment Dialog - positioned popup */
+    .overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.3);
+      display: none;
+      z-index: 200;
+    }
+    .overlay.active { display: block; }
+
+    .dialog {
+      position: absolute;
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      width: 700px;
+      max-width: 90vw;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      border: 1px solid #444;
+    }
+    .dialog h3 { font-size: 16px; margin-bottom: 5px; }
+    .dialog .line-info { color: #888; font-size: 13px; margin-bottom: 15px; }
+    .dialog .line-preview {
+      background: #1a1a1a; padding: 10px; border-radius: 4px;
+      font-family: monospace; font-size: 12px; margin-bottom: 15px;
+      overflow-x: auto; white-space: pre;
+    }
+    .dialog textarea {
+      width: 100%; height: 100px;
+      background: #1a1a1a; border: 1px solid #444;
+      color: #fff; padding: 10px; border-radius: 4px;
+      font-family: inherit; font-size: 14px;
+      resize: vertical;
+    }
+    .dialog textarea:focus { outline: none; border-color: #3b82f6; }
+    .dialog .actions { margin-top: 15px; text-align: right; }
+    .dialog .btn { margin-left: 8px; }
+    .btn-danger { background: #ef4444; color: #fff; }
+
+    /* Annotations list */
+    .annotations-panel {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 300px;
+      background: #252525; border-left: 1px solid #333;
+      transform: translateX(100%);
+      transition: transform 0.2s;
+      z-index: 150;
+      overflow-y: auto;
+    }
+    .annotations-panel.open { transform: translateX(0); }
+    .annotations-panel h3 { padding: 15px; border-bottom: 1px solid #333; font-size: 14px; }
+    .annotation-item {
+      padding: 12px 15px; border-bottom: 1px solid #333; cursor: pointer;
+    }
+    .annotation-item:hover { background: #2a2a2a; }
+    .annotation-item .line { color: #3b82f6; font-size: 12px; }
+    .annotation-item .text { font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body data-builder="{{BUILDER_ID}}" data-file="{{FILE_PATH}}" data-lang="{{LANG}}">
+  <div class="header">
+    <h1 class="path">{{FILE_PATH}}</h1>
+    <div class="subtitle">Click on a line number to leave an annotation.</div>
+    <div class="actions">
+      <button id="reloadBtn" class="btn btn-secondary" onclick="reloadFile()" title="Reload from disk" aria-label="Reload file from disk">↻</button>
+      <button id="editBtn" class="btn btn-primary" onclick="toggleEditMode()">Switch to Editing</button>
+      <button id="saveBtn" class="btn btn-success" onclick="saveEdit()" style="display: none;">Save</button>
+      <button id="cancelBtn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">Cancel</button>
+      <span id="unsavedIndicator">Unsaved changes</span>
+    </div>
+  </div>
+
+  <div class="content" id="viewMode">
+    <!-- Grid: alternating line-num and code-line elements -->
+  </div>
+
+  <!-- Editor mode -->
+  <textarea id="editor" spellcheck="false"></textarea>
+
+  <!-- Comment Dialog -->
+  <div class="overlay" id="overlay">
+    <div class="dialog">
+      <h3 id="dialogTitle">Add Review Comment</h3>
+      <div class="line-info">Line <span id="dialogLine"></span></div>
+      <div class="line-preview" id="dialogPreview"></div>
+      <textarea id="commentText" placeholder="Enter your review comment..."></textarea>
+      <div class="hint" style="color: #666; font-size: 12px; margin-top: 8px;">Tip: Press Enter 3 times to submit</div>
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>
+        <button class="btn btn-danger" onclick="resolveComment()" id="resolveBtn" style="display:none">Resolve</button>
+        <button class="btn btn-primary" onclick="saveComment()">Add Comment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Annotations Panel -->
+  <div class="annotations-panel" id="annotationsPanel">
+    <h3>Review Comments</h3>
+    <div id="annotationsList"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+
+  <script>
+    // State
+    let fileLines = [];
+    let currentLine = null;
+    let isEditing = false;  // For comment dialog editing
+    let consecutiveEnters = 0;  // Track triple-enter to submit
+
+    // Edit mode state
+    let editMode = false;
+    let originalContent = '';
+    let currentContent = '';
+    let hasUnsavedChanges = false;
+
+    // Comment patterns by file extension
+    const COMMENT_PATTERNS = {
+      js: { prefix: '// REVIEW', regex: /^(\s*)\/\/\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      ts: { prefix: '// REVIEW', regex: /^(\s*)\/\/\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      jsx: { prefix: '// REVIEW', regex: /^(\s*)\/\/\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      tsx: { prefix: '// REVIEW', regex: /^(\s*)\/\/\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      py: { prefix: '# REVIEW', regex: /^(\s*)#\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      sh: { prefix: '# REVIEW', regex: /^(\s*)#\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      bash: { prefix: '# REVIEW', regex: /^(\s*)#\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      yaml: { prefix: '# REVIEW', regex: /^(\s*)#\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      yml: { prefix: '# REVIEW', regex: /^(\s*)#\s*REVIEW(\(@\w+\))?:\s*(.*)$/ },
+      md: { prefix: '<!-- REVIEW', suffix: ' -->', regex: /^(\s*)<!--\s*REVIEW(\(@\w+\))?:\s*(.*?)\s*-->$/ },
+      html: { prefix: '<!-- REVIEW', suffix: ' -->', regex: /^(\s*)<!--\s*REVIEW(\(@\w+\))?:\s*(.*?)\s*-->$/ },
+      css: { prefix: '/* REVIEW', suffix: ' */', regex: /^(\s*)\/\*\s*REVIEW(\(@\w+\))?:\s*(.*?)\s*\*\/$/ },
+    };
+
+    // Get file extension and language
+    const filePath = document.body.dataset.file;
+    const ext = filePath.split('.').pop().toLowerCase();
+    const lang = document.body.dataset.lang || ext;
+    const commentStyle = COMMENT_PATTERNS[ext] || COMMENT_PATTERNS.js;
+
+    // Initialize
+    function init(content) {
+      currentContent = content;
+      originalContent = content;
+      fileLines = content.split('\n');
+      renderFile();
+      updateAnnotationsList();
+    }
+
+    function renderFile() {
+      const viewMode = document.getElementById('viewMode');
+
+      // Render code with syntax highlighting - highlight LINE BY LINE
+      const isMarkdown = lang === 'markdown' || lang === 'md';
+      const prismLang = Prism.languages[lang] || Prism.languages.plaintext;
+
+      // Reset markdown state before rendering
+      if (isMarkdown) resetMarkdownState();
+
+      // For markdown: two-pass table rendering
+      let tableMap = new Map();
+      if (isMarkdown) {
+        const codeBlockRanges = findCodeBlockRanges(fileLines);
+        const tables = identifyTables(fileLines, codeBlockRanges);
+        tableMap = buildTableMap(tables);
+      }
+
+      // Generate grid rows: each row has [line-num, code-line]
+      const gridHtml = fileLines.map((line, i) => {
+        let lineToRender = line;
+
+        // For markdown tables: pad cells for alignment
+        if (isMarkdown) {
+          const tableInfo = tableMap.get(i);
+          if (tableInfo) {
+            const isSep = isSeparatorRow(line);
+            lineToRender = renderTableRow(line, tableInfo.columns, isSep);
+          }
+        }
+
+        // Use custom hybrid renderer for markdown
+        const highlighted = isMarkdown ? renderMarkdownLine(lineToRender) : Prism.highlight(lineToRender, prismLang, lang);
+        const isReview = commentStyle.regex.test(line);
+        const codeContent = isReview ? `<span class="review-line">${highlighted}</span>` : highlighted;
+
+        const hasReviewClass = isReview ? 'has-review' : '';
+        return `<span class="line-num ${hasReviewClass}" onclick="openDialog(${i}, event)">${i + 1}</span><div class="code-line" data-line="${i}">${codeContent || '&nbsp;'}</div>`;
+      }).join('');
+
+      viewMode.innerHTML = gridHtml;
+    }
+
+    function openDialog(lineIndex, event) {
+      currentLine = lineIndex;
+      const line = fileLines[lineIndex];
+      const match = line.match(commentStyle.regex);
+
+      document.getElementById('dialogLine').textContent = lineIndex + 1;
+
+      // Show prior 3 lines + current line
+      const startLine = Math.max(0, lineIndex - 3);
+      const previewLines = [];
+      for (let i = startLine; i <= lineIndex; i++) {
+        const lineNum = (i + 1).toString().padStart(4, ' ');
+        const marker = i === lineIndex ? '→' : ' ';
+        previewLines.push(`${lineNum}${marker} ${fileLines[i]}`);
+      }
+      document.getElementById('dialogPreview').textContent = previewLines.join('\n');
+
+      if (match) {
+        // Editing existing comment
+        isEditing = true;
+        document.getElementById('dialogTitle').textContent = 'Edit Review Comment';
+        document.getElementById('commentText').value = match[3] || '';
+        document.getElementById('resolveBtn').style.display = 'inline-block';
+      } else {
+        // Adding new comment
+        isEditing = false;
+        document.getElementById('dialogTitle').textContent = 'Add Review Comment';
+        document.getElementById('commentText').value = '';
+        document.getElementById('resolveBtn').style.display = 'none';
+      }
+
+      // Position dialog next to click
+      const dialog = document.querySelector('.dialog');
+      const rect = event.target.getBoundingClientRect();
+      const dialogWidth = 700;
+      const dialogHeight = 350;
+
+      // Position to the right of the line number, with some padding
+      let left = rect.right + 10;
+      let top = rect.top;
+
+      // Keep dialog in viewport
+      if (left + dialogWidth > window.innerWidth) {
+        left = window.innerWidth - dialogWidth - 20;
+      }
+      if (top + dialogHeight > window.innerHeight) {
+        top = window.innerHeight - dialogHeight - 20;
+      }
+      if (top < 60) top = 60; // Below header
+
+      dialog.style.left = left + 'px';
+      dialog.style.top = top + 'px';
+
+      document.getElementById('overlay').classList.add('active');
+      document.getElementById('commentText').focus();
+    }
+
+    function closeDialog() {
+      document.getElementById('overlay').classList.remove('active');
+      currentLine = null;
+      isEditing = false;
+    }
+
+    // Open dialog from annotation panel (center it since no click position)
+    function openDialogFromPanel(lineIndex) {
+      // Create a fake event positioned at the line number
+      // Exclude continuation spans (..) so indexing matches fileLines
+      const lineNums = document.querySelectorAll('.line-num:not(.continuation)');
+      if (lineNums[lineIndex]) {
+        const fakeEvent = { target: lineNums[lineIndex] };
+        openDialog(lineIndex, fakeEvent);
+        // Scroll to the line
+        lineNums[lineIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function saveComment() {
+      const text = document.getElementById('commentText').value.trim();
+      if (!text) return;
+
+      const line = fileLines[currentLine];
+      const indent = line.match(/^(\s*)/)[1];
+
+      let commentLine = indent + commentStyle.prefix + '(@architect): ' + text;
+      if (commentStyle.suffix) {
+        commentLine += commentStyle.suffix;
+      }
+
+      if (isEditing) {
+        // Replace existing comment
+        fileLines[currentLine] = commentLine;
+      } else {
+        // Insert new comment BELOW the current line (so the annotated line keeps its number)
+        fileLines.splice(currentLine + 1, 0, commentLine);
+      }
+
+      renderFile();
+      updateAnnotationsList();
+      closeDialog();
+      saveFile(); // Auto-save
+    }
+
+    function resolveComment() {
+      if (currentLine !== null && isEditing) {
+        fileLines.splice(currentLine, 1);
+        renderFile();
+        updateAnnotationsList();
+        closeDialog();
+        saveFile(); // Auto-save
+      }
+    }
+
+    function updateAnnotationsList() {
+      const list = document.getElementById('annotationsList');
+      const annotations = [];
+
+      fileLines.forEach((line, i) => {
+        const match = line.match(commentStyle.regex);
+        if (match) {
+          annotations.push({
+            line: i + 1,
+            author: match[2] || '',
+            text: match[3] || ''
+          });
+        }
+      });
+
+      if (annotations.length === 0) {
+        list.innerHTML = '<div style="padding: 15px; color: #666;">No review comments</div>';
+      } else {
+        list.innerHTML = annotations.map(a => `
+          <div class="annotation-item" onclick="openDialogFromPanel(${a.line - 1})">
+            <div class="line">Line ${a.line} ${a.author}</div>
+            <div class="text">${escapeHtml(a.text)}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function toggleAnnotations() {
+      document.getElementById('annotationsPanel').classList.toggle('open');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Hybrid markdown: syntax visible but muted, content styled
+    // State for multi-line constructs
+    let inCodeBlock = false;
+
+    function renderMarkdownLine(line) {
+      // Handle code block fences
+      const fenceMatch = line.match(/^(\s*)(```+)(\w*)$/);
+      if (fenceMatch) {
+        inCodeBlock = !inCodeBlock;
+        return `<span class="md-fence">${escapeHtml(line)}</span>`;
+      }
+
+      // Inside code block - render as code, no markdown processing
+      if (inCodeBlock) {
+        return `<span class="md-codeblock">${escapeHtml(line)}</span>`;
+      }
+
+      let html = escapeHtml(line);
+
+      // Headers: # visible but muted, content styled
+      const headerMatch = html.match(/^(#{1,6})\s+(.*)$/);
+      if (headerMatch) {
+        const level = headerMatch[1].length;
+        const hashes = headerMatch[1];
+        const content = headerMatch[2];
+        return `<span class="md-syntax">${hashes}</span> <span class="md-h${level}">${content}</span>`;
+      }
+
+      // List items: - or * visible but styled
+      html = html.replace(/^(\s*)([-*])\s+/, '$1<span class="md-bullet">$2</span> ');
+      html = html.replace(/^(\s*)(\d+\.)\s+/, '$1<span class="md-bullet">$2</span> ');
+
+      // Bold: ** visible but muted, content bold
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<span class="md-syntax">**</span><span class="md-bold">$1</span><span class="md-syntax">**</span>');
+
+      // Italic: * visible but muted, content italic (but not inside **)
+      html = html.replace(/(?<!\*)(?<!\<span class="md-syntax"\>)\*([^*]+)\*(?!\*)/g, '<span class="md-syntax">*</span><span class="md-italic">$1</span><span class="md-syntax">*</span>');
+
+      // Inline code: ` visible but muted, content styled
+      html = html.replace(/`([^`]+)`/g, '<span class="md-syntax">`</span><span class="md-code">$1</span><span class="md-syntax">`</span>');
+
+      // Links: [text](url) - brackets muted, text styled, url muted
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="md-syntax">[</span><span class="md-link-text">$1</span><span class="md-syntax">](</span><span class="md-link-url">$2</span><span class="md-syntax">)</span>');
+
+      // Blockquote: > visible but muted
+      html = html.replace(/^(\s*)(&gt;)\s*(.*)$/, '$1<span class="md-syntax">$2</span> <span class="md-blockquote">$3</span>');
+
+      return html;
+    }
+
+    // Reset code block state when re-rendering
+    function resetMarkdownState() {
+      inCodeBlock = false;
+    }
+
+    // ==================== Table Alignment Functions ====================
+
+    // Find code block ranges to exclude from table processing
+    function findCodeBlockRanges(lines) {
+      const ranges = [];
+      let start = null;
+
+      lines.forEach((line, i) => {
+        if (/^(\s*)(```+|~~~+)/.test(line)) {
+          if (start === null) {
+            start = i;
+          } else {
+            ranges.push({ start, end: i });
+            start = null;
+          }
+        }
+      });
+
+      // Handle unclosed code block (extends to end of file)
+      if (start !== null) {
+        ranges.push({ start, end: lines.length - 1 });
+      }
+
+      return ranges;
+    }
+
+    // Check if line is inside a code block
+    function isInsideCodeBlock(lineNum, ranges) {
+      return ranges.some(r => lineNum >= r.start && lineNum <= r.end);
+    }
+
+    // Check if line is a table separator row (e.g., |---|---|)
+    function isSeparatorRow(line) {
+      // Must contain at least one dash and be mostly dashes, pipes, colons, and spaces
+      return /^\|?[\s:|-]+\|?$/.test(line) && line.includes('-');
+    }
+
+    // Parse cells from a table row, handling leading/trailing pipes
+    function parseTableCells(line) {
+      // Split by | (not escaped \|)
+      const parts = line.split(/(?<!\\)\|/);
+
+      // Remove empty first/last elements from leading/trailing pipes
+      if (parts.length > 0 && parts[0].trim() === '') parts.shift();
+      if (parts.length > 0 && parts[parts.length - 1].trim() === '') parts.pop();
+
+      return parts;
+    }
+
+    // Pad a separator cell preserving alignment markers (:---:, :---, ---:)
+    function padSeparatorCell(cell, width) {
+      const trimmed = cell.trim();
+      const leftColon = trimmed.startsWith(':');
+      const rightColon = trimmed.endsWith(':');
+
+      // Calculate dash count: width minus colons
+      const dashCount = width - (leftColon ? 1 : 0) - (rightColon ? 1 : 0);
+
+      return (leftColon ? ':' : '') + '-'.repeat(Math.max(1, dashCount)) + (rightColon ? ':' : '');
+    }
+
+    // Pad a regular cell to target width
+    function padCell(cell, width) {
+      const trimmed = cell.trim();
+      return trimmed.padEnd(width);
+    }
+
+    // Identify tables in the document and compute column widths
+    function identifyTables(lines, codeBlockRanges) {
+      const tables = [];
+
+      for (let i = 0; i < lines.length - 1; i++) {
+        // Skip lines inside code blocks
+        if (isInsideCodeBlock(i, codeBlockRanges)) continue;
+
+        const line = lines[i];
+        const nextLine = lines[i + 1];
+
+        // Look for header + separator pattern
+        if (line.includes('|') && isSeparatorRow(nextLine) && !isInsideCodeBlock(i + 1, codeBlockRanges)) {
+          const table = { startLine: i, endLine: i + 1, columns: [] };
+
+          // Extend table to include all following rows with |
+          let j = i + 2;
+          while (j < lines.length && lines[j].includes('|') && !isInsideCodeBlock(j, codeBlockRanges)) {
+            table.endLine = j;
+            j++;
+          }
+
+          // Compute column widths across all rows
+          for (let row = table.startLine; row <= table.endLine; row++) {
+            const cells = parseTableCells(lines[row]);
+            cells.forEach((cell, col) => {
+              const cellWidth = cell.trim().length;
+              table.columns[col] = Math.max(table.columns[col] || 0, cellWidth);
+            });
+          }
+
+          tables.push(table);
+          i = table.endLine; // Skip past this table
+        }
+      }
+
+      return tables;
+    }
+
+    // Build a map: lineNumber -> tableInfo (or undefined)
+    function buildTableMap(tables) {
+      const map = new Map();
+      for (const table of tables) {
+        for (let i = table.startLine; i <= table.endLine; i++) {
+          map.set(i, table);
+        }
+      }
+      return map;
+    }
+
+    // Render a table row with padded cells
+    function renderTableRow(line, columnWidths, isSeparator) {
+      // Preserve original indentation for nested tables (in lists, blockquotes)
+      const indent = line.match(/^(\s*)/)[1];
+      const trimmedLine = line.trimStart();
+
+      const cells = parseTableCells(line);
+      const hasLeadingPipe = trimmedLine.startsWith('|');
+      const hasTrailingPipe = line.trimEnd().endsWith('|');
+
+      const paddedCells = cells.map((cell, i) => {
+        const targetWidth = columnWidths[i] || cell.trim().length;
+        if (isSeparator) {
+          return padSeparatorCell(cell, targetWidth);
+        } else {
+          return padCell(cell, targetWidth);
+        }
+      });
+
+      // Reconstruct line with pipes, preserving indentation
+      let result = indent;
+      if (hasLeadingPipe) result += '| ';
+      result += paddedCells.join(' | ');
+      if (hasTrailingPipe) result += ' |';
+
+      return result;
+    }
+
+    async function saveFile() {
+      try {
+        const response = await fetch('/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file: filePath,
+            content: fileLines.join('\n')
+          })
+        });
+
+        if (!response.ok) {
+          console.error('Failed to save:', await response.text());
+        }
+      } catch (err) {
+        console.error('Failed to save:', err.message);
+      }
+    }
+
+    // Reload file from disk (after external edits)
+    function reloadFile() {
+      // Warn if there are unsaved changes
+      if (hasUnsavedChanges) {
+        if (!confirm('You have unsaved changes. Reload anyway?')) {
+          return;
+        }
+      }
+
+      // Reload the page - server re-reads file on each request
+      window.location.reload();
+    }
+
+    // ==================== Edit Mode Functions ====================
+
+    async function toggleEditMode() {
+      const viewMode = document.getElementById('viewMode');
+      const editor = document.getElementById('editor');
+      const editBtn = document.getElementById('editBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+
+      const subtitle = document.querySelector('.subtitle');
+
+      if (!editMode) {
+        // Enter edit mode
+        // Capture scroll position from view mode
+        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+
+        currentContent = fileLines.join('\n');
+        // Note: originalContent is set only in init() and after successful saves
+        // to ensure Cancel always reverts to the true disk state
+        editor.value = currentContent;
+        viewMode.style.display = 'none';
+        editor.style.display = 'block';
+        editBtn.textContent = 'Switch to Annotate';
+        subtitle.textContent = 'Edit the file directly by clicking and typing.';
+        saveBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'inline-block';
+        editMode = true;
+
+        // Apply scroll position to editor
+        editor.scrollTop = scrollTop;
+        editor.focus();
+      } else {
+        // Exit to view mode - auto-save changes per spec
+        // Capture scroll position from editor
+        const scrollTop = editor.scrollTop;
+
+        // Auto-save if there are changes (spec requires: "Edit text, click View → changes saved")
+        if (hasUnsavedChanges) {
+          await saveEdit();
+        }
+
+        currentContent = editor.value;
+        fileLines = currentContent.split('\n');
+        editor.style.display = 'none';
+        viewMode.style.display = 'grid';
+        editBtn.textContent = 'Switch to Editing';
+        subtitle.textContent = 'Click on a line number to leave an annotation.';
+        saveBtn.style.display = 'none';
+        cancelBtn.style.display = 'none';
+        editMode = false;
+
+        renderFile();
+        updateAnnotationsList();
+
+        // Apply scroll position to document
+        requestAnimationFrame(() => {
+          document.documentElement.scrollTop = scrollTop;
+          document.body.scrollTop = scrollTop;
+        });
+      }
+    }
+
+    async function saveEdit() {
+      const editor = document.getElementById('editor');
+      const content = editor.value;
+
+      try {
+        const response = await fetch('/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file: filePath, content })
+        });
+
+        if (response.ok) {
+          currentContent = content;
+          originalContent = content;
+          fileLines = content.split('\n');
+          hasUnsavedChanges = false;
+          updateUnsavedIndicator();
+          showNotification('File saved!');
+        } else {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Save failed');
+        }
+      } catch (err) {
+        showNotification('Error saving file: ' + err.message, 'error');
+      }
+    }
+
+    function cancelEdit() {
+      const editor = document.getElementById('editor');
+      editor.value = originalContent;
+      currentContent = originalContent;
+      fileLines = originalContent.split('\n');
+      hasUnsavedChanges = false;
+      updateUnsavedIndicator();
+      toggleEditMode(); // Back to view mode
+    }
+
+    function updateUnsavedIndicator() {
+      const indicator = document.getElementById('unsavedIndicator');
+      indicator.style.display = hasUnsavedChanges ? 'inline' : 'none';
+    }
+
+    function showNotification(message, type = 'success') {
+      // Remove existing notification
+      const existing = document.querySelector('.notification');
+      if (existing) existing.remove();
+
+      const notification = document.createElement('div');
+      notification.className = 'notification' + (type === 'error' ? ' error' : '');
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      setTimeout(() => notification.remove(), 3000);
+    }
+
+    // Track unsaved changes in editor
+    document.getElementById('editor').addEventListener('input', () => {
+      hasUnsavedChanges = document.getElementById('editor').value !== originalContent;
+      updateUnsavedIndicator();
+    });
+
+    // Tab key handling for indentation
+    document.getElementById('editor').addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const editor = e.target;
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+
+        // Insert 2 spaces (or could use \t)
+        editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
+
+        // Trigger input event to update unsaved indicator
+        editor.dispatchEvent(new Event('input'));
+      }
+    });
+
+    // Handle keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDialog();
+      }
+
+      // Cmd/Ctrl+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editMode) {
+          saveEdit();
+        }
+      }
+    });
+
+    // Warn before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // Triple-enter to submit annotation
+    document.getElementById('commentText').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        consecutiveEnters++;
+        if (consecutiveEnters >= 3) {
+          e.preventDefault();
+          consecutiveEnters = 0;
+          saveComment();
+        }
+      } else {
+        consecutiveEnters = 0;
+      }
+    });
+
+    // FILE_CONTENT will be injected by the server
+  </script>
+</body>
+</html>

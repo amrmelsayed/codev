@@ -1,0 +1,470 @@
+/**
+ * codev consult - AI consultation with external models
+ *
+ * Port of codev/bin/consult (Python) to TypeScript
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawn, execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import chalk from 'chalk';
+
+// Model configuration
+interface ModelConfig {
+  cli: string;
+  args: string[];
+  envVar: string | null;
+}
+
+const MODEL_CONFIGS: Record<string, ModelConfig> = {
+  gemini: { cli: 'gemini', args: ['--yolo'], envVar: 'GEMINI_SYSTEM_MD' },
+  codex: { cli: 'codex', args: ['exec', '--full-auto'], envVar: 'CODEX_SYSTEM_MESSAGE' },
+  claude: { cli: 'claude', args: ['--print', '-p'], envVar: null },
+};
+
+// Model aliases
+const MODEL_ALIASES: Record<string, string> = {
+  pro: 'gemini',
+  gpt: 'codex',
+  opus: 'claude',
+};
+
+interface ConsultOptions {
+  model: string;
+  subcommand: string;
+  args: string[];
+  dryRun?: boolean;
+}
+
+/**
+ * Find the codev root directory
+ */
+function findCodevRoot(): string {
+  let current = process.cwd();
+
+  while (current !== path.dirname(current)) {
+    const roleFile = path.join(current, 'codev', 'roles', 'consultant.md');
+    if (fs.existsSync(roleFile)) {
+      return current;
+    }
+    current = path.dirname(current);
+  }
+
+  return process.cwd();
+}
+
+/**
+ * Load the consultant role
+ */
+function loadRole(codevRoot: string): string {
+  const roleFile = path.join(codevRoot, 'codev', 'roles', 'consultant.md');
+  if (!fs.existsSync(roleFile)) {
+    throw new Error(`Role file not found: ${roleFile}\nAre you in a codev-enabled project?`);
+  }
+  return fs.readFileSync(roleFile, 'utf-8');
+}
+
+/**
+ * Load .env file if it exists
+ */
+function loadDotenv(codevRoot: string): void {
+  const envFile = path.join(codevRoot, '.env');
+  if (!fs.existsSync(envFile)) return;
+
+  const content = fs.readFileSync(envFile, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+
+    const key = trimmed.substring(0, eqIndex).trim();
+    let value = trimmed.substring(eqIndex + 1).trim();
+
+    // Remove surrounding quotes
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    // Only set if not already in environment
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+/**
+ * Find a spec file by number
+ */
+function findSpec(codevRoot: string, number: number): string | null {
+  const specsDir = path.join(codevRoot, 'codev', 'specs');
+  const pattern = String(number).padStart(4, '0');
+
+  if (fs.existsSync(specsDir)) {
+    const files = fs.readdirSync(specsDir);
+    for (const file of files) {
+      if (file.startsWith(pattern) && file.endsWith('.md')) {
+        return path.join(specsDir, file);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a plan file by number
+ */
+function findPlan(codevRoot: string, number: number): string | null {
+  const plansDir = path.join(codevRoot, 'codev', 'plans');
+  const pattern = String(number).padStart(4, '0');
+
+  if (fs.existsSync(plansDir)) {
+    const files = fs.readdirSync(plansDir);
+    for (const file of files) {
+      if (file.startsWith(pattern) && file.endsWith('.md')) {
+        return path.join(plansDir, file);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Log query to history file
+ */
+function logQuery(codevRoot: string, model: string, query: string, duration?: number): void {
+  try {
+    const logDir = path.join(codevRoot, '.consult');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    const logFile = path.join(logDir, 'history.log');
+    const timestamp = new Date().toISOString();
+    const queryPreview = query.substring(0, 100).replace(/\n/g, ' ');
+    const durationStr = duration !== undefined ? ` duration=${duration.toFixed(1)}s` : '';
+
+    fs.appendFileSync(logFile, `${timestamp} model=${model}${durationStr} query=${queryPreview}...\n`);
+  } catch {
+    // Logging failure should not block consultation
+  }
+}
+
+/**
+ * Check if a command exists
+ */
+function commandExists(cmd: string): boolean {
+  try {
+    execSync(`which ${cmd}`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run the consultation
+ */
+async function runConsultation(
+  model: string,
+  query: string,
+  codevRoot: string,
+  dryRun: boolean
+): Promise<void> {
+  const role = loadRole(codevRoot);
+  const config = MODEL_CONFIGS[model];
+
+  if (!config) {
+    throw new Error(`Unknown model: ${model}`);
+  }
+
+  // Check if CLI exists
+  if (!commandExists(config.cli)) {
+    throw new Error(`${config.cli} not found. Please install it first.`);
+  }
+
+  let tempFile: string | null = null;
+  const env: Record<string, string> = {};
+
+  // Prepare command and environment based on model
+  let cmd: string[];
+
+  if (model === 'gemini') {
+    // Gemini uses GEMINI_SYSTEM_MD env var for role
+    tempFile = path.join(tmpdir(), `codev-role-${Date.now()}.md`);
+    fs.writeFileSync(tempFile, role);
+    env['GEMINI_SYSTEM_MD'] = tempFile;
+
+    // Handle GOOGLE_API_KEY vs GEMINI_API_KEY conflict
+    if (process.env['GOOGLE_API_KEY'] && process.env['GEMINI_API_KEY']) {
+      env['GEMINI_API_KEY'] = '';
+    }
+
+    cmd = [config.cli, ...config.args, query];
+  } else if (model === 'codex') {
+    // Codex uses CODEX_SYSTEM_MESSAGE env var
+    env['CODEX_SYSTEM_MESSAGE'] = role;
+    cmd = [config.cli, ...config.args, query];
+  } else if (model === 'claude') {
+    // Claude gets role prepended to query
+    const fullQuery = `${role}\n\n---\n\nConsultation Request:\n${query}`;
+    cmd = [config.cli, ...config.args, fullQuery, '--dangerously-skip-permissions'];
+  } else {
+    throw new Error(`Unknown model: ${model}`);
+  }
+
+  if (dryRun) {
+    console.log(chalk.yellow(`[${model}] Would execute:`));
+    console.log(`  Command: ${cmd.join(' ')}`);
+    if (Object.keys(env).length > 0) {
+      for (const [key, value] of Object.entries(env)) {
+        if (key === 'GEMINI_SYSTEM_MD') {
+          console.log(`  Env: ${key}=<temp file with consultant role>`);
+        } else {
+          const preview = value.substring(0, 50) + (value.length > 50 ? '...' : '');
+          console.log(`  Env: ${key}=${preview}`);
+        }
+      }
+    }
+    if (tempFile) fs.unlinkSync(tempFile);
+    return;
+  }
+
+  // Execute with passthrough stdio
+  const fullEnv = { ...process.env, ...env };
+  const startTime = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd[0], cmd.slice(1), {
+      env: fullEnv,
+      stdio: 'inherit',
+    });
+
+    proc.on('close', (code) => {
+      const duration = (Date.now() - startTime) / 1000;
+      logQuery(codevRoot, model, query, duration);
+
+      if (tempFile && fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+
+      console.error(`\n[${model} completed in ${duration.toFixed(1)}s]`);
+
+      if (code !== 0) {
+        reject(new Error(`Process exited with code ${code}`));
+      } else {
+        resolve();
+      }
+    });
+
+    proc.on('error', (error) => {
+      if (tempFile && fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      reject(error);
+    });
+  });
+}
+
+/**
+ * Build query for PR review
+ */
+function buildPRQuery(prNumber: number, codevRoot: string): string {
+  const dataDir = path.join(codevRoot, '.consult', `pr-${String(prNumber).padStart(4, '0')}`);
+
+  return `Review Pull Request #${prNumber}
+
+Available data files (read these to understand the PR):
+- PR Info: ${dataDir}/pr-info.txt
+- Comments: ${dataDir}/pr-comments.txt
+- Diff: ${dataDir}/pr-diff.patch
+- Files JSON: ${dataDir}/pr-files.json
+
+Please review:
+1. Code quality and correctness
+2. Alignment with spec/plan (if provided)
+3. Test coverage and quality
+4. Edge cases and error handling
+5. Documentation and comments
+6. Any security concerns
+
+End your review with a verdict in this EXACT format:
+
+---
+VERDICT: [APPROVE | REQUEST_CHANGES | COMMENT]
+SUMMARY: [One-line summary of your review]
+CONFIDENCE: [HIGH | MEDIUM | LOW]
+---
+
+KEY_ISSUES: [List of critical issues if any, or "None"]`;
+}
+
+/**
+ * Build query for spec review
+ */
+function buildSpecQuery(specPath: string, planPath: string | null): string {
+  let query = `Review Specification: ${path.basename(specPath)}
+
+Please read and review this specification:
+- Spec file: ${specPath}
+`;
+
+  if (planPath) {
+    query += `- Plan file: ${planPath}\n`;
+  }
+
+  query += `
+Please review:
+1. Clarity and completeness of requirements
+2. Technical feasibility
+3. Edge cases and error scenarios
+4. Security considerations
+5. Testing strategy
+6. Any ambiguities or missing details
+
+End your review with a verdict in this EXACT format:
+
+---
+VERDICT: [APPROVE | REQUEST_CHANGES | COMMENT]
+SUMMARY: [One-line summary of your review]
+CONFIDENCE: [HIGH | MEDIUM | LOW]
+---
+
+KEY_ISSUES: [List of critical issues if any, or "None"]`;
+
+  return query;
+}
+
+/**
+ * Build query for plan review
+ */
+function buildPlanQuery(planPath: string, specPath: string | null): string {
+  let query = `Review Implementation Plan: ${path.basename(planPath)}
+
+Please read and review this implementation plan:
+- Plan file: ${planPath}
+`;
+
+  if (specPath) {
+    query += `- Spec file: ${specPath} (for context)\n`;
+  }
+
+  query += `
+Please review:
+1. Alignment with specification requirements
+2. Implementation approach and architecture
+3. Task breakdown and ordering
+4. Risk identification and mitigation
+5. Testing strategy
+6. Any missing steps or considerations
+
+End your review with a verdict in this EXACT format:
+
+---
+VERDICT: [APPROVE | REQUEST_CHANGES | COMMENT]
+SUMMARY: [One-line summary of your review]
+CONFIDENCE: [HIGH | MEDIUM | LOW]
+---
+
+KEY_ISSUES: [List of critical issues if any, or "None"]`;
+
+  return query;
+}
+
+/**
+ * Main consult entry point
+ */
+export async function consult(options: ConsultOptions): Promise<void> {
+  const { model: modelInput, subcommand, args, dryRun = false } = options;
+
+  // Resolve model alias
+  const model = MODEL_ALIASES[modelInput.toLowerCase()] || modelInput.toLowerCase();
+
+  // Validate model
+  if (!MODEL_CONFIGS[model]) {
+    const validModels = [...Object.keys(MODEL_CONFIGS), ...Object.keys(MODEL_ALIASES)];
+    throw new Error(`Unknown model: ${modelInput}\nValid models: ${validModels.join(', ')}`);
+  }
+
+  const codevRoot = findCodevRoot();
+  loadDotenv(codevRoot);
+
+  console.error(`[${subcommand} review]`);
+  console.error(`Model: ${model}`);
+
+  let query: string;
+
+  switch (subcommand.toLowerCase()) {
+    case 'pr': {
+      if (args.length === 0) {
+        throw new Error('PR number required\nUsage: codev consult -m <model> pr <number>');
+      }
+      const prNumber = parseInt(args[0], 10);
+      if (isNaN(prNumber)) {
+        throw new Error(`Invalid PR number: ${args[0]}`);
+      }
+      query = buildPRQuery(prNumber, codevRoot);
+      break;
+    }
+
+    case 'spec': {
+      if (args.length === 0) {
+        throw new Error('Spec number required\nUsage: codev consult -m <model> spec <number>');
+      }
+      const specNumber = parseInt(args[0], 10);
+      if (isNaN(specNumber)) {
+        throw new Error(`Invalid spec number: ${args[0]}`);
+      }
+      const specPath = findSpec(codevRoot, specNumber);
+      if (!specPath) {
+        throw new Error(`Spec ${specNumber} not found`);
+      }
+      const planPath = findPlan(codevRoot, specNumber);
+      query = buildSpecQuery(specPath, planPath);
+      console.error(`Spec: ${specPath}`);
+      if (planPath) console.error(`Plan: ${planPath}`);
+      break;
+    }
+
+    case 'plan': {
+      if (args.length === 0) {
+        throw new Error('Plan number required\nUsage: codev consult -m <model> plan <number>');
+      }
+      const planNumber = parseInt(args[0], 10);
+      if (isNaN(planNumber)) {
+        throw new Error(`Invalid plan number: ${args[0]}`);
+      }
+      const planPath = findPlan(codevRoot, planNumber);
+      if (!planPath) {
+        throw new Error(`Plan ${planNumber} not found`);
+      }
+      const specPath = findSpec(codevRoot, planNumber);
+      query = buildPlanQuery(planPath, specPath);
+      console.error(`Plan: ${planPath}`);
+      if (specPath) console.error(`Spec: ${specPath}`);
+      break;
+    }
+
+    case 'general': {
+      if (args.length === 0) {
+        throw new Error('Query required\nUsage: codev consult -m <model> general "<query>"');
+      }
+      query = args.join(' ');
+      break;
+    }
+
+    default:
+      throw new Error(`Unknown subcommand: ${subcommand}\nValid subcommands: pr, spec, plan, general`);
+  }
+
+  console.error('');
+  console.error('='.repeat(60));
+  console.error(`[${model.toUpperCase()}] Starting consultation...`);
+  console.error('='.repeat(60));
+  console.error('');
+
+  await runConsultation(model, query, codevRoot, dryRun);
+}
