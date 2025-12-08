@@ -145,8 +145,8 @@ Every project has a CLAUDE.md file with project-specific guidance. Style prefere
 
 Want to try SP(IDE)R yourself?
 
-1. Visit: [`github.com/ansari-project/codev`](https://github.com/ansari-project/codev)
-2. Tell your AI: "Follow the instructions in [INSTALL.md](https://github.com/ansari-project/codev/blob/main/INSTALL.md)"
+1. Visit: [`github.com/cluesmith/codev`](https://github.com/cluesmith/codev)
+2. Tell your AI: "Follow the instructions in [INSTALL.md](https://github.com/cluesmith/codev/blob/main/INSTALL.md)"
 3. Start with SP(IDE)R-SOLO for single-agent workflows
 4. Review our examples to see the methodology in action
 
@@ -155,8 +155,8 @@ We built a functional todo app without directly touching code, while maintaining
 ## Join the Movement
 
 Codev is in its early stages, and we're learning from every implementation. If you try SP(IDE)R:
-- Star the [GitHub repository](https://github.com/ansari-project/codev) to stay updated
-- [File issues](https://github.com/ansari-project/codev/issues) with your experiences, suggestions, or questions
+- Star the [GitHub repository](https://github.com/cluesmith/codev) to stay updated
+- [File issues](https://github.com/cluesmith/codev/issues) with your experiences, suggestions, or questions
 - Share your SP(IDE)R implementations - we analyze them to evolve the protocol
 - Email us at hi@waleed.dk with feedback
 - Join the conversation about the future of specification-driven development

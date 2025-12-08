@@ -36,7 +36,7 @@ mcp__zen__version
 ```bash
 # Clone codev repository to temporary directory
 TEMP_DIR=$(mktemp -d)
-git clone --depth 1 https://github.com/ansari-project/codev.git "$TEMP_DIR"
+git clone --depth 1 https://github.com/cluesmith/codev.git "$TEMP_DIR"
 
 # Copy skeleton structure to your project
 mkdir -p codev
@@ -335,7 +335,7 @@ The installation process automatically detects your environment and installs age
 **How to use**:
 ```bash
 # Check a specific repository for improvements
-"Check the ansari-project/webapp repo for any SPIDER improvements"
+"Check the cluesmith/webapp repo for any SPIDER improvements"
 
 # Periodic review of SPIDER implementations
 "Scan recent SPIDER implementations for protocol enhancements"

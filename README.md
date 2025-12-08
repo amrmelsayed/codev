@@ -32,7 +32,7 @@ Codev requires several dependencies. See **[DEPENDENCIES.md](codev-skeleton/DEPE
 
 Tell your AI agent:
 ```
-Apply Codev to this repo following the instructions at https://github.com/ansari-project/codev/
+Apply Codev to this repo following the instructions at https://github.com/cluesmith/codev/
 ```
 
 Then say "I want to build X using the SPIDER protocol" or "Teach me about Codev". 
@@ -48,7 +48,7 @@ Watch a brief overview of what Codev is and how it works.
 
 ### 💬 Participate
 
-Join the conversation in [GitHub Discussions](https://github.com/ansari-project/codev/discussions)! Share your specs, ask questions, and learn from the community.
+Join the conversation in [GitHub Discussions](https://github.com/cluesmith/codev/discussions)! Share your specs, ask questions, and learn from the community.
 
 **Get notified of new discussions**: Click the **Watch** button at the top of this repo → **Custom** → check **Discussions**.
 
@@ -257,7 +257,7 @@ See `tests/README.md` for detailed test documentation.
 
 Ask your AI agent to:
 ```
-Install Codev by following the instructions at https://github.com/ansari-project/codev/blob/main/INSTALL.md
+Install Codev by following the instructions at https://github.com/cluesmith/codev/blob/main/INSTALL.md
 ```
 
 The agent will:
@@ -436,7 +436,7 @@ See [INSTALL.md](INSTALL.md#architect-builder-pattern-optional) for full documen
 We welcome contributions! Please help us improve Codev:
 
 ### Filing Issues
-- **Bug Reports**: [Open an issue](https://github.com/ansari-project/codev/issues) with clear reproduction steps
+- **Bug Reports**: [Open an issue](https://github.com/cluesmith/codev/issues) with clear reproduction steps
 - **Feature Requests**: Share your ideas for new features or improvements
 - **Documentation**: Report unclear or missing documentation
 - **Questions**: Ask for clarification or help with implementation

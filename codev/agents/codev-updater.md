@@ -86,7 +86,7 @@ Document what's currently installed and what user work exists.
 ```bash
 # Clone latest codev to temporary directory
 TEMP_DIR=$(mktemp -d)
-git clone --depth 1 https://github.com/ansari-project/codev.git "$TEMP_DIR"
+git clone --depth 1 https://github.com/cluesmith/codev.git "$TEMP_DIR"
 
 # Compare versions
 diff -r codev/protocols "$TEMP_DIR/codev-skeleton/protocols" | grep "Only in"

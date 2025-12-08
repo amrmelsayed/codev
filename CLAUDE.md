@@ -186,7 +186,7 @@ The `spider-protocol-updater` agent helps evolve the SPIDER protocol by analyzin
 **How to invoke**:
 ```bash
 # Ask Claude to check a specific repository
-"Check the ansari-project/webapp repo for any SPIDER improvements we should adopt"
+"Check the cluesmith/webapp repo for any SPIDER improvements we should adopt"
 
 # Or for periodic reviews
 "It's been a month since we last checked for SPIDER improvements in other repos"
