@@ -89,6 +89,11 @@
       background: #2563eb;
     }
 
+    .btn-launch {
+      flex-shrink: 0;
+      min-width: 100px;
+    }
+
     .btn-small {
       padding: 6px 12px;
       font-size: 13px;
@@ -406,10 +411,11 @@
       display: flex;
       gap: 12px;
       align-items: center;
+      width: 100%;
     }
 
     .launch-form input[type="text"] {
-      flex: 1;
+      width: 100%;
       padding: 12px 16px;
       border-radius: 6px;
       border: 1px solid var(--border);
@@ -430,7 +436,8 @@
     /* Autocomplete dropdown */
     .autocomplete-wrapper {
       position: relative;
-      flex: 1;
+      flex: 1 1 auto;
+      width: 100%;
     }
 
     .autocomplete-dropdown {
@@ -585,7 +592,7 @@
           <input type="text" id="project-path" placeholder="Start typing a path (e.g., ~/Development/)" autocomplete="off" />
           <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
         </div>
-        <button class="btn btn-primary" onclick="launchInstance()">Start</button>
+        <button class="btn btn-primary btn-launch" onclick="launchInstance()">Launch</button>
       </div>
       <p class="launch-hint">
         Type a path to see suggestions. Directories with <code>codev/</code> are highlighted as valid projects.

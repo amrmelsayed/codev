@@ -242,6 +242,18 @@ async function launchInstance(projectPath: string): Promise<{ success: boolean; 
     return { success: false, error: `Not a directory: ${projectPath}` };
   }
 
+  // Validate codev directory exists
+  const codevDir = path.join(projectPath, 'codev');
+  if (!fs.existsSync(codevDir)) {
+    return { success: false, error: `Not a codev project: missing codev/ directory` };
+  }
+
+  // Validate roles directory exists
+  const rolesDir = path.join(codevDir, 'roles');
+  if (!fs.existsSync(rolesDir)) {
+    return { success: false, error: `Missing codev/roles/ directory. Run 'codev init' to set up the project.` };
+  }
+
   // Determine which agent-farm CLI to use:
   // 1. Local install: codev/bin/agent-farm (if exists)
   // 2. Global: npx agent-farm (fallback)
