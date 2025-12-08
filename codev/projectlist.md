@@ -123,6 +123,20 @@ Projects currently in development (conceived through committed), sorted by prior
 
 ```yaml
 # High Priority
+  - id: "0039"
+    title: "Codev CLI (First-Class Command)"
+    summary: "Unified codev command as primary entry point: init, adopt, doctor, update, tower, consult"
+    status: implementing
+    priority: high
+    release: null
+    files:
+      spec: codev/specs/0039-codev-cli.md
+      plan: codev/plans/0039-codev-cli.md
+      review: null
+    dependencies: ["0005", "0022"]
+    tags: [cli, npm, architecture]
+    notes: "4-way reviewed. Decisions: MERGE agent-farm, PORT consult to TS, SEPARATE binaries. ~3-4 days effort."
+
   - id: "0014"
     title: "Flexible Builder Spawning"
     summary: "Generalize spawn command to accept natural language instructions, not just project specs"
@@ -728,7 +742,7 @@ Projects that are paused or canceled.
 
 ## Next Available Number
 
-**0039** - Reserve this number for your next project
+**0040** - Reserve this number for your next project
 
 ---
 

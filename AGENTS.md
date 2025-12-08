@@ -411,12 +411,12 @@ The `consult` CLI provides a unified interface for single-agent consultation via
 
 ```
 # ✅ CORRECT - Two separate Bash tool calls in one message
-[Bash tool call 1]: ./codev/bin/consult gemini "$QUERY"
-[Bash tool call 2]: ./codev/bin/consult codex "$QUERY"
+[Bash tool call 1]: ./codev/bin/consult --model gemini spec 39
+[Bash tool call 2]: ./codev/bin/consult --model codex spec 39
 
 # ❌ WRONG - Sequential tool calls in separate messages
-[Message 1, Bash]: ./codev/bin/consult gemini "$QUERY"
-[Message 2, Bash]: ./codev/bin/consult codex "$QUERY"
+[Message 1, Bash]: ./codev/bin/consult --model gemini spec 39
+[Message 2, Bash]: ./codev/bin/consult --model codex spec 39
 ```
 
 ### Prerequisites
@@ -429,54 +429,37 @@ The `consult` CLI provides a unified interface for single-agent consultation via
 ### Usage
 
 ```bash
-# Consult Gemini (with autonomous mode)
-./codev/bin/consult gemini "Review this design approach"
+# Subcommand-based interface (preferred)
+./codev/bin/consult --model gemini pr 33        # Review a PR
+./codev/bin/consult --model codex spec 39       # Review a spec
+./codev/bin/consult --model claude plan 39      # Review a plan
+./codev/bin/consult --model gemini general "Review this design"  # General query
 
-# Consult Codex (with autonomous mode)
-./codev/bin/consult codex "What do you think of this API?"
-
-# Consult Claude (with autonomous mode)
-./codev/bin/consult claude "Review this implementation"
-
-# Use model aliases
-./codev/bin/consult pro "Review this"   # alias for gemini
-./codev/bin/consult gpt "Review this"   # alias for codex
-./codev/bin/consult opus "Review this"  # alias for claude
-
-# Pipe input via stdin
-echo "Review this code" | ./codev/bin/consult pro
+# Model aliases work too
+./codev/bin/consult --model pro spec 39    # alias for gemini
+./codev/bin/consult --model gpt pr 33      # alias for codex
+./codev/bin/consult --model opus plan 39   # alias for claude
 
 # Dry run (print command without executing)
-./codev/bin/consult gemini "test" --dry-run
+./codev/bin/consult --model gemini spec 39 --dry-run
 ```
 
-### Parallel Consultation
+### Parallel Consultation (3-Way Reviews)
 
-For 3-way reviews (Claude + Gemini + Codex), run consultations in parallel using separate shell processes:
+For 3-way reviews, run consultations in parallel using separate Bash tool calls:
 
 ```bash
-# Terminal 1: Gemini consultation with timing
-QUERY="Review PR 34..."
-START=$(date +%s)
-./codev/bin/consult gemini "$QUERY"
-echo "Gemini completed in $(($(date +%s)-START))s"
-
-# Terminal 2: Codex consultation with timing (simultaneously)
-START=$(date +%s)
-./codev/bin/consult codex "$QUERY"
-echo "Codex completed in $(($(date +%s)-START))s"
-
-# Terminal 3: Claude consultation with timing (simultaneously)
-START=$(date +%s)
-./codev/bin/consult claude "$QUERY"
-echo "Claude completed in $(($(date +%s)-START))s"
+# All three in parallel (separate Bash tool calls in same message)
+./codev/bin/consult --model gemini spec 39
+./codev/bin/consult --model codex spec 39
+./codev/bin/consult --model claude spec 39
 ```
 
-Or use background processes:
+Or use background processes in a single shell:
 ```bash
-./codev/bin/consult gemini "$QUERY" &
-./codev/bin/consult codex "$QUERY" &
-./codev/bin/consult claude "$QUERY" &
+./codev/bin/consult --model gemini spec 39 &
+./codev/bin/consult --model codex spec 39 &
+./codev/bin/consult --model claude spec 39 &
 wait
 ```
 
@@ -504,14 +487,13 @@ wait
 ### How It Works
 
 1. Reads the consultant role from `codev/roles/consultant.md`
-2. Invokes the appropriate CLI with autonomous mode enabled:
-   - gemini: `GEMINI_SYSTEM_MD=<temp_file> gemini --yolo <query>` (temp file contains the role)
+2. For subcommands (pr, spec, plan), auto-locates the file (e.g., `codev/specs/0039-*.md`)
+3. Invokes the appropriate CLI with autonomous mode enabled:
+   - gemini: `GEMINI_SYSTEM_MD=<temp_file> gemini --yolo <query>`
    - codex: `CODEX_SYSTEM_MESSAGE=<role> codex exec --full-auto <query>`
-   - claude: `claude --print -p <role + query> --dangerously-skip-permissions` (role prepended to query)
-3. Passes through stdout/stderr and exit codes
-4. Logs queries with timing to `.consult/history.log`
-5. Prints completion time to stderr
-6. Cleans up temp files after execution
+   - claude: `claude --print -p <role + query> --dangerously-skip-permissions`
+4. Passes through stdout/stderr and exit codes
+5. Logs queries with timing to `.consult/history.log`
 
 ### The Consultant Role
 
