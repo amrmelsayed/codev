@@ -723,10 +723,10 @@
 
   <!-- Context menu -->
   <div class="context-menu hidden" id="context-menu" role="menu">
-    <div class="context-menu-item" role="menuitem" tabindex="0" onclick="openContextTab()" onkeydown="handleContextMenuKeydown(event, openContextTab)">Open in New Tab</div>
-    <div class="context-menu-item" role="menuitem" tabindex="-1" onclick="closeActiveTab()" onkeydown="handleContextMenuKeydown(event, closeActiveTab)">Close</div>
-    <div class="context-menu-item" role="menuitem" tabindex="-1" onclick="closeOtherTabs()" onkeydown="handleContextMenuKeydown(event, closeOtherTabs)">Close Others</div>
-    <div class="context-menu-item danger" role="menuitem" tabindex="-1" onclick="closeAllTabs()" onkeydown="handleContextMenuKeydown(event, closeAllTabs)">Close All</div>
+    <div class="context-menu-item" role="menuitem" tabindex="0" data-action="openContextTab" onclick="openContextTab()" onkeydown="handleContextMenuKeydown(event)">Open in New Tab</div>
+    <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="closeActiveTab" onclick="closeActiveTab()" onkeydown="handleContextMenuKeydown(event)">Close</div>
+    <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="closeOtherTabs" onclick="closeOtherTabs()" onkeydown="handleContextMenuKeydown(event)">Close Others</div>
+    <div class="context-menu-item danger" role="menuitem" tabindex="-1" data-action="closeAllTabs" onclick="closeAllTabs()" onkeydown="handleContextMenuKeydown(event)">Close All</div>
   </div>
 
   <!-- Toast container -->
@@ -1381,7 +1381,7 @@
     }
 
     // Handle keyboard navigation in context menu
-    function handleContextMenuKeydown(event, action) {
+    function handleContextMenuKeydown(event) {
       const menu = document.getElementById('context-menu');
       const items = Array.from(menu.querySelectorAll('.context-menu-item'));
       const currentIndex = items.findIndex(item => item === document.activeElement);
@@ -1400,7 +1400,10 @@
         case 'Enter':
         case ' ':
           event.preventDefault();
-          action();
+          const actionName = event.target.dataset.action;
+          if (actionName && typeof window[actionName] === 'function') {
+            window[actionName]();
+          }
           break;
         case 'Escape':
           event.preventDefault();
