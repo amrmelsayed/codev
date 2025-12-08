@@ -271,6 +271,53 @@ function checkDependency(dep: Dependency): CheckResult {
 }
 
 /**
+ * Check if npm dependencies are installed
+ */
+function checkNpmDependencies(): CheckResult {
+  try {
+    // Check if we're in a directory with a package.json
+    const fs = require('node:fs');
+    const path = require('node:path');
+
+    // Look for codev package installation
+    const globalPath = execSync('npm root -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    const codevPath = path.join(globalPath, '@cluesmith', 'codev');
+
+    if (fs.existsSync(codevPath)) {
+      // Check version
+      try {
+        const pkgJson = JSON.parse(fs.readFileSync(path.join(codevPath, 'package.json'), 'utf-8'));
+        return { status: 'ok', version: pkgJson.version || 'installed' };
+      } catch {
+        return { status: 'ok', version: 'installed' };
+      }
+    }
+
+    // Check if af command exists (global install)
+    if (commandExists('af')) {
+      return { status: 'ok', version: 'installed (via af)' };
+    }
+
+    // Check if codev command exists
+    if (commandExists('codev')) {
+      return { status: 'ok', version: 'installed (via codev)' };
+    }
+
+    return {
+      status: 'warn',
+      version: 'not globally installed',
+      note: 'npm i -g @cluesmith/codev',
+    };
+  } catch {
+    return {
+      status: 'warn',
+      version: 'check failed',
+      note: 'npm i -g @cluesmith/codev',
+    };
+  }
+}
+
+/**
  * Main doctor function
  */
 export async function doctor(): Promise<number> {
@@ -291,6 +338,11 @@ export async function doctor(): Promise<number> {
     if (result.status === 'fail') errors++;
     if (result.status === 'warn') warnings++;
   }
+
+  // Check npm package
+  const npmResult = checkNpmDependencies();
+  printStatus('@cluesmith/codev', npmResult);
+  if (npmResult.status === 'warn') warnings++;
 
   console.log('');
 

@@ -1,7 +1,17 @@
 #!/bin/bash
-# Thin wrapper - forwards all commands to agent-farm TypeScript
+# Thin wrapper - forwards all commands to @cluesmith/codev agent-farm
 # Uses readlink to handle symlinks (e.g., if symlinked to /usr/local/bin)
 SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-exec node "$PROJECT_ROOT/agent-farm/dist/index.js" "$@"
+
+# Try new unified CLI first, fall back to old location for transition period
+if [ -f "$PROJECT_ROOT/packages/codev/dist/cli.js" ]; then
+  exec node "$PROJECT_ROOT/packages/codev/dist/cli.js" agent-farm "$@"
+elif [ -f "$PROJECT_ROOT/agent-farm/dist/index.js" ]; then
+  exec node "$PROJECT_ROOT/agent-farm/dist/index.js" "$@"
+else
+  echo "Error: Could not find agent-farm CLI" >&2
+  echo "Run 'npm install' in the codev root directory" >&2
+  exit 1
+fi
