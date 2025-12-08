@@ -3,7 +3,7 @@
  */
 
 import { resolve } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { StartOptions, ArchitectState } from '../types.js';
 import { getConfig, ensureDirectories } from '../utils/index.js';
 import { logger, fatal } from '../utils/logger.js';
@@ -60,25 +60,30 @@ export async function start(options: StartOptions = {}): Promise<void> {
   // Command is passed from index.ts (already resolved via CLI > config.json > default)
   let cmd = options.cmd || 'claude';
 
+  // Check if base command exists before we wrap it in a launch script
+  const baseCmdName = cmd.split(' ')[0];
+  if (!(await commandExists(baseCmdName))) {
+    fatal(`Command not found: ${baseCmdName}`);
+  }
+
   // Load architect role if available and not disabled
   if (!options.noRole) {
     const role = loadRolePrompt(config, 'architect');
     if (role) {
-      // Pass the prompt as a positional argument (not -p which exits after response)
-      // This starts an interactive session with the prompt as the first message
-      // Use double quotes since this will be wrapped in single quotes for tmux
-      const rolePath = role.source === 'local'
-        ? 'codev/roles/architect.md'
-        : resolve(config.bundledRolesDir, 'architect.md');
-      cmd = `${cmd} "You are the architect. Your role and responsibilities are described in ${rolePath}. Please read that file to understand your role."`;
+      // Write role to a file and create a launch script to avoid shell escaping issues
+      // The architect.md file contains backticks, $variables, and other shell-sensitive chars
+      const roleFile = resolve(config.stateDir, 'architect-role.md');
+      writeFileSync(roleFile, role.content, 'utf-8');
+
+      const launchScript = resolve(config.stateDir, 'launch-architect.sh');
+      writeFileSync(launchScript, `#!/bin/bash
+cd "${config.projectRoot}"
+exec ${cmd} --append-system-prompt "$(cat '${roleFile}')"
+`, { mode: 0o755 });
+
+      cmd = launchScript;
       logger.info(`Loaded architect role (${role.source})`);
     }
-  }
-
-  // Check if command exists
-  const cmdName = cmd.split(' ')[0];
-  if (!(await commandExists(cmdName))) {
-    fatal(`Command not found: ${cmdName}`);
   }
 
   // Find available port for architect terminal

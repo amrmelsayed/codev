@@ -222,20 +222,29 @@ async function startBuilderSession(
 
   logger.info('Creating tmux session...');
 
-  // Write role to a file if provided
-  if (roleContent) {
-    const roleFile = resolve(worktreePath, '.builder-role.md');
-    writeFileSync(roleFile, roleContent);
-    logger.info(`Loaded role (${roleSource})`);
-  }
-
   // Write initial prompt to a file for reference
   const promptFile = resolve(worktreePath, '.builder-prompt.txt');
   writeFileSync(promptFile, prompt);
 
-  // Build the start script
+  // Build the start script with role if provided
   const scriptPath = resolve(worktreePath, '.builder-start.sh');
-  writeFileSync(scriptPath, `#!/bin/bash\nexec ${baseCmd} "${prompt}"\n`);
+  let scriptContent: string;
+
+  if (roleContent) {
+    // Write role to a file and use $(cat) to avoid shell escaping issues
+    const roleFile = resolve(worktreePath, '.builder-role.md');
+    writeFileSync(roleFile, roleContent);
+    logger.info(`Loaded role (${roleSource})`);
+    scriptContent = `#!/bin/bash
+exec ${baseCmd} --append-system-prompt "$(cat '${roleFile}')" "\$(cat '${promptFile}')"
+`;
+  } else {
+    scriptContent = `#!/bin/bash
+exec ${baseCmd} "\$(cat '${promptFile}')"
+`;
+  }
+
+  writeFileSync(scriptPath, scriptContent);
   chmodSync(scriptPath, '755');
 
   // Create tmux session running the script
@@ -603,17 +612,27 @@ async function spawnWorktree(options: SpawnOptions, config: Config): Promise<voi
 
   logger.info('Creating tmux session...');
 
-  // Write role to a file if provided
+  // Build launch script (with role if provided) to avoid shell escaping issues
+  const scriptPath = resolve(worktreePath, '.builder-start.sh');
+  let scriptContent: string;
+
   if (role) {
     const roleFile = resolve(worktreePath, '.builder-role.md');
     writeFileSync(roleFile, role.content);
     logger.info(`Loaded role (${role.source})`);
+    scriptContent = `#!/bin/bash
+exec ${commands.builder} --append-system-prompt "$(cat '${roleFile}')"
+`;
+  } else {
+    scriptContent = `#!/bin/bash
+exec ${commands.builder}
+`;
   }
 
-  // No prompt file for worktree mode - interactive session
+  writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
 
-  // Create tmux session running Claude with no initial prompt
-  await run(`tmux new-session -d -s "${sessionName}" -x 200 -y 50 -c "${worktreePath}" "${commands.builder}"`);
+  // Create tmux session running the launch script
+  await run(`tmux new-session -d -s "${sessionName}" -x 200 -y 50 -c "${worktreePath}" "${scriptPath}"`);
 
   // Enable mouse scrolling in tmux
   await run('tmux set -g mouse on');
