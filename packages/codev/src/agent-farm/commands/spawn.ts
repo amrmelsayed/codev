@@ -21,6 +21,21 @@ import { loadState, upsertBuilder } from '../state.js';
  * Generate a short 4-character base64-encoded ID
  * Uses URL-safe base64 (a-z, A-Z, 0-9, -, _) for filesystem-safe IDs
  */
+/**
+ * Get the project name from config (basename of projectRoot)
+ * Used to namespace tmux sessions and prevent cross-project collisions
+ */
+function getProjectName(config: Config): string {
+  return basename(config.projectRoot);
+}
+
+/**
+ * Get a namespaced tmux session name: builder-{project}-{id}
+ */
+function getSessionName(config: Config, builderId: string): string {
+  return `builder-${getProjectName(config)}-${builderId}`;
+}
+
 function generateShortId(): string {
   // Generate random 24-bit number and base64 encode to 4 chars
   const num = Math.floor(Math.random() * 0xFFFFFF);
@@ -218,7 +233,7 @@ async function startBuilderSession(
   roleSource: string | null,
 ): Promise<{ port: number; pid: number; sessionName: string }> {
   const port = await findFreePort(config);
-  const sessionName = `builder-${builderId}`;
+  const sessionName = getSessionName(config, builderId);
 
   logger.info('Creating tmux session...');
 
@@ -608,7 +623,7 @@ async function spawnWorktree(options: SpawnOptions, config: Config): Promise<voi
 
   // Worktree mode: launch Claude with no prompt, but in the worktree directory
   const port = await findFreePort(config);
-  const sessionName = `builder-${builderId}`;
+  const sessionName = getSessionName(config, builderId);
 
   logger.info('Creating tmux session...');
 

@@ -4,11 +4,19 @@
 
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import type { Builder } from '../types.js';
+import { basename } from 'node:path';
+import type { Builder, Config } from '../types.js';
 import { getConfig } from '../utils/index.js';
 import { logger, fatal } from '../utils/logger.js';
 import { run } from '../utils/shell.js';
 import { loadState, removeBuilder } from '../state.js';
+
+/**
+ * Get a namespaced tmux session name: builder-{project}-{id}
+ */
+function getSessionName(config: Config, builderId: string): string {
+  return `builder-${basename(config.projectRoot)}-${builderId}`;
+}
 
 export interface CleanupOptions {
   project: string;
@@ -119,7 +127,7 @@ async function cleanupBuilder(builder: Builder, force?: boolean): Promise<void> 
   }
 
   // Kill tmux session if exists (use stored session name for correct shell/builder naming)
-  const sessionName = builder.tmuxSession || `builder-${builder.id}`;
+  const sessionName = builder.tmuxSession || getSessionName(config, builder.id);
   try {
     await run(`tmux kill-session -t "${sessionName}" 2>/dev/null`);
     logger.info('Killed tmux session');
