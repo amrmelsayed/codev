@@ -484,13 +484,17 @@ KEY_ISSUES: [List of critical issues if any, or "None"]
     print(f"Output: {spec_dir}/")
 
 
-def do_integrate(artifact_type: str, number: int) -> None:
-    """Synthesize verdicts from parallel consultations.
+def do_integrate(artifact_type: str, number: int, model: str, dry_run: bool) -> None:
+    """Synthesize verdicts from parallel consultations using AI.
 
-    Reads verdict files from all models and produces a combined summary.
+    Reads verdict files from all consultants and sends them to the specified
+    model for intelligent synthesis.
     """
     codev_root = find_codev_root()
     log_dir = codev_root / ".consult"
+
+    # Load .env
+    load_dotenv(codev_root)
 
     # Map artifact type to directory prefix
     dir_prefix = {
@@ -506,6 +510,9 @@ def do_integrate(artifact_type: str, number: int) -> None:
 
     artifact_dir = log_dir / dir_prefix[artifact_type]
 
+    print(f"[Integrate {artifact_type.upper()} #{number}]", file=sys.stderr)
+    print(f"Model: {model}", file=sys.stderr)
+
     # Check if directory exists
     if not artifact_dir.exists():
         print(f"Error: No consultations found for {artifact_type} {number}", file=sys.stderr)
@@ -516,95 +523,87 @@ def do_integrate(artifact_type: str, number: int) -> None:
         print(f"  consult --model claude {artifact_type} {number}", file=sys.stderr)
         sys.exit(1)
 
-    # Collect verdicts from all models
+    # Collect full verdict outputs from all models
     verdicts = {}
-    for model in ALL_MODELS:
-        verdict_file = artifact_dir / f"{model}-verdict.txt"
+    for consultant in ALL_MODELS:
+        verdict_file = artifact_dir / f"{consultant}-verdict.txt"
         if verdict_file.exists():
-            verdicts[model] = verdict_file.read_text()
+            verdicts[consultant] = verdict_file.read_text()
 
     if not verdicts:
         print(f"Error: No verdict files found in {artifact_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Parse verdicts to extract structured data
-    def parse_verdict(text: str) -> dict:
-        """Extract verdict, summary, confidence from verdict text."""
-        result = {"raw": text}
-        for line in text.split("\n"):
-            line = line.strip()
-            if line.startswith("VERDICT:"):
-                result["verdict"] = line.split(":", 1)[1].strip()
-            elif line.startswith("SUMMARY:"):
-                result["summary"] = line.split(":", 1)[1].strip()
-            elif line.startswith("CONFIDENCE:"):
-                result["confidence"] = line.split(":", 1)[1].strip()
-            elif line.startswith("KEY_ISSUES:"):
-                result["issues"] = line.split(":", 1)[1].strip()
-        return result
+    print(f"Found {len(verdicts)} verdict(s): {', '.join(verdicts.keys())}", file=sys.stderr)
 
-    parsed = {model: parse_verdict(text) for model, text in verdicts.items()}
+    if dry_run:
+        print("\n[DRY RUN] Would execute:", file=sys.stderr)
+        print(f"  1. Read {len(verdicts)} verdict files", file=sys.stderr)
+        print(f"  2. Send to {model} for synthesis", file=sys.stderr)
+        print(f"  3. Save output to {artifact_dir}/{model}-integrate.txt", file=sys.stderr)
+        sys.exit(0)
 
-    # Count verdicts
-    verdict_counts = {}
-    for model, data in parsed.items():
-        v = data.get("verdict", "UNKNOWN")
-        verdict_counts[v] = verdict_counts.get(v, 0) + 1
+    # Build query with all verdicts
+    verdict_text = ""
+    for consultant, content in verdicts.items():
+        verdict_text += f"\n## {consultant.upper()} Verdict:\n{content}\n"
 
-    # Determine consensus
-    total = len(parsed)
-    approve_count = verdict_counts.get("APPROVE", 0)
-    changes_count = verdict_counts.get("REQUEST_CHANGES", 0)
+    query = f"""Synthesize the following consultant verdicts for {artifact_type.upper()} #{number}.
 
-    if changes_count > 0:
-        consensus = "REQUEST_CHANGES"
-        consensus_reason = f"{changes_count}/{total} consultants requested changes"
-    elif approve_count == total:
-        consensus = "APPROVE"
-        consensus_reason = f"All {total} consultants approved"
-    else:
-        consensus = "COMMENT"
-        consensus_reason = f"Mixed verdicts: {verdict_counts}"
+You are reviewing verdicts from multiple AI consultants. Your job is to:
+1. Identify areas of agreement
+2. Identify areas of disagreement
+3. Weigh the arguments and provide your synthesis
+4. Give a final integrated recommendation
 
-    # Output integrated summary
+{verdict_text}
+
+Provide your synthesis with:
+1. CONSENSUS ANALYSIS: Where do the consultants agree/disagree?
+2. KEY CONCERNS: What issues were raised that should be addressed?
+3. YOUR SYNTHESIS: Your integrated view weighing all perspectives
+
+End with a verdict in this EXACT format:
+
+---
+VERDICT: [APPROVE | REQUEST_CHANGES | COMMENT]
+SUMMARY: [One-line integrated summary]
+CONFIDENCE: [HIGH | MEDIUM | LOW]
+---
+
+KEY_ISSUES: [Synthesized list of issues that need attention, or "None"]
+"""
+
+    # Run consultation
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"[{model.upper()}] Starting integration synthesis...", file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr)
+
+    output_file = artifact_dir / f"{model}-integrate.txt"
+    output, retcode, duration = run_model_consultation(
+        model, query, codev_root, output_file
+    )
+    log_query(log_dir, model, f"Integrate {artifact_type} #{number}", duration)
+
+    # Extract and display verdict
+    verdict = extract_verdict(output)
+    verdict_file = artifact_dir / f"{model}-integrate-verdict.txt"
+    verdict_file.write_text(verdict)
+
+    print(f"\n{'='*60}")
+    print(f"INTEGRATION SYNTHESIS [{model.upper()}] ({duration:.1f}s)")
     print(f"{'='*60}")
-    print(f"INTEGRATED VERDICT: {artifact_type.upper()} #{number}")
+    print(verdict)
+
+    # Summary
+    print(f"\n{'='*60}")
+    print("SUMMARY")
     print(f"{'='*60}")
-    print()
-    print(f"CONSENSUS: {consensus}")
-    print(f"Reason: {consensus_reason}")
-    print()
-
-    print("Individual Verdicts:")
-    print("-" * 40)
-    for model in ALL_MODELS:
-        if model in parsed:
-            data = parsed[model]
-            v = data.get("verdict", "UNKNOWN")
-            conf = data.get("confidence", "?")
-            summary = data.get("summary", "No summary")
-            print(f"  [{model.upper()}] {v} ({conf})")
-            print(f"    {summary}")
-        else:
-            print(f"  [{model.upper()}] Not consulted")
-    print()
-
-    # Collect key issues
-    all_issues = []
-    for model, data in parsed.items():
-        issues = data.get("issues", "")
-        if issues and issues.lower() != "none":
-            all_issues.append(f"[{model}] {issues}")
-
-    if all_issues:
-        print("Key Issues Raised:")
-        print("-" * 40)
-        for issue in all_issues:
-            print(f"  {issue}")
-        print()
-
-    # Output location
-    print(f"Full outputs: {artifact_dir}/")
+    print(f"Artifact: {artifact_type} #{number}")
+    print(f"Synthesizer: {model}")
+    print(f"Inputs: {', '.join(verdicts.keys())}")
+    print(f"Duration: {duration:.1f}s")
+    print(f"Output: {artifact_dir}/")
 
 
 def do_plan(number: int, model: str, dry_run: bool) -> None:
@@ -1100,7 +1099,7 @@ Subcommands:
   spec <number>          Review a Specification
   plan <number>          Review an Implementation Plan
   general <query>        General consultation query
-  integrate <type> <n>   Synthesize verdicts (no --model required)
+  integrate <type> <n>   Synthesize verdicts with AI
 
 Subcommand Options:
   -n, --dry-run          Show what would execute without running
@@ -1122,55 +1121,6 @@ def main():
     # Check for help with no args
     if not args or args == ["--help"] or args == ["-h"]:
         print_help()
-        sys.exit(0)
-
-    # Special case: integrate subcommand doesn't require --model
-    # Check if first arg is 'integrate' (before any flags)
-    if args[0].lower() == "integrate":
-        # Handle integrate subcommand directly
-        sub_args = args[1:]
-        if "--help" in sub_args or "-h" in sub_args:
-            print("""Usage: consult integrate <type> <number>
-
-Synthesize verdicts from parallel consultations.
-
-Arguments:
-  type                   Artifact type: pr, spec, or plan
-  number                 Artifact number
-
-Note: This subcommand does NOT require --model.
-
-Examples:
-  consult integrate pr 33
-  consult integrate spec 38
-  consult integrate plan 38
-
-Workflow:
-  1. Run parallel consultations:
-     consult --model gemini spec 38 &
-     consult --model codex spec 38 &
-     consult --model claude spec 38 &
-     wait
-
-  2. Synthesize the verdicts:
-     consult integrate spec 38
-""")
-            sys.exit(0)
-
-        if len(sub_args) < 2:
-            print("Error: integrate requires <type> and <number>", file=sys.stderr)
-            print("Usage: consult integrate <type> <number>", file=sys.stderr)
-            print("Types: pr, spec, plan", file=sys.stderr)
-            sys.exit(1)
-
-        artifact_type = sub_args[0].lower()
-        try:
-            artifact_number = int(sub_args[1])
-        except ValueError:
-            print(f"Error: Invalid number '{sub_args[1]}'", file=sys.stderr)
-            sys.exit(1)
-
-        do_integrate(artifact_type, artifact_number)
         sys.exit(0)
 
     # Parse global --model option first (before subcommand)
@@ -1429,9 +1379,71 @@ Examples:
 
         do_plan(plan_number, resolved_model, dry_run)
 
+    elif subcommand == "integrate":
+        # Parse integrate subcommand
+        if "--help" in sub_args or "-h" in sub_args:
+            print("""Usage: consult --model <model> integrate <type> <number> [options]
+
+Synthesize verdicts from parallel consultations using AI.
+
+Reads verdict files from all consultants and sends them to the specified
+model for intelligent synthesis.
+
+Arguments:
+  type                   Artifact type: pr, spec, or plan
+  number                 Artifact number
+
+Options:
+  -n, --dry-run          Show what would be executed without running
+  -h, --help             Show this message and exit
+
+Workflow:
+  1. Run parallel consultations:
+     consult --model gemini spec 38 &
+     consult --model codex spec 38 &
+     consult --model claude spec 38 &
+     wait
+
+  2. Run parallel integrations:
+     consult --model gemini integrate spec 38 &
+     consult --model codex integrate spec 38 &
+     consult --model claude integrate spec 38 &
+     wait
+
+  3. Architect synthesizes the integration outputs
+
+Examples:
+  consult --model gemini integrate pr 33
+  consult --model claude integrate spec 38
+""")
+            sys.exit(0)
+
+        if len(sub_args) < 2:
+            print("Error: integrate requires <type> and <number>", file=sys.stderr)
+            print("Usage: consult --model <model> integrate <type> <number>", file=sys.stderr)
+            print("Types: pr, spec, plan", file=sys.stderr)
+            sys.exit(1)
+
+        artifact_type = sub_args[0].lower()
+        try:
+            artifact_number = int(sub_args[1])
+        except ValueError:
+            print(f"Error: Invalid number '{sub_args[1]}'", file=sys.stderr)
+            sys.exit(1)
+
+        dry_run = False
+        for arg in sub_args[2:]:
+            if arg in ["--dry-run", "-n"]:
+                dry_run = True
+            else:
+                print(f"Error: Unknown option '{arg}'", file=sys.stderr)
+                sys.exit(1)
+
+        do_integrate(artifact_type, artifact_number, resolved_model, dry_run)
+
     else:
         print(f"Error: Unknown subcommand '{subcommand}'", file=sys.stderr)
-        print("Available subcommands: pr, spec, plan, general", file=sys.stderr)
+        print("Available subcommands: pr, spec, plan, general, integrate", file=sys.stderr)
         sys.exit(1)
 
 

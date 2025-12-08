@@ -783,9 +783,23 @@ Projects that are paused or canceled.
     tags: [agent-farm, multi-project, bug-fix]
     notes: "TICK protocol (hotfix). Changed session naming from 'builder-{spec_id}' to 'builder-{project}-{spec_id}'. PR #75."
 
+  - id: "0043"
+    title: "Codex Reliability for Codev"
+    summary: "Get Codex CLI running consistently and rapidly with codev consultations"
+    status: conceived
+    priority: high
+    release: null
+    files:
+      spec: null
+      plan: null
+      review: null
+    dependencies: ["0022"]
+    tags: [cli, consultation, codex]
+    notes: "Codex takes 200-250s vs Gemini's 120-150s. Sequential shell commands. Need to investigate optimization opportunities."
+
 ## Next Available Number
 
-**0043** - Reserve this number for your next project
+**0044** - Reserve this number for your next project
 
 ---
 
