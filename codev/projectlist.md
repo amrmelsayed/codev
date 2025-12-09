@@ -799,7 +799,7 @@ Projects that are paused or canceled.
   - id: "0044"
     title: "Architect-Builder Workflow Clarity"
     summary: "Document and enforce clear workflow stages between architect and builder roles"
-    status: specified
+    status: implementing
     priority: high
     release: null
     files:
