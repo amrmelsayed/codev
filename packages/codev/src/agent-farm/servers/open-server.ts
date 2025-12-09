@@ -89,7 +89,9 @@ const server = http.createServer((req, res) => {
       template = template.replace(/\{\{LANG\}\}/g, lang);
 
       // Inject file content
-      const escapedContent = JSON.stringify(fileContent);
+      // JSON.stringify escapes quotes but not </script> which would break HTML parsing
+      // Replace </script> with <\/script> (valid JS, doesn't match HTML closing tag)
+      const escapedContent = JSON.stringify(fileContent).replace(/<\/script>/gi, '<\\/script>');
       template = template.replace(
         '// FILE_CONTENT will be injected by the server',
         `init(${escapedContent});`

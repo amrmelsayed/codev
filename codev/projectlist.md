@@ -808,11 +808,25 @@ Projects that are paused or canceled.
       review: null
     dependencies: []
     tags: [protocol, workflow, spider]
-    notes: "9-stage workflow with clear human gates. Delete SPIDER-SOLO, add consult --type parameter, create review type prompts."
+    notes: "7-stage workflow with clear human gates. Delete SPIDER-SOLO, add consult --type parameter, create review type prompts."
+
+  - id: "0045"
+    title: "Project List UI"
+    summary: "Visual dashboard tab showing project status across 7 lifecycle stages with welcome onboarding"
+    status: conceived
+    priority: high
+    release: null
+    files:
+      spec: codev/specs/0045-project-list-ui.md
+      plan: null
+      review: null
+    dependencies: ["0007"]
+    tags: [ui, dashboard, onboarding]
+    notes: "Uncloseable tab, 7-column Kanban view, projects march across as work progresses"
 
 ## Next Available Number
 
-**0045** - Reserve this number for your next project
+**0046** - Reserve this number for your next project
 
 ---
 
