@@ -2550,9 +2550,6 @@
     // Render a single project row
     function renderProjectRow(project) {
       const isExpanded = expandedProjectId === project.id;
-      const tickBadge = project.ticks && project.ticks.length > 0
-        ? `<span class="tick-badge" title="TICK amendments">🔧</span>`
-        : '';
 
       const row = `
         <tr class="status-${project.status}"
@@ -2565,7 +2562,6 @@
             <div class="project-cell">
               <span class="project-id">${escapeProjectHtml(project.id)}</span>
               <span class="project-title" title="${escapeProjectHtml(project.title)}">${escapeProjectHtml(project.title)}</span>
-              ${tickBadge}
             </div>
           </td>
           ${LIFECYCLE_STAGES.map(stage => renderStageCell(project, stage)).join('')}
@@ -2581,16 +2577,8 @@
     // Render the details row when expanded
     function renderProjectDetailsRow(project) {
       const links = [];
-      if (project.files) {
-        if (project.files.spec) {
-          links.push(`<a href="#" onclick="openProjectFile('${project.files.spec}'); return false;">Spec</a>`);
-        }
-        if (project.files.plan) {
-          links.push(`<a href="#" onclick="openProjectFile('${project.files.plan}'); return false;">Plan</a>`);
-        }
-        if (project.files.review) {
-          links.push(`<a href="#" onclick="openProjectFile('${project.files.review}'); return false;">Review</a>`);
-        }
+      if (project.files && project.files.review) {
+        links.push(`<a href="#" onclick="openProjectFile('${project.files.review}'); return false;">Review</a>`);
       }
 
       const dependencies = project.dependencies && project.dependencies.length > 0
