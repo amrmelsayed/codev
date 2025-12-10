@@ -34,11 +34,19 @@ export async function consult(
 
   // Build the consult command
   const consultBin = path.join(config.projectRoot, 'codev/bin/consult');
-  let cmd = `${consultBin} --model ${options.model}`;
+  let consultCmd = `${consultBin} --model ${options.model}`;
   if (options.type) {
-    cmd += ` --type ${options.type}`;
+    consultCmd += ` --type ${options.type}`;
   }
-  cmd += ` ${subcommand} ${target}`;
+  consultCmd += ` ${subcommand} ${target}`;
+
+  // For PR reviews, checkout the PR branch first so consultants can explore the actual files
+  let cmd: string;
+  if (subcommand.toLowerCase() === 'pr') {
+    cmd = `gh pr checkout ${target} && ${consultCmd}`;
+  } else {
+    cmd = consultCmd;
+  }
 
   // Generate a name for the terminal (e.g., "gemini-pr87")
   const name = `${options.model}-${subcommand}${target}`;
