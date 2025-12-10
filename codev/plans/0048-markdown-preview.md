@@ -8,9 +8,23 @@
 
 ## Executive Summary
 
-Implement a toggle button in the `af open` file viewer that allows users to switch between raw markdown editing and rendered preview modes. The implementation uses marked.js for markdown parsing, DOMPurify for XSS sanitization, and Prism.js (already loaded) for syntax highlighting code blocks.
+Implement a toggle button in the `af open` file viewer that allows users to switch between the default annotated view (line numbers + syntax highlighting) and a rendered markdown preview. The implementation uses marked.js for markdown parsing, DOMPurify for XSS sanitization, and Prism.js (already loaded) for syntax highlighting code blocks.
 
 This is a small, focused change affecting primarily the `open.html` template with minor changes to `open-server.ts`.
+
+## Architecture Clarification
+
+**Important:** The `af open` UI has three distinct containers:
+
+1. **`#viewMode`** - The default view showing line numbers and syntax-highlighted code in a grid layout. This is what users see when they first open a file.
+
+2. **`#editor`** - A hidden textarea that becomes visible only when the user clicks "Switch to Editing" (the existing edit mode for making changes).
+
+3. **`#preview-container`** (NEW) - The rendered markdown preview that will toggle with `#viewMode`.
+
+The markdown preview feature toggles between `#viewMode` and `#preview-container`. It does NOT interact with `#editor` (the textarea). The "Edit" in the spec's "Edit/Preview toggle" refers to the `#viewMode` annotated view, NOT the textarea edit mode.
+
+**Content source:** The `currentContent` JavaScript variable holds the file content (kept in sync with any edits). Preview rendering reads from `currentContent`, not the textarea.
 
 ## Success Metrics
 - [ ] All specification criteria met (see spec for full list)
@@ -106,91 +120,109 @@ Remove the CDN script tags
 
 #### Objectives
 - Add toggle button to toolbar
-- Implement basic show/hide toggling between edit and preview containers
+- Implement basic show/hide toggling between annotated view and preview container
 
 #### Deliverables
 - [ ] Toggle button in toolbar (visible only for .md files)
 - [ ] Preview container div
 - [ ] Basic toggle functionality (no rendering yet)
 - [ ] Keyboard shortcut (Cmd/Ctrl+Shift+P)
+- [ ] Disable "Switch to Editing" button when in preview mode
 
 #### Implementation Details
 
 **File**: `agent-farm/templates/open.html`
 
-**HTML structure** (add preview container after editor):
+**HTML structure** (add preview container after `#viewMode`):
 
 ```html
-<div id="preview-container" style="display: none; padding: 20px; overflow: auto;"></div>
+<!-- Add after the <div class="content" id="viewMode">...</div> -->
+<div id="preview-container" style="display: none; padding: 20px; overflow: auto; height: calc(100vh - 80px);"></div>
 ```
 
-**Toolbar button** (add before save button):
+**Toolbar button** (add after editBtn, before saveBtn):
 
 ```html
-<button id="toggle-preview" style="display: none;" title="Toggle Preview (Cmd+Shift+P)">
+<button id="togglePreviewBtn" class="btn btn-secondary" style="display: none;" title="Toggle Preview (Cmd+Shift+P)">
   <span id="toggle-icon">👁</span> <span id="toggle-text">Preview</span>
 </button>
 ```
 
-**JavaScript** (toggle logic):
+**JavaScript** (toggle logic - add to the script section):
 
 ```javascript
+// Markdown preview state (add near other state variables like editMode)
 const isMarkdown = {{IS_MARKDOWN}};
-const toggleBtn = document.getElementById('toggle-preview');
-const toggleIcon = document.getElementById('toggle-icon');
-const toggleText = document.getElementById('toggle-text');
-const editor = document.getElementById('editor');
-const previewContainer = document.getElementById('preview-container');
-const saveButton = document.getElementById('save-button');
-
 let isPreviewMode = false;
 
-if (isMarkdown) {
-  toggleBtn.style.display = 'inline-block';
-  toggleBtn.addEventListener('click', toggleMode);
+// DOM elements for preview (add in init or at script start)
+const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+const previewContainer = document.getElementById('preview-container');
+const viewMode = document.getElementById('viewMode');
+const editBtn = document.getElementById('editBtn');
 
-  // Keyboard shortcut
+// Initialize preview toggle if markdown file
+if (isMarkdown && togglePreviewBtn) {
+  togglePreviewBtn.style.display = 'inline-block';
+  togglePreviewBtn.addEventListener('click', togglePreviewMode);
+
+  // Keyboard shortcut: Cmd/Ctrl+Shift+P
   document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
       e.preventDefault();
-      toggleMode();
+      togglePreviewMode();
     }
   });
 }
 
-function toggleMode() {
+function togglePreviewMode() {
+  // Don't allow preview toggle while in textarea edit mode
+  if (editMode) {
+    return;  // Must exit edit mode first
+  }
+
   isPreviewMode = !isPreviewMode;
 
+  const toggleIcon = document.getElementById('toggle-icon');
+  const toggleText = document.getElementById('toggle-text');
+
   if (isPreviewMode) {
-    editor.style.display = 'none';
+    // Switch to Preview mode: hide viewMode, show preview
+    viewMode.style.display = 'none';
     previewContainer.style.display = 'block';
     toggleIcon.textContent = '✏️';
     toggleText.textContent = 'Edit';
-    saveButton.disabled = true;
+    editBtn.disabled = true;  // Can't enter edit mode while previewing
+    // Note: renderPreview() will be called here in Phase 4
   } else {
-    editor.style.display = 'block';
+    // Switch back to annotated view
+    viewMode.style.display = 'grid';  // Restore grid display
     previewContainer.style.display = 'none';
     toggleIcon.textContent = '👁';
     toggleText.textContent = 'Preview';
-    saveButton.disabled = false;
+    editBtn.disabled = false;
   }
 }
 ```
 
+**Important:** The toggle switches between `#viewMode` (the line-number grid) and `#preview-container`. The `#editor` textarea is a separate concept used by the existing "Switch to Editing" functionality.
+
 #### Acceptance Criteria
 - [ ] Toggle button visible for .md files
 - [ ] Toggle button hidden for non-.md files
-- [ ] Clicking toggles between editor and empty preview container
+- [ ] Clicking toggles between `#viewMode` (annotated view) and empty preview container
 - [ ] Cmd/Ctrl+Shift+P triggers toggle
-- [ ] Save button disabled in preview mode
+- [ ] "Switch to Editing" button disabled in preview mode (must exit preview first)
+- [ ] Toggle does nothing if user is currently in textarea edit mode
 
 #### Test Plan
 - **Manual Testing**:
   - Open .md file, verify toggle button visible
   - Open .ts file, verify toggle button hidden
-  - Click toggle, verify editor hides and preview shows
+  - Click toggle, verify `#viewMode` (line numbers) hides and preview container shows
   - Press Cmd+Shift+P, verify toggle works
-  - Verify save button grays out in preview mode
+  - Verify "Switch to Editing" button is disabled in preview mode
+  - Click "Switch to Editing" first, verify preview toggle button is blocked while in textarea edit mode
 
 #### Rollback Strategy
 Remove the toggle button and related JavaScript
@@ -218,6 +250,7 @@ Remove the toggle button and related JavaScript
 **Configure marked.js with secure link renderer**:
 
 ```javascript
+// Configure marked.js once on page load (add after isMarkdown check)
 if (isMarkdown && typeof marked !== 'undefined') {
   marked.use({
     renderer: {
@@ -230,27 +263,35 @@ if (isMarkdown && typeof marked !== 'undefined') {
 }
 
 function renderPreview() {
-  const content = editor.textContent || editor.innerText;
-  const rawHtml = marked.parse(content);
+  // Use currentContent (the authoritative file content variable)
+  // This is kept in sync with any edits the user makes
+  const rawHtml = marked.parse(currentContent);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
   previewContainer.innerHTML = cleanHtml;
 }
 ```
 
-**Update toggleMode() to call renderPreview()**:
+**Update togglePreviewMode() to call renderPreview()** (in Phase 3 code):
 
 ```javascript
-function toggleMode() {
+function togglePreviewMode() {
+  if (editMode) return;
+
   isPreviewMode = !isPreviewMode;
+  // ... (toggle icon/text as before)
 
   if (isPreviewMode) {
-    renderPreview();  // <-- Add this
-    editor.style.display = 'none';
-    // ... rest of function
+    renderPreview();  // <-- Add this call
+    viewMode.style.display = 'none';
+    previewContainer.style.display = 'block';
+    // ... rest
+  } else {
+    // ... restore viewMode
   }
-  // ...
 }
 ```
+
+**Note:** The `currentContent` variable is the authoritative source of file content in `open.html`. It's initialized with the file contents and updated whenever the user saves changes. Using this instead of `editor.textContent` ensures preview works even when the user hasn't entered textarea edit mode.
 
 #### Acceptance Criteria
 - [ ] Markdown renders as HTML in preview
@@ -287,12 +328,12 @@ Remove marked.use() configuration and renderPreview() function
 
 **File**: `agent-farm/templates/open.html`
 
-**Update renderPreview() to run Prism.js**:
+**Update renderPreview() to run Prism.js after markdown rendering**:
 
 ```javascript
 function renderPreview() {
-  const content = editor.textContent || editor.innerText;
-  const rawHtml = marked.parse(content);
+  // Use currentContent (the authoritative file content variable)
+  const rawHtml = marked.parse(currentContent);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
   previewContainer.innerHTML = cleanHtml;
 
@@ -307,6 +348,8 @@ function renderPreview() {
   });
 }
 ```
+
+**Note:** This is an update to the `renderPreview()` function from Phase 4. The syntax highlighting runs after markdown is parsed and sanitized.
 
 #### Acceptance Criteria
 - [ ] Code blocks with language specifier (```javascript) are highlighted
@@ -340,57 +383,63 @@ Remove the Prism.js highlighting loop from renderPreview()
 
 **File**: `agent-farm/templates/open.html`
 
-**Scroll position handling** (update toggleMode()):
+**Scroll position handling** (update togglePreviewMode()):
 
 ```javascript
-function toggleMode() {
+function togglePreviewMode() {
+  if (editMode) return;
+
   // Capture scroll position as percentage before switching
-  const sourceElement = isPreviewMode ? previewContainer : editor;
-  const scrollPercent = sourceElement.scrollHeight > 0
-    ? sourceElement.scrollTop / sourceElement.scrollHeight
+  // Note: We scroll the body/document since viewMode/previewContainer fill the viewport
+  const scrollPercent = document.documentElement.scrollHeight > 0
+    ? window.scrollY / document.documentElement.scrollHeight
     : 0;
 
   isPreviewMode = !isPreviewMode;
 
+  const toggleIcon = document.getElementById('toggle-icon');
+  const toggleText = document.getElementById('toggle-text');
+
   if (isPreviewMode) {
     renderPreview();
-    editor.style.display = 'none';
+    viewMode.style.display = 'none';
     previewContainer.style.display = 'block';
     toggleIcon.textContent = '✏️';
     toggleText.textContent = 'Edit';
-    saveButton.disabled = true;
+    editBtn.disabled = true;
   } else {
-    editor.style.display = 'block';
+    viewMode.style.display = 'grid';
     previewContainer.style.display = 'none';
     toggleIcon.textContent = '👁';
     toggleText.textContent = 'Preview';
-    saveButton.disabled = false;
+    editBtn.disabled = false;
   }
 
-  // Restore approximate scroll position
-  const targetElement = isPreviewMode ? previewContainer : editor;
+  // Restore approximate scroll position after content is rendered
   requestAnimationFrame(() => {
-    targetElement.scrollTop = scrollPercent * targetElement.scrollHeight;
+    window.scrollTo(0, scrollPercent * document.documentElement.scrollHeight);
   });
-
-  updateToggleButton();
 }
 ```
 
+**Note:** Scroll position is tracked on the window/document level since both `#viewMode` and `#preview-container` fill the viewport. This provides approximate scroll preservation when toggling between modes.
+
 **CSS styling** (add to `<style>` section):
+
+Note: Since `open.html` uses hardcoded colors (not CSS variables), use explicit color values matching the existing dark theme:
 
 ```css
 #preview-container {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.6;
-  color: var(--text-primary);
+  color: #fff;  /* Match body color */
   max-width: 900px;
   margin: 0 auto;
 }
 
 #preview-container h1,
 #preview-container h2 {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #333;  /* Match existing border colors */
   padding-bottom: 0.3em;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
@@ -401,14 +450,14 @@ function toggleMode() {
 #preview-container h3 { font-size: 1.25em; margin-top: 1em; }
 
 #preview-container code {
-  background: var(--bg-tertiary);
+  background: #2c313a;  /* Match .md-code background */
   padding: 0.2em 0.4em;
   border-radius: 3px;
   font-size: 0.9em;
 }
 
 #preview-container pre {
-  background: var(--bg-secondary);
+  background: #252525;  /* Match .line-num background */
   padding: 16px;
   overflow: auto;
   border-radius: 6px;
@@ -428,21 +477,21 @@ function toggleMode() {
 
 #preview-container th,
 #preview-container td {
-  border: 1px solid var(--border);
+  border: 1px solid #333;
   padding: 8px 12px;
   text-align: left;
 }
 
 #preview-container th {
-  background: var(--bg-secondary);
+  background: #2a2a2a;  /* Match .header background */
 }
 
 #preview-container tr:nth-child(even) {
-  background: var(--bg-tertiary);
+  background: #252525;
 }
 
 #preview-container a {
-  color: var(--accent);
+  color: #3b82f6;  /* Match .btn-primary */
   text-decoration: underline;
 }
 
@@ -453,10 +502,10 @@ function toggleMode() {
 }
 
 #preview-container blockquote {
-  border-left: 4px solid var(--border);
+  border-left: 4px solid #333;
   padding-left: 1em;
   margin: 1em 0;
-  color: var(--text-secondary);
+  color: #888;  /* Match .subtitle color */
 }
 ```
 
@@ -575,16 +624,34 @@ Phase 1 (Server) ──→ Phase 2 (CDN) ──→ Phase 3 (Toggle UI) ──→
 - [ ] Performance spot check with large markdown file
 
 ## Expert Review
-<!-- To be filled after consultation -->
+
+### 3-Way Plan Review (2025-12-10)
+
+| Model | Verdict | Summary |
+|-------|---------|---------|
+| Gemini | ✅ APPROVE | Detailed and well-structured plan with appropriate risk mitigations |
+| Codex | ⚠️ REQUEST_CHANGES | Plan targeted wrong UI elements; needed architectural clarification |
+| Claude | ✅ APPROVE | Well-structured with minor cleanup needed |
+
+**Codex's Key Issues (ADDRESSED):**
+1. ~~Preview wired to `#editor` instead of `#viewMode`~~ → Fixed: Added Architecture Clarification section, updated all phases
+2. ~~Content reads from editor textarea~~ → Fixed: Now uses `currentContent` variable
+3. ~~Scroll preservation on wrong elements~~ → Fixed: Now uses window scroll position
+4. ~~Save button/edit mode interaction unclear~~ → Fixed: editBtn disabled in preview mode
+
+**Claude's Minor Issues (ADDRESSED):**
+1. ~~`updateToggleButton()` undefined~~ → Removed from Phase 6
+2. ~~CSS variables need verification~~ → Replaced with hardcoded colors matching theme
 
 ## Approval
 - [ ] Technical Lead Review
-- [ ] Expert AI Consultation Complete
+- [x] Expert AI Consultation Complete
 
 ## Change Log
 | Date | Change | Reason | Author |
 |------|--------|--------|--------|
 | 2025-12-10 | Initial plan | Created from spec | Architect |
+| 2025-12-10 | Major revision | Address 3-way review feedback (Codex: architectural issues, Claude: minor cleanup) | Architect |
 
 ## Notes
 - Implementation details moved from spec per architect review
