@@ -1177,7 +1177,7 @@ Projects that are paused or canceled.
   - id: "0045"
     title: "Project List UI"
     summary: "Visual dashboard tab showing project status across 7 lifecycle stages with welcome onboarding"
-    status: committed
+    status: integrated
     priority: high
     release: null
     files:
@@ -1193,13 +1193,13 @@ Projects that are paused or canceled.
       implementing_at: null
       implemented_at: null
       committed_at: null
-      integrated_at: null
+      integrated_at: "2025-12-09T20:54:57-08:00"
     notes: "PR #85 merged 2025-12-09. Projects tab with Kanban view, welcome screen, parser, terminal states."
 
   - id: "0046"
     title: "CLI Command Reference Documentation"
     summary: "Reference documentation for codev, af, and consult CLI commands"
-    status: committed
+    status: integrated
     priority: medium
     release: null
     files:
@@ -1215,7 +1215,7 @@ Projects that are paused or canceled.
       implementing_at: null
       implemented_at: null
       committed_at: null
-      integrated_at: null
+      integrated_at: "2025-12-09T20:54:57-08:00"
     notes: "PR #87 merged 2025-12-10."
 
   - id: "0047"
