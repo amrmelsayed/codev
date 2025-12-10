@@ -1243,13 +1243,13 @@ Projects that are paused or canceled.
   - id: "0048"
     title: "Markdown Preview for af open"
     summary: "Add option to render markdown files as formatted HTML when opened via af open"
-    status: implementing
+    status: implemented
     priority: medium
     release: null
     files:
       spec: codev/specs/0048-markdown-preview.md
       plan: codev/plans/0048-markdown-preview.md
-      review: null
+      review: codev/reviews/0048-markdown-preview.md
     dependencies: []
     tags: [dashboard, ui, markdown]
     timestamps:
@@ -1257,7 +1257,7 @@ Projects that are paused or canceled.
       specified_at: "2025-12-09T23:21:00-08:00"
       planned_at: "2025-12-09T23:28:59-08:00"
       implementing_at: "2025-12-09T23:31:36-08:00"
-      implemented_at: null
+      implemented_at: "2025-12-09T23:57:41-08:00"
       committed_at: null
       integrated_at: null
     notes: ""
