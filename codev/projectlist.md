@@ -492,24 +492,24 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0012"
     title: "Hide tmux Status Bar"
     summary: "Cleaner dashboard UI by removing the tmux status bar from embedded terminals"
-    status: specified
+    status: planned
     priority: low
     release: null
     files:
       spec: codev/specs/0012-hide-tmux-status-bar.md
-      plan: null
+      plan: codev/plans/0012-hide-tmux-status-bar.md
       review: null
     dependencies: []
     tags: [ui, dashboard]
     timestamps:
       conceived_at: null
       specified_at: null
-      planned_at: null
+      planned_at: "2025-12-10T12:24:00-08:00"
       implementing_at: null
       implemented_at: null
       committed_at: null
       integrated_at: null
-    notes: "TICK protocol. tmux set-option status off. Add toggle for debugging. Consulted GPT-5 and Gemini Pro."
+    notes: "TICK protocol. Plan approved by Gemini and Codex (HIGH confidence)."
 
   - id: "0017"
     title: "Platform Portability Layer"
