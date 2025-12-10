@@ -826,9 +826,23 @@ Projects that are paused or canceled.
     tags: [ui, dashboard, onboarding]
     notes: "PR #85 merged 2025-12-09. Projects tab with Kanban view, welcome screen, parser, terminal states."
 
+  - id: "0046"
+    title: "CLI Command Reference Documentation"
+    summary: "Reference documentation for codev, af, and consult CLI commands"
+    status: planned
+    priority: medium
+    release: null
+    files:
+      spec: codev/specs/0046-cli-command-reference.md
+      plan: codev/plans/0046-cli-command-reference.md
+      review: null
+    dependencies: ["0039"]
+    tags: [documentation, cli]
+    notes: ""
+
 ## Next Available Number
 
-**0046** - Reserve this number for your next project
+**0047** - Reserve this number for your next project
 
 ---
 
