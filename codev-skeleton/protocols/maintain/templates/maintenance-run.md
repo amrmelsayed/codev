@@ -26,6 +26,7 @@ git log --oneline <last-maint-commit>..HEAD
 - [ ] arch.md sync
 - [ ] lessons-learned.md generation
 - [ ] CLAUDE.md / AGENTS.md sync
+- [ ] Documentation pruning (obsolete content, size limits)
 
 ### Framework
 - [ ] codev update
@@ -34,6 +35,25 @@ git log --oneline <last-maint-commit>..HEAD
 ## Findings
 
 <!-- Notable discoveries during maintenance -->
+
+## Documentation Changes
+
+<!-- REQUIRED: Log all documentation deletions/moves with justification -->
+
+### arch.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
+
+### CLAUDE.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
+
+### README.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
 
 ## Deferred
 

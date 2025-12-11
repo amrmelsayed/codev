@@ -192,31 +192,54 @@ Ensure both instruction files contain the same content:
 
 ### Prune Documentation
 
-Review documentation for obsolete content and size management:
+**CRITICAL: Documentation pruning requires JUSTIFICATION for every deletion.**
+
+Size targets (~400 lines for CLAUDE.md/README.md) are **guidelines, not mandates**. Never sacrifice clarity or important content just to hit a line count.
+
+**Before deleting ANY content, document:**
+1. **What** is being removed (quote or summarize)
+2. **Why** it's being removed:
+   - `OBSOLETE` - References deleted code/features
+   - `DUPLICATIVE` - Same info exists elsewhere (cite location)
+   - `MOVED` - Relocated to another file (cite new location)
+   - `VERBOSE` - Can be condensed without losing meaning
+3. **Decision** - Delete, move, or keep with note
+
+**Create a deletion log in your maintenance file:**
+```markdown
+## Documentation Changes
+
+### arch.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| "Old API docs" | DELETED | OBSOLETE - API removed in v1.2 |
+| "Installation" | MOVED | To INSTALL.md for brevity |
+| "Architecture patterns" | KEPT | Still relevant, referenced by builders |
+```
 
 **Files to review**:
 - `codev/resources/arch.md` - remove references to deleted code/modules
-- `codev/resources/lessons-learned.md` - remove outdated lessons (tech changed, patterns superseded)
-- `CLAUDE.md` / `AGENTS.md` - keep under ~400 lines
-- `README.md` - keep under ~400 lines
+- `codev/resources/lessons-learned.md` - remove outdated lessons
+- `CLAUDE.md` / `AGENTS.md` - target ~400 lines (guideline, not hard limit)
+- `README.md` - target ~400 lines (guideline, not hard limit)
 
-**Size management for CLAUDE.md/README.md**:
-1. Check line count: `wc -l CLAUDE.md README.md`
-2. If over 400 lines, identify content to extract
-3. Move detailed content to `codev/resources/` or `codev/docs/`
-4. Replace with summary + link to full doc
+**Conservative approach**:
+- When in doubt, KEEP the content
+- If unsure, ASK the architect before deleting
+- Prefer MOVING over DELETING
+- Never delete "development patterns" or "best practices" sections without explicit approval
 
-**What to extract**:
+**What to extract (move, don't delete)**:
 - Detailed command references → `codev/docs/commands/`
 - Protocol details → `codev/protocols/*/protocol.md`
 - Tool configuration → `codev/resources/`
-- Historical context → `codev/resources/`
 
-**What to keep in CLAUDE.md**:
-- Quick start essentials
-- Critical rules and constraints
+**What to ALWAYS keep in CLAUDE.md**:
+- Git prohibitions and safety rules
+- Critical workflow instructions
+- Protocol selection guidance
+- Consultation requirements
 - Links to detailed docs
-- Project-specific context
 
 ### Remove Dead Code
 
@@ -310,18 +333,24 @@ MAINTAIN is an **operational protocol**, not a feature development protocol:
 
 ## Best Practices
 
-1. **Don't be aggressive**: When in doubt, keep the code
-2. **Check git blame**: Understand why code exists before deleting
+1. **Don't be aggressive**: When in doubt, KEEP the content. It's easier to delete later than to recover lost knowledge.
+2. **Check git blame**: Understand why code/docs exist before removing
 3. **Run full test suite**: Not just affected tests
 4. **Group related changes**: One commit per logical change
-5. **Document decisions**: Note why things were kept or removed
+5. **Document EVERY deletion**: Include what, why, and where (if moved)
+6. **Ask when unsure**: Consult architect before removing "important-looking" content
+7. **Prefer moving over deleting**: Extract to another file rather than removing entirely
+8. **Size targets are guidelines**: Never sacrifice clarity to hit a line count
 
 ---
 
 ## Anti-Patterns
 
-1. **Deleting everything the audit finds**: Review each item
-2. **Skipping validation**: "It looked dead" is not validation
-3. **Using `rm` instead of `git rm`**: Lose history
-4. **Maintaining during active development**: Wait for PRs to merge
-5. **Ignoring false positives**: Fix audit logic if it's wrong
+1. **Aggressive rewriting without explanation**: "I condensed it" is not a reason
+2. **Deleting without documenting why**: Every deletion needs justification in the maintenance file
+3. **Hitting line count targets at all costs**: 400 lines is a guideline, not a mandate
+4. **Removing "patterns" or "best practices" sections**: These are high-value content
+5. **Deleting everything the audit finds**: Review each item individually
+6. **Skipping validation**: "It looked dead/obsolete" is not validation
+7. **Using `rm` instead of `git rm`**: Lose history
+8. **Making changes the architect can't review**: Big deletions need clear explanations

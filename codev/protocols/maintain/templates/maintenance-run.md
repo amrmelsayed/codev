@@ -36,6 +36,25 @@ git log --oneline <last-maint-commit>..HEAD
 
 <!-- Notable discoveries during maintenance -->
 
+## Documentation Changes
+
+<!-- REQUIRED: Log all documentation deletions/moves with justification -->
+
+### arch.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
+
+### CLAUDE.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
+
+### README.md
+| Section | Action | Reason |
+|---------|--------|--------|
+| (example) | KEPT/MOVED/DELETED | (justification) |
+
 ## Deferred
 
 <!-- Items discovered but deferred to next run, with reason -->
