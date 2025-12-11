@@ -4,6 +4,586 @@
 
 Codev is a context-driven development methodology framework that treats natural language specifications as first-class code. This repository serves a dual purpose: it is both the canonical source of the Codev framework AND a self-hosted instance where Codev uses its own methodology to develop itself.
 
+## Agent Farm Internals
+
+This section provides comprehensive documentation of how the Agent Farm (`af`) system works internally. Agent Farm is the most complex component of Codev, enabling parallel AI-assisted development through the architect-builder pattern.
+
+### Architecture Overview
+
+Agent Farm orchestrates multiple AI agents working in parallel on a codebase. The architecture consists of:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Dashboard (HTTP Server)                       │
+│                         http://localhost:4200                        │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │Architect │  │ Builder  │  │ Builder  │  │  Utils   │            │
+│  │  Tab     │  │  Tab 1   │  │  Tab 2   │  │  Tabs    │            │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘            │
+│       │             │             │             │                   │
+│       ▼             ▼             ▼             ▼                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │  ttyd    │  │  ttyd    │  │  ttyd    │  │  ttyd    │            │
+│  │ :4201    │  │ :4210    │  │ :4211    │  │ :4230    │            │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘            │
+└───────┼─────────────┼─────────────┼─────────────┼──────────────────┘
+        │             │             │             │
+        ▼             ▼             ▼             ▼
+   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+   │  tmux    │  │  tmux    │  │  tmux    │  │  tmux    │
+   │ session  │  │ session  │  │ session  │  │ session  │
+   │(claude)  │  │(claude)  │  │(claude)  │  │ (bash)   │
+   └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┘
+        │             │             │
+        ▼             ▼             ▼
+   ┌──────────┐  ┌──────────┐  ┌──────────┐
+   │  Main    │  │ Worktree │  │ Worktree │
+   │  Repo    │  │ .builders│  │ .builders│
+   │          │  │  /0003/  │  │  /0005/  │
+   └──────────┘  └──────────┘  └──────────┘
+```
+
+**Key Components**:
+1. **Dashboard Server**: Native Node.js HTTP server (not Express) serving the web UI and REST API
+2. **ttyd**: Web-based terminal emulator exposing tmux sessions via HTTP
+3. **tmux**: Terminal multiplexer providing session persistence
+4. **Git Worktrees**: Isolated working directories for each builder
+5. **SQLite Databases**: State persistence (local and global)
+
+**Data Flow**:
+1. User opens dashboard at `http://localhost:4200`
+2. Dashboard polls `/api/state` for current state (1-second interval)
+3. Each tab embeds an iframe pointing to its ttyd port
+4. ttyd connects to a tmux session running claude or bash
+5. Builders work in isolated git worktrees under `.builders/`
+
+### Port System
+
+The port system ensures multiple projects can run Agent Farm simultaneously without conflicts.
+
+#### Port Block Allocation
+
+Each project receives a dedicated 100-port block:
+- First project: 4200-4299
+- Second project: 4300-4399
+- Third project: 4400-4499
+- Maximum: ~58 projects (ports 4200-9999)
+
+#### Port Layout Within a Block
+
+Given a base port (e.g., 4200), ports are allocated from starting offsets:
+
+| Port Offset | Port (example) | Purpose |
+|-------------|----------------|---------|
+| +0 | 4200 | Dashboard HTTP server |
+| +1 | 4201 | Architect terminal (ttyd) |
+| +10+ | 4210+ | Builder terminals (start offset) |
+| +30+ | 4230+ | Utility terminals (start offset) |
+| +50+ | 4250+ | Annotation viewers (start offset) |
+
+**Note**: Port ranges are starting points, not hard limits. When spawning terminals, the system starts at the range offset and scans upward for an available port. With many concurrent terminals, ports may extend beyond their nominal ranges within the 100-port block.
+
+#### Global Registry (`~/.agent-farm/global.db`)
+
+The global registry is a SQLite database that tracks port allocations across all projects. See `packages/codev/src/agent-farm/db/schema.ts` for the full schema.
+
+**Key Operations** (from `utils/port-registry.ts`):
+- `getPortBlock(projectRoot)`: Allocates or retrieves port block for a project
+- `getProjectPorts(projectRoot)`: Returns all port assignments for a project
+- `cleanupStaleEntries()`: Removes allocations for deleted projects
+- `listAllocations()`: Lists all registered projects and ports
+
+**Concurrency Handling**:
+- Uses SQLite's `BEGIN IMMEDIATE` transaction for atomic allocation
+- WAL mode enables concurrent reads
+- 5-second busy timeout prevents deadlocks
+
+### tmux Integration
+
+tmux provides terminal session persistence and multiplexing, enabling terminals to survive browser refreshes and continue running in the background.
+
+#### Session Naming Convention
+
+Each session has a unique name based on its purpose:
+
+| Session Type | Name Pattern | Example |
+|--------------|--------------|---------|
+| Architect | `af-architect-{port}` | `af-architect-4201` |
+| Builder | `builder-{project}-{id}` | `builder-codev-0003` |
+| Shell | `shell-{id}` | `shell-U1A2B3C4` |
+| Utility | `af-shell-{id}` | `af-shell-U5D6E7F8` |
+
+#### Session Configuration
+
+Each tmux session is configured with:
+
+```bash
+# Create session with specific dimensions
+tmux new-session -d -s "${sessionName}" -x 200 -y 50 "${command}"
+
+# Hide tmux status bar (dashboard provides tabs)
+tmux set-option -t "${sessionName}" status off
+
+# Enable mouse support
+tmux set-option -t "${sessionName}" -g mouse on
+
+# Enable clipboard integration (OSC 52)
+tmux set-option -t "${sessionName}" -g set-clipboard on
+tmux set-option -t "${sessionName}" -g allow-passthrough on
+
+# Copy to system clipboard on mouse release (macOS)
+tmux bind-key -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
+```
+
+#### ttyd Integration
+
+ttyd exposes tmux sessions over HTTP:
+
+```bash
+ttyd --port {port} --writable tmux attach -t {sessionName}
+```
+
+**Custom Index Page** (`ttyd-index.html` - optional):
+If a `ttyd-index.html` template exists, ttyd uses it to provide enhanced features:
+- File path click detection using xterm.js link provider
+- Supports relative paths (`./foo.ts`), src-relative (`src/bar.js:42`), and absolute paths
+- Opens clicked files in the annotation viewer via `/open-file` route
+
+If the template is not present, ttyd falls back to its default UI and file click handling works via the `/open-file` HTTP endpoint with BroadcastChannel messaging to the dashboard.
+
+### State Management
+
+Agent Farm uses SQLite for ACID-compliant state persistence with two databases:
+
+#### Local State (`.agent-farm/state.db`)
+
+Stores the current session's state with tables for `architect`, `builders`, `utils`, and `annotations`. See `packages/codev/src/agent-farm/db/schema.ts` for the full schema.
+
+#### State Operations (from `state.ts`)
+
+All state operations are synchronous for simplicity:
+
+| Function | Purpose |
+|----------|---------|
+| `loadState()` | Load complete dashboard state |
+| `setArchitect(state)` | Set or clear architect state |
+| `upsertBuilder(builder)` | Add or update a builder |
+| `removeBuilder(id)` | Remove a builder |
+| `getBuilder(id)` | Get single builder |
+| `getBuilders()` | Get all builders |
+| `getBuildersByStatus(status)` | Filter by status |
+| `addUtil(util)` | Add utility terminal |
+| `removeUtil(id)` | Remove utility terminal |
+| `addAnnotation(annotation)` | Add file viewer |
+| `removeAnnotation(id)` | Remove file viewer |
+| `clearState()` | Clear all state |
+
+#### Builder Lifecycle States
+
+```
+spawning → implementing → blocked → implementing → pr-ready → complete
+               ↑______________|
+```
+
+| Status | Meaning |
+|--------|---------|
+| `spawning` | Worktree created, builder starting |
+| `implementing` | Actively working on spec |
+| `blocked` | Needs architect help |
+| `pr-ready` | Implementation complete, awaiting review |
+| `complete` | Merged, ready for cleanup |
+
+### Worktree Management
+
+Git worktrees provide isolated working directories for each builder, enabling parallel development without conflicts.
+
+#### Worktree Creation
+
+When spawning a builder (`af spawn -p 0003`):
+
+1. **Generate IDs**: Create builder ID and branch name
+   ```
+   builderId: "0003"
+   branchName: "builder/0003-feature-name"
+   worktreePath: ".builders/0003"
+   ```
+
+2. **Create Branch**: `git branch builder/0003-feature-name HEAD`
+
+3. **Create Worktree**: `git worktree add .builders/0003 builder/0003-feature-name`
+
+4. **Setup Files**:
+   - `.builder-prompt.txt`: Initial prompt for the builder
+   - `.builder-role.md`: Role definition (from `codev/roles/builder.md`)
+   - `.builder-start.sh`: Launch script for tmux
+
+#### Directory Structure
+
+```
+project-root/
+├── .builders/                    # All builder worktrees
+│   ├── 0003/                     # Builder for spec 0003
+│   │   ├── .builder-prompt.txt   # Initial instructions
+│   │   ├── .builder-role.md      # Builder role content
+│   │   ├── .builder-start.sh     # Launch script
+│   │   └── [full repo copy]      # Complete working directory
+│   ├── task-A1B2/                # Task-based builder
+│   │   └── ...
+│   └── worktree-C3D4/            # Interactive worktree
+│       └── ...
+└── .agent-farm/                  # State directory
+    └── state.db                  # SQLite database
+```
+
+#### Builder Types
+
+| Type | Flag | Worktree | Branch | Initial Prompt |
+|------|------|----------|--------|----------------|
+| `spec` | `--project/-p` | Yes | `builder/{id}-{name}` | Implement spec |
+| `task` | `--task` | Yes | `builder/task-{id}` | User-provided task |
+| `protocol` | `--protocol` | Yes | `builder/{protocol}-{id}` | Run protocol |
+| `shell` | `--shell` | No | None | None |
+| `worktree` | `--worktree` | Yes | `builder/worktree-{id}` | None |
+
+#### Cleanup Process
+
+When cleaning up a builder (`af cleanup -p 0003`):
+
+1. **Check for uncommitted changes**: Refuses if dirty (unless `--force`)
+2. **Kill ttyd process**: `kill(pid, SIGTERM)`
+3. **Kill tmux session**: `tmux kill-session -t {session}`
+4. **Remove worktree**: `git worktree remove .builders/0003`
+5. **Delete branch**: `git branch -d builder/0003-feature-name`
+6. **Update state**: Remove builder from database
+7. **Prune worktrees**: `git worktree prune`
+
+### Dashboard Server
+
+The dashboard server (`servers/dashboard-server.ts`) is an HTTP server that provides the web UI and REST API.
+
+#### Server Architecture
+
+- **Framework**: Native Node.js `http` module (no Express)
+- **Port**: Base port (e.g., 4200)
+- **Security**: Host/Origin validation, path traversal prevention
+- **State**: Direct SQLite access via state functions
+
+#### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Serve dashboard HTML |
+| `GET` | `/api/state` | Get current state (polled every 1s) |
+| `POST` | `/api/tabs/file` | Open file annotation viewer |
+| `POST` | `/api/tabs/builder` | Create worktree builder |
+| `POST` | `/api/tabs/shell` | Create shell terminal |
+| `DELETE` | `/api/tabs/{id}` | Close a tab |
+| `POST` | `/api/stop` | Stop all processes |
+| `GET` | `/open-file?path=...&line=...` | Handle terminal file clicks |
+| `GET` | `/file?path=...` | Read file contents |
+| `GET` | `/api/projectlist-exists` | Check for projectlist.md |
+
+#### Dashboard UI (`templates/dashboard-split.html`)
+
+The dashboard is a single-page application with:
+
+**Tab System**:
+- Architect tab (always present when running)
+- Builder tabs (one per spawned builder)
+- Utility tabs (shell terminals)
+- File tabs (annotation viewers)
+
+**Status Indicators**:
+```javascript
+const STATUS_CONFIG = {
+  'spawning':     { color: 'var(--status-active)',   shape: 'circle',  animation: 'pulse' },
+  'implementing': { color: 'var(--status-active)',   shape: 'circle',  animation: 'pulse' },
+  'blocked':      { color: 'var(--status-error)',    shape: 'diamond', animation: 'blink-fast' },
+  'pr-ready':     { color: 'var(--status-waiting)',  shape: 'ring',    animation: 'blink-slow' },
+  'complete':     { color: 'var(--status-complete)', shape: 'circle',  animation: null }
+};
+```
+
+**Communication**:
+- Polls `/api/state` every 1 second
+- BroadcastChannel for cross-tab communication (file opening)
+- Each terminal iframe loads ttyd at its assigned port
+
+#### File Path Click Handling
+
+When a file path is clicked in a terminal:
+
+1. **xterm.js** detects link pattern via custom link provider
+2. **ttyd-index.html** navigates to `/open-file?path=...&line=...`
+3. **Dashboard server** validates path is within project
+4. **Response page** sends BroadcastChannel message to dashboard
+5. **Dashboard** receives message, opens file via `/api/tabs/file`
+6. **open-server.ts** spawns to serve the annotation viewer
+
+### Error Handling and Recovery
+
+Agent Farm includes several mechanisms for handling failures and recovering from error states.
+
+#### Orphan Session Detection
+
+On startup, `handleOrphanedSessions()` detects and cleans up:
+- tmux sessions from previous crashed runs
+- ttyd processes without parent dashboard
+- State entries for dead processes
+
+```typescript
+// From utils/orphan-handler.ts
+export async function handleOrphanedSessions(options: { kill: boolean }): Promise<void> {
+  // Find tmux sessions matching af-* or builder-* patterns
+  // Check if corresponding state entries exist
+  // Kill orphaned sessions if options.kill is true
+}
+```
+
+#### Port Allocation Race Conditions
+
+When multiple builders spawn simultaneously:
+
+```typescript
+// Retry loop in dashboard-server.ts
+const MAX_PORT_RETRIES = 5;
+for (let attempt = 0; attempt < MAX_PORT_RETRIES; attempt++) {
+  const currentState = loadState();
+  const candidatePort = await findAvailablePort(CONFIG.utilPortStart, currentState);
+
+  // Try to spawn on candidatePort...
+  // If port taken by concurrent request, retry with fresh state
+  if (tryAddUtil(util)) {
+    break; // Success
+  }
+  // Port conflict - kill spawned process and retry
+  await killProcessGracefully(spawnedPid);
+}
+```
+
+#### Dead Process Cleanup
+
+Dashboard server cleans up stale entries on state load:
+
+```typescript
+function cleanupDeadProcesses(): void {
+  // Check each util/annotation for running process
+  for (const util of getUtils()) {
+    if (!isProcessRunning(util.pid)) {
+      console.log(`Auto-closing shell tab ${util.name} (process ${util.pid} exited)`);
+      if (util.tmuxSession) {
+        killTmuxSession(util.tmuxSession);
+      }
+      removeUtil(util.id);
+    }
+  }
+}
+```
+
+#### Graceful Shutdown
+
+Two-phase process termination prevents zombie processes:
+
+```typescript
+async function killProcessGracefully(pid: number, tmuxSession?: string): Promise<void> {
+  // First kill tmux session
+  if (tmuxSession) {
+    killTmuxSession(tmuxSession);
+  }
+
+  // SIGTERM first
+  process.kill(pid, 'SIGTERM');
+
+  // Wait up to 500ms
+  // If still alive, SIGKILL
+  process.kill(pid, 'SIGKILL');
+}
+```
+
+#### Worktree Pruning
+
+Stale worktree entries are pruned automatically:
+
+```bash
+# Run before spawn to prevent "can't find session" errors
+git worktree prune
+```
+
+This catches orphaned worktrees from crashes, manual kills, or incomplete cleanups.
+
+#### Port Exhaustion
+
+When maximum allocations are reached (~58 projects):
+
+```typescript
+if (nextPort >= BASE_PORT + (MAX_ALLOCATIONS * PORT_BLOCK_SIZE)) {
+  throw new Error('No available port blocks. Maximum allocations reached.');
+}
+```
+
+**Recovery**: Run `af ports cleanup` to remove stale allocations from deleted projects.
+
+### Security Model
+
+Agent Farm is designed for local development use only. Understanding the security model is critical for safe operation.
+
+#### Network Binding
+
+All services bind to `localhost` only:
+- Dashboard server: `127.0.0.1:4200`
+- ttyd terminals: `127.0.0.1:{port}`
+- No external network exposure
+
+#### Authentication
+
+**Current approach: None (localhost assumption)**
+- Dashboard has no login/password
+- ttyd terminals are directly accessible
+- All processes share the user's permissions
+
+**Justification**: Since all services bind to localhost, only processes running as the same user can connect. External network access is blocked at the binding level.
+
+#### Request Validation
+
+The dashboard server implements multiple security checks:
+
+```javascript
+// Host header validation (prevents DNS rebinding)
+if (host && !host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {
+  return false;
+}
+
+// Origin header validation (prevents CSRF from external sites)
+if (origin && !origin.startsWith('http://localhost') && !origin.startsWith('http://127.0.0.1')) {
+  return false;
+}
+```
+
+#### Path Traversal Prevention
+
+All file operations validate paths are within the project root:
+
+```javascript
+function validatePathWithinProject(filePath: string): string | null {
+  // Decode URL encoding to catch %2e%2e (encoded ..)
+  const decodedPath = decodeURIComponent(filePath);
+
+  // Resolve and normalize to prevent .. traversal
+  const normalizedPath = path.normalize(path.resolve(projectRoot, decodedPath));
+
+  // Verify path stays within project
+  if (!normalizedPath.startsWith(projectRoot + path.sep)) {
+    return null; // Reject
+  }
+
+  // Resolve symlinks to prevent symlink-based traversal
+  if (fs.existsSync(normalizedPath)) {
+    const realPath = fs.realpathSync(normalizedPath);
+    if (!realPath.startsWith(projectRoot + path.sep)) {
+      return null; // Reject symlink pointing outside
+    }
+  }
+
+  return normalizedPath;
+}
+```
+
+#### Worktree Isolation
+
+Each builder operates in a separate git worktree:
+- **Filesystem isolation**: Different directory per builder
+- **Branch isolation**: Each builder has its own branch
+- **No secret sharing**: Worktrees don't share uncommitted files
+- **Safe cleanup**: Refuses to delete dirty worktrees without `--force`
+
+#### DoS Protection
+
+Tab creation has built-in limits:
+```javascript
+const CONFIG = {
+  maxTabs: 20, // Maximum concurrent tabs
+};
+```
+
+#### Security Recommendations
+
+1. **Never expose ports externally**: Don't use port forwarding or tunnels
+2. **Trust local processes**: Anyone with local access can use agent-farm
+3. **Review worktree contents**: Check `.builder-*` files before committing
+4. **Use `--force` carefully**: Understand what uncommitted changes will be lost
+
+### Key Files Reference
+
+#### CLI Layer
+
+| File | Purpose |
+|------|---------|
+| `src/agent-farm/cli.ts` | CLI command definitions using commander.js |
+| `src/agent-farm/index.ts` | Re-exports for programmatic use |
+| `src/agent-farm/types.ts` | TypeScript type definitions |
+
+#### Commands
+
+| File | Purpose |
+|------|---------|
+| `commands/start.ts` | Start architect dashboard |
+| `commands/stop.ts` | Stop all processes |
+| `commands/spawn.ts` | Spawn builder (5 modes) |
+| `commands/cleanup.ts` | Clean up builder worktree |
+| `commands/status.ts` | Show agent status |
+| `commands/util.ts` | Spawn utility shell |
+| `commands/open.ts` | Open file annotation viewer |
+| `commands/send.ts` | Send message to builder |
+| `commands/rename.ts` | Rename builder/utility |
+| `commands/tower.ts` | Multi-project overview |
+
+#### Database Layer
+
+| File | Purpose |
+|------|---------|
+| `db/index.ts` | Database initialization and connection management |
+| `db/schema.ts` | SQLite schema definitions (local and global) |
+| `db/migrate.ts` | JSON to SQLite migration |
+| `db/types.ts` | Database row types and converters |
+| `db/errors.ts` | Error handling utilities |
+
+#### State Management
+
+| File | Purpose |
+|------|---------|
+| `state.ts` | High-level state operations |
+
+#### Servers
+
+| File | Purpose |
+|------|---------|
+| `servers/dashboard-server.ts` | Main dashboard HTTP server |
+| `servers/open-server.ts` | File annotation viewer server |
+| `servers/tower-server.ts` | Multi-project overview server |
+
+#### Utilities
+
+| File | Purpose |
+|------|---------|
+| `utils/config.ts` | Configuration loading and port initialization |
+| `utils/port-registry.ts` | Global port allocation |
+| `utils/shell.ts` | Shell command execution, ttyd spawning |
+| `utils/logger.ts` | Formatted console output |
+| `utils/deps.ts` | Dependency checking (git, tmux, ttyd) |
+| `utils/orphan-handler.ts` | Stale session cleanup |
+
+#### Templates
+
+| File | Purpose |
+|------|---------|
+| `templates/dashboard-split.html` | Main dashboard UI |
+| `templates/dashboard.html` | Legacy dashboard (fallback) |
+| `templates/annotate.html` | File annotation viewer |
+| `templates/ttyd-index.html` | Custom terminal with file clicks (optional) |
+
+---
+
 ## Technology Stack
 
 ### Core Technologies
@@ -412,6 +992,14 @@ af cleanup -p 0003 --force    # Force cleanup (lose uncommitted work)
 af util                       # Open a utility shell terminal
 af shell                      # Alias for util
 af open src/file.ts           # Open file annotation viewer
+
+# Communication
+af send 0003 "Check the tests"        # Send message to builder 0003
+af send --all "Stop and report"       # Broadcast to all builders
+af send architect "Need help"         # Builder sends to architect (from worktree)
+af send 0003 "msg" --file diff.txt    # Include file content
+af send 0003 "msg" --interrupt        # Send Ctrl+C first
+af send 0003 "msg" --raw              # Skip structured formatting
 
 # Port management (multi-project support)
 af ports list                 # List port allocations
@@ -1351,8 +1939,6 @@ A well-maintained Codev architecture should enable:
 - **Easy Extension**: Add new protocols or agents in <1 hour
 - **Reliable Testing**: Tests pass consistently on all platforms
 - **Safe Updates**: Framework updates never break user work
-
----
 
 ## Recent Infrastructure Changes (2024-12-03)
 
