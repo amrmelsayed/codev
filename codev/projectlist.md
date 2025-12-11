@@ -153,7 +153,7 @@ Projects currently in development (conceived through committed), sorted by prior
       implemented_at: null
       committed_at: null
       integrated_at: "2025-12-09T21:54:55-08:00"
-    notes: "PR #84 merged 2025-12-09. TICK-001 (consult TS consolidation) + TICK-002 (embedded skeleton) + TICK-003 (revert to copy-on-init for AI accessibility)."
+    notes: "PR #84 merged 2025-12-09. TICK-001 (consult TS consolidation) + TICK-002 (embedded skeleton) + TICK-003 (revert to copy-on-init for AI accessibility). TICK-005 (codev import) PR #88 merged 2025-12-11."
 
   - id: "0040"
     title: "TICK as SPIDER Amendment"
