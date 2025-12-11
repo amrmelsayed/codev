@@ -71,13 +71,12 @@ Roles → Protocols → Subagents → Skills
 - Contract: Clear input → concrete artifact/decision output
 
 **Examples in Codev:**
-- **architecture-documenter**: Reads code changes, updates architecture docs
-- **spider-protocol-updater**: Analyzes implementations, evolves protocol
-- **codev-updater**: Updates framework while preserving user work
+- Custom project-specific agents can be created in `.claude/agents/`
+- The `codev import` command uses an interactive Claude session as a subagent for protocol import
 
-**Location:** `.claude/agents/`
+**Location:** `.claude/agents/` (for custom agents)
 
-**Key Insight:** Subagents are composable - they can be called by multiple protocols. The `architecture-documenter` can be invoked by SPIDER (in Review phase) AND by a Cleanup protocol (in Sync phase).
+**Key Insight:** Subagents are composable - they can be called by multiple protocols. For example, an architecture-documenter subagent could be invoked by SPIDER (in Review phase) AND by a Cleanup protocol (in Sync phase). Codev has moved from bundled agents to CLI commands (like `codev import`) for common workflows, while allowing projects to define custom agents as needed.
 
 ---
 

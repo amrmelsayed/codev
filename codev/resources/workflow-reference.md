@@ -111,6 +111,19 @@ af send architect "Question about the spec..."
 af open src/path/to/file.ts
 ```
 
+### Protocol Import
+
+```bash
+# Import protocol improvements from another project
+codev import /path/to/other-project
+
+# Import from GitHub
+codev import github:cluesmith/ansari-project
+
+# Preview without running Claude
+codev import github:owner/repo --dry-run
+```
+
 ### Consultation Commands
 
 ```bash

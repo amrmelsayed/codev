@@ -141,6 +141,7 @@ You need at least one AI CLI installed to use Codev. Install more for multi-agen
 | Requirement | Value |
 |-------------|-------|
 | Purpose | Primary AI agent for development |
+| Required For | `codev import` command (spawns interactive Claude session) |
 | Documentation | [docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code) |
 
 **Installation:**

@@ -132,20 +132,17 @@ project-root/
 │   ├── specs/          # Specifications
 │   ├── plans/          # Implementation plans
 │   ├── reviews/        # Reviews and lessons learned
-│   ├── resources/      # Reference materials and documentation
-│   └── agents/         # Custom agents (non-Claude Code tools)
-│       └── spider-protocol-updater.md
+│   └── resources/      # Reference materials and documentation
 ├── .claude/            # Claude Code-specific directory (if using Claude Code)
-│   └── agents/         # Custom agents (Claude Code only)
-│       └── spider-protocol-updater.md
+│   └── agents/         # Custom project agents
 ├── AGENTS.md           # Universal AI agent instructions (if NOT using Claude Code)
 ├── CLAUDE.md           # Claude Code-specific instructions (if using Claude Code)
 └── [project files]     # Your actual code
 ```
 
 **Note**:
-- Agents are installed to either `.claude/agents/` (Claude Code) OR `codev/agents/` (other tools), not both
 - Agent configuration file is either `CLAUDE.md` (Claude Code) OR `AGENTS.md` (other tools), not both
+- Custom project agents can be placed in `.claude/agents/` (Claude Code) or `codev/agents/` (other tools)
 
 ### Step 3: Protocol Selection
 
@@ -360,48 +357,36 @@ After installation, guide the user:
 
 **Note**: To skip multi-agent consultation in SPIDER, say "without consultation" when starting work.
 
-## Workflow Agents
+## Protocol Import
 
-Codev includes specialized workflow agents that can be invoked for specific tasks. These agents are automatically installed during the setup process to the appropriate location based on your development environment.
+Codev includes an AI-assisted command for importing protocol improvements from other codev projects.
 
-**Available Agents**:
-- **spider-protocol-updater**: Analyzes SPIDER implementations in other repositories and recommends protocol improvements
-- **architecture-documenter**: Maintains comprehensive architecture documentation (arch.md)
-- **codev-updater**: Updates your Codev installation to the latest version
-
-**Agent Location**:
-- **Claude Code users**: Agents are installed to `.claude/agents/` and accessible via native Claude Code agent invocation
-- **Other tool users**: Agents are installed to `codev/agents/` and can be manually referenced or invoked
-
-The installation process automatically detects your environment and installs agents to the appropriate location.
-
-**What the agents do**:
-
-**spider-protocol-updater**:
-- Analyzes SPIDER implementations in other GitHub repositories
-- Identifies improvements and lessons learned
-- Recommends protocol updates based on community usage
-- Helps the protocol evolve through collective wisdom
-
-**architecture-documenter**:
-- Maintains comprehensive architecture documentation (arch.md)
-- Documents directory structure, utilities, and design patterns
-- Automatically invoked at the end of TICK protocol reviews
-- Helps developers quickly understand the codebase structure
-
-**How to use**:
+**Usage**:
 ```bash
-# Check a specific repository for improvements
-"Check the ansari-project/webapp repo for any SPIDER improvements"
+# Import from local directory
+codev import /path/to/other-project
 
-# Periodic review of SPIDER implementations
-"Scan recent SPIDER implementations for protocol enhancements"
+# Import from GitHub
+codev import github:owner/repo
+codev import https://github.com/owner/repo
 ```
 
-**Note**: These agents require:
-- Claude Code with Task tool support
-- Access to GitHub repositories (for spider-protocol-updater)
-- The agent files in `.claude/agents/`
+**How it works**:
+1. Fetches the source codev/ directory (local path or GitHub clone)
+2. Spawns an interactive Claude session with source and target context
+3. Claude analyzes differences and recommends imports
+4. You interactively approve/reject each suggested change
+5. Claude makes approved edits to your local codev/ files
+
+**Focus areas**:
+- Protocol improvements (new phases, better documentation)
+- Lessons learned from other projects
+- Architectural patterns and documentation structure
+- New protocols not in your installation
+
+**Requirements**:
+- Claude CLI (`npm install -g @anthropic-ai/claude-code`)
+- git (for GitHub imports)
 
 ## Architect-Builder Pattern (Optional)
 

@@ -46,6 +46,7 @@ This installs all three commands globally: `codev`, `af`, and `consult`.
 | `codev doctor` | Check system dependencies |
 | `codev update` | Update codev templates and protocols |
 | `codev eject [path]` | Copy embedded files for customization |
+| `codev import <source>` | AI-assisted protocol import from other projects |
 | `codev tower` | Cross-project dashboard |
 
 See [codev.md](codev.md) for full documentation.

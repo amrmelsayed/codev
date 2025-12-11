@@ -213,6 +213,57 @@ codev eject protocols/spider --force
 
 ---
 
+### codev import
+
+AI-assisted protocol import from other codev projects.
+
+```bash
+codev import <source> [options]
+```
+
+**Arguments:**
+- `source` - Local path or GitHub reference to import from
+
+**Options:**
+- `-n, --dry-run` - Show what would be imported without running Claude
+
+**Description:**
+
+Imports protocol improvements from another codev project using AI-assisted analysis. The command fetches the source codev/ directory and spawns an interactive Claude session to analyze differences and recommend imports.
+
+**Source Formats:**
+- Local path: `/path/to/other-project`
+- GitHub shorthand: `github:owner/repo`
+- GitHub URL: `https://github.com/owner/repo`
+
+**How it works:**
+1. Fetches the source codev/ directory
+2. Reads markdown files from protocols/, resources/, roles/
+3. Spawns interactive Claude session with source and target context
+4. Claude analyzes differences and recommends imports
+5. User approves/rejects each suggested change
+6. Claude makes approved edits to local files
+
+**Examples:**
+
+```bash
+# Import from local project
+codev import /path/to/other-project
+
+# Import from GitHub
+codev import github:cluesmith/ansari-project
+codev import https://github.com/cluesmith/ansari-project
+
+# Preview without running Claude
+codev import github:owner/repo --dry-run
+```
+
+**Requirements:**
+- Claude CLI (`npm install -g @anthropic-ai/claude-code`)
+- git (for GitHub imports)
+
+---
+
 ### codev tower
 
 Cross-project dashboard showing all agent-farm instances.

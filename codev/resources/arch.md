@@ -176,10 +176,6 @@ codev/                                  # Project root (git repository)
 │   ├── resources/                      # Reference materials
 │   │   ├── arch.md                     # This file
 │   │   └── llms.txt                    # LLM-friendly documentation
-│   ├── agents/                         # Agent definitions (canonical)
-│   │   ├── spider-protocol-updater.md
-│   │   ├── architecture-documenter.md
-│   │   └── codev-updater.md
 │   └── projectlist.md                  # Master project tracking
 ├── codev-skeleton/                     # Template for distribution
 │   ├── bin/                            # CLI wrapper
@@ -278,107 +274,38 @@ codev/                                  # Project root (git repository)
 - Use TICK for: Bug fixes, simple features, utilities, configuration
 - Use SPIDER for: Complex features, architecture changes, unclear requirements
 
-### 2. Agent System
+### 2. Protocol Import
 
-Codev includes specialized AI agents for workflow automation. Agents are installed conditionally based on the development environment:
+#### Protocol Import Command
 
-#### Agent Installation Architecture
+The `codev import` command provides AI-assisted import of protocol improvements from other codev projects, replacing the older agent-based approach.
 
-Codev uses **tool-agnostic agent installation** that detects the development environment and installs agents to the appropriate location for optimal integration.
-
-**Conditional Installation Logic** (from `INSTALL.md`):
+**Usage**:
 ```bash
-# Detect Claude Code and install to appropriate location
-if command -v claude &> /dev/null; then
-    # Claude Code detected - install to .claude/agents/
-    mkdir -p .claude/agents
-    cp -r codev-skeleton/agents/* ./.claude/agents/
-    echo "✓ Agents installed to .claude/agents/ (Claude Code detected)"
-else
-    # Other tools - agents remain in codev/agents/
-    # (already present from skeleton copy)
-    echo "✓ Agents installed to codev/agents/ (universal location)"
-fi
+# Import from local directory
+codev import /path/to/other-project
+
+# Import from GitHub
+codev import github:owner/repo
+codev import https://github.com/owner/repo
 ```
 
-**Agent Locations by Environment**:
-- **Claude Code users**: `.claude/agents/` (native integration via Claude Code's agent system)
-- **Other tools** (Cursor, Copilot, etc.): `codev/agents/` (universal location via AGENTS.md standard)
-- **Canonical source**: `codev/agents/` in this repository (self-hosted development)
+**How it works**:
+1. Fetches the source codev/ directory (local path or GitHub clone)
+2. Spawns an interactive Claude session with source and target context
+3. Claude analyzes differences and recommends imports
+4. User interactively approves/rejects each suggested change
+5. Claude makes approved edits to local codev/ files
 
-**Design Rationale**:
-1. **Native integration when available** - Claude Code's `.claude/agents/` provides built-in agent execution
-2. **Universal fallback** - Other tools can reference `codev/agents/` via AGENTS.md standard
-3. **Single source of truth** - All agents originate from `codev/agents/` in the main repository
-4. **No tool lock-in** - Works with any AI coding assistant that supports AGENTS.md standard
+**Focus areas**:
+- Protocol improvements (new phases, better documentation)
+- Lessons learned from other projects
+- Architectural patterns and documentation structure
+- New protocols not in your installation
 
-#### Available Agents
-
-##### spider-protocol-updater
-**Purpose**: Protocol evolution through community learning
-
-**Capabilities**:
-- Analyzes SPIDER implementations in other repositories
-- Compares remote implementations with canonical protocol
-- Reviews lessons learned across projects
-- Classifies improvements (Universal, Domain-specific, Experimental, Anti-pattern)
-- Recommends protocol updates with justification
-
-**Location**: `codev/agents/spider-protocol-updater.md`
-
-**Usage**:
-```
-"Check the ansari-project/webapp repo for SPIDER improvements"
-"Scan recent SPIDER implementations for protocol enhancements"
-```
-
-##### architecture-documenter
-**Purpose**: Maintain comprehensive architecture documentation
-
-**Capabilities**:
-- Reviews specs, plans, and reviews for architectural information
-- Scans implementation to verify documented structure matches reality
-- Maintains `codev/resources/arch.md` (this file)
-- Documents directory structure, utilities, patterns, and components
-- Automatically invoked at end of TICK protocol reviews
-
-**Location**: `codev/agents/architecture-documenter.md`
-
-**Usage**:
-- Automatically triggered by TICK protocol
-- Manually: "Update the architecture documentation"
-
-**What it maintains**:
-- Complete directory structure
-- All utility functions and helpers
-- Key architectural patterns
-- Component relationships
-- Technology stack details
-
-##### codev-updater
-**Purpose**: Framework updates with safety and preservation
-
-**Capabilities**:
-- Checks for updates to protocols, agents, and templates
-- Creates timestamped backups before updating
-- Updates framework components from main repository
-- Preserves user specs, plans, reviews (never modified)
-- Provides rollback instructions
-
-**Location**: `codev/agents/codev-updater.md`
-
-**Usage**:
-```
-"Please update my codev framework to the latest version"
-"Are there any updates available for codev?"
-```
-
-**Safety Features**:
-- Backups created before any changes
-- User work never modified
-- CLAUDE.md customizations preserved
-- Clear rollback procedures
-- Verification before completion
+**Requirements**:
+- Claude CLI (`npm install -g @anthropic-ai/claude-code`)
+- git (for GitHub imports)
 
 ### 3. Agent-Farm CLI (Orchestration Engine)
 
