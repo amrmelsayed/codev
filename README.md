@@ -1,6 +1,19 @@
-# Codev: Context-First Development
+# Codev
 
-A development methodology that treats natural language context as code. Instead of writing code first and documenting later, you start with clear specifications that both humans and AI agents can understand and execute.
+**A Human-Agent Software Development Operating System**
+
+Codev is a framework for humans and AI agents to build software together as partners with different skillsets.
+
+**Humans bring**: Vision, judgment, domain knowledge, and approval at critical gates.
+
+**Agents bring**: Speed, consistency, parallelism, and tireless execution.
+
+As an "operating system" for development, Codev provides:
+- **Core Philosophies** - Natural language as programming language, multi-model collaboration, structured human-agent workflows
+- **Core Concepts** - Protocols (SPIDER, TICK, MAINTAIN), roles (Architect, Builder, Consultant), information hierarchy
+- **Core Tools** - `codev`, `af` (agent-farm), `consult`
+
+The result: humans focus on *what* and *why*, agents handle *how* at scale.
 
 ## Installation
 
