@@ -1,5 +1,0 @@
-# The AI Collaboration Opportunity {#sec-opportunity}
-
-::: {.callout-note}
-This chapter is under development.
-:::

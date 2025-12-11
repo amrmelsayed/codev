@@ -1,5 +1,0 @@
-# The consult Tool {#sec-consult}
-
-::: {.callout-note}
-This chapter is under development.
-:::

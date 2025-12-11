@@ -1,5 +1,0 @@
-# Troubleshooting {#sec-troubleshooting}
-
-::: {.callout-note}
-This appendix is under development.
-:::

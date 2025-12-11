@@ -1,5 +1,0 @@
-# The Documents {#sec-documents}
-
-::: {.callout-note}
-This chapter is under development.
-:::

@@ -1,5 +1,0 @@
-# Quick Reference {#sec-reference}
-
-::: {.callout-note}
-This appendix is under development.
-:::

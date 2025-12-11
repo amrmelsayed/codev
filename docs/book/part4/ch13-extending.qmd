@@ -1,5 +1,0 @@
-# Extending Codev {#sec-extending}
-
-::: {.callout-note}
-This chapter is under development.
-:::

@@ -1,5 +1,0 @@
-# Core Principles {#sec-principles}
-
-::: {.callout-note}
-This chapter is under development.
-:::

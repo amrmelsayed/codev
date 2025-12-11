@@ -1,5 +1,0 @@
-# The codev CLI {#sec-codev-cli}
-
-::: {.callout-note}
-This chapter is under development.
-:::

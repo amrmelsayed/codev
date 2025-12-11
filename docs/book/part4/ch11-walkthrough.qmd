@@ -1,5 +1,0 @@
-# A Complete Walkthrough {#sec-walkthrough}
-
-::: {.callout-note}
-This chapter is under development.
-:::

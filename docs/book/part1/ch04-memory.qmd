@@ -1,5 +1,0 @@
-# The Memory Architecture {#sec-memory}
-
-::: {.callout-note}
-This chapter is under development.
-:::

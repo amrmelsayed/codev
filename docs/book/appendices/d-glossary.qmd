@@ -1,5 +1,0 @@
-# Glossary {#sec-glossary}
-
-::: {.callout-note}
-This appendix is under development.
-:::

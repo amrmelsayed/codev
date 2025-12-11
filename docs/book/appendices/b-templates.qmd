@@ -1,5 +1,0 @@
-# Templates {#sec-templates}
-
-::: {.callout-note}
-This appendix is under development.
-:::
