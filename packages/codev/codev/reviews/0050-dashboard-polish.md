@@ -92,6 +92,32 @@ it('should parse arrays', () => {
 
 ---
 
+## 3-Way Review Summary
+
+### Gemini Review
+**Verdict:** REQUEST_CHANGES → Fixed
+
+**Issue identified:** Infinite reload loop when `projectlist.md` exists but is empty.
+- Root cause: Starter mode detection only checked `projectsData.length === 0`
+- Fix: Added `projectlistHash === null` check to distinguish "file not found" from "file empty"
+
+### Codex Review
+**Verdict:** REQUEST_CHANGES → Fixed
+
+**Issues identified:**
+1. **Starter mode polling never tears down** - `checkStarterMode()` only called once on startup
+   - Fix: Added calls after `loadProjectlist()`, `reloadProjectlist()`, and poll debounce
+   - Removed redundant `setTimeout(checkStarterMode, 1000)`
+
+2. **Row cursor/hover misleading** - Entire row showed pointer cursor but only title was clickable
+   - Fix: Changed row cursor to `default`, hover to subtle `bg-secondary`
+   - Only `.project-cell.clickable` shows pointer cursor
+
+### Fixes Applied
+All reviewer feedback addressed in commit `[Spec 0050][Evaluate] Address reviewer feedback`.
+
+---
+
 ## What I Learned
 
 1. **Click event propagation** - Need `event.stopPropagation()` when moving click handlers from parent to child elements, otherwise events may still bubble.
@@ -99,6 +125,12 @@ it('should parse arrays', () => {
 2. **Starter mode detection** - The dashboard already had 5-second polling for content changes, but it didn't detect file creation. Separate polling for existence vs content is cleaner.
 
 3. **CSS specificity** - Using `.project-ticks .tick-badge` overrides the existing `.tick-badge` styles to ensure green background is applied.
+
+4. **State-change hooks** - When adding polling intervals that depend on state, ensure `checkState()` is called after every state update (not just once on init). Resource leaks are easy to miss.
+
+5. **Differentiate "not found" vs "empty"** - A 404 and an empty response require different handling. Using a hash/flag to track "file was loaded" prevents infinite reload loops.
+
+6. **UX consistency** - If you remove click behavior, also remove the visual indicators (cursor, hover). Users expect pointer + hover = clickable.
 
 ---
 
