@@ -407,7 +407,7 @@ Projects currently in development (conceived through committed), sorted by prior
     priority: medium
     release: null
     files:
-      spec: codev/specs/0035-maintain-protocol.md
+      spec: codev/specs/0035-maintenance-framework.md
       plan: null
       review: null
     dependencies: ["0015"]
@@ -492,13 +492,13 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0012"
     title: "Hide tmux Status Bar"
     summary: "Cleaner dashboard UI by removing the tmux status bar from embedded terminals"
-    status: implementing
+    status: integrated
     priority: low
     release: null
     files:
       spec: codev/specs/0012-hide-tmux-status-bar.md
       plan: codev/plans/0012-hide-tmux-status-bar.md
-      review: null
+      review: codev/reviews/0012-hide-tmux-status-bar.md
     dependencies: []
     tags: [ui, dashboard]
     timestamps:
@@ -506,10 +506,10 @@ Projects currently in development (conceived through committed), sorted by prior
       specified_at: null
       planned_at: "2025-12-10T12:24:00-08:00"
       implementing_at: "2025-12-10T12:24:38-08:00"
-      implemented_at: null
-      committed_at: null
-      integrated_at: null
-    notes: "TICK protocol. Builder started 2025-12-10."
+      implemented_at: "2025-12-10T12:36:14-08:00"
+      committed_at: "2025-12-11T07:27:10-08:00"
+      integrated_at: "2025-12-11T07:45:00-08:00"
+    notes: "TICK protocol. PR #90 merged 2025-12-11. Adds 'tmux set-option -t sessionName status off' after all session creations. 3-way integration review completed (Gemini/Codex APPROVE, Claude noted scope creep but approved)."
 
   - id: "0017"
     title: "Platform Portability Layer"

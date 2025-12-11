@@ -102,9 +102,32 @@ tmux show-options -t "af-architect-XXXX" status
 - **Speed vs quality trade-off**: Balanced - simple change, hard to get wrong
 - **End-only consultation**: Appropriate given scope
 
+## Architect Integration Review
+
+**PR**: #90
+**Merged**: 2025-12-11
+**Review Models**: Gemini Pro, GPT-5 Codex, Claude Opus
+
+### Integration Review Summary
+
+| Model | Verdict | Key Notes |
+|-------|---------|-----------|
+| Gemini Pro | APPROVE | Wisely refactors terminal spawning; includes beneficial stability fixes |
+| GPT-5 Codex | APPROVE | Per-session status off applied consistently |
+| Claude Opus | REQUEST_CHANGES | Noted scope creep beyond spec (spawnTtyd refactor, /file endpoint, port retry logic) |
+
+**Architect Decision**: APPROVED despite Claude's scope creep concern. The additional changes were beneficial improvements needed for proper implementation.
+
+### Integration Notes
+- Verified `validatePathWithinProject` is robust against path traversal
+- Session naming change (`builder-{project}-{id}`) added for multi-project support
+- Changes were more extensive than spec indicated (refactoring vs. simple addition)
+
 ## Follow-Up Actions
-- [ ] Run multi-agent consultation
-- [ ] Manual testing after merge
+- [x] Run multi-agent consultation (completed implementation phase)
+- [x] Run architect integration review (3-way, completed merge phase)
+- [x] PR merged to main
+- [ ] Manual testing after merge (user validation required)
 - [ ] Consider adding toggle mechanism if users request it (per expert consultation in spec)
 
 ## Conclusion

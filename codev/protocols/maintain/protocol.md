@@ -8,17 +8,11 @@ MAINTAIN is a periodic maintenance protocol for keeping codebases healthy. Unlik
 
 ## When to Use MAINTAIN
 
-### Triggers
+- When the user/architect requests it
 - Before a release (clean slate for shipping)
 - Quarterly maintenance window
 - After completing a major feature
 - When the codebase feels "crusty"
-- Before major refactoring efforts
-
-### Skip MAINTAIN for
-- Active development branches with pending PRs
-- Emergency production issues
-- When tests are failing (fix tests first)
 
 ## Execution Model
 
@@ -39,9 +33,30 @@ Architect reviews → Builder merges
 ## Prerequisites
 
 Before starting MAINTAIN:
-- [ ] Git working directory is clean
-- [ ] All tests are passing
-- [ ] No pending merges or PRs in flight
+1. Check `codev/maintain/` for last maintenance run
+2. Note the base commit from that run
+3. Focus on changes since that commit: `git log --oneline <base-commit>..HEAD`
+
+---
+
+## Maintenance Files
+
+Each maintenance run creates a numbered file in `codev/maintain/`:
+
+```
+codev/maintain/
+├── 0001.md
+├── 0002.md
+└── ...
+```
+
+**Template**: `codev/protocols/maintain/templates/maintenance-run.md`
+
+The file records:
+- Base commit (starting point)
+- Tasks completed
+- Findings and deferred items
+- Summary
 
 ---
 
@@ -83,6 +98,12 @@ ruff check --select F401   # Find unused imports
 |------|----------------|---------------|-------------|
 | Update projectlist.md status | Yes | No | Update project statuses |
 | Archive terminal projects | Yes | No | Move completed/abandoned to terminal section |
+
+### Framework Tasks
+
+| Task | Parallelizable | Human Review? | Description |
+|------|----------------|---------------|-------------|
+| Run codev update | No | Yes | Update codev framework to latest version |
 
 ---
 
@@ -158,6 +179,16 @@ Review and update outdated dependencies:
    - Major: Requires human review for breaking changes
 3. Update and test
 4. Document any migration steps
+
+### Run codev update
+
+Update the codev framework to the latest version:
+
+```bash
+codev update
+```
+
+This updates protocols, templates, and agents while preserving your specs, plans, and reviews.
 
 ---
 

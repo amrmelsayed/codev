@@ -277,6 +277,45 @@ function checkDependency(dep: Dependency): CheckResult {
 }
 
 /**
+ * Verify an AI model is operational by running a quick consult command
+ */
+function verifyAiModel(modelName: string): CheckResult {
+  const modelMap: Record<string, string> = {
+    'Claude': 'claude',
+    'Gemini': 'gemini',
+    'Codex': 'codex',
+  };
+
+  const model = modelMap[modelName];
+  if (!model) {
+    return { status: 'skip', version: 'unknown model' };
+  }
+
+  try {
+    // Use consult to verify the model is operational
+    const result = spawnSync(
+      'consult',
+      ['--model', model, 'general', 'Reply with just OK if operational'],
+      { encoding: 'utf-8', timeout: 60000, stdio: 'pipe' }
+    );
+
+    if (result.status === 0 && result.stdout) {
+      return { status: 'ok', version: 'operational' };
+    }
+
+    // Check for common auth errors in stderr
+    const stderr = result.stderr || '';
+    if (stderr.includes('auth') || stderr.includes('API key') || stderr.includes('token')) {
+      return { status: 'fail', version: 'auth error', note: 'check API key/auth' };
+    }
+
+    return { status: 'fail', version: 'not responding', note: 'check configuration' };
+  } catch {
+    return { status: 'fail', version: 'error', note: 'consult command failed' };
+  }
+}
+
+/**
  * Check if @cluesmith/codev is installed
  */
 function checkNpmDependencies(): CheckResult {
@@ -347,18 +386,47 @@ export async function doctor(): Promise<number> {
   console.log('');
 
   let aiCliCount = 0;
+  const installedAiClis: string[] = [];
+
+  // First check if CLIs are installed
   for (const dep of AI_DEPENDENCIES) {
     const result = checkDependency(dep);
     if (result.status === 'ok') {
-      aiCliCount++;
+      installedAiClis.push(dep.name);
     }
     printStatus(dep.name, result);
   }
 
-  if (aiCliCount === 0) {
+  if (installedAiClis.length === 0) {
     console.log('');
-    console.log(chalk.red('  ✗') + ' No AI CLI working! Install and configure at least one to use Codev.');
+    console.log(chalk.red('  ✗') + ' No AI CLI installed! Install at least one to use Codev.');
     errors++;
+  } else {
+    // Verify installed CLIs are actually operational
+    console.log('');
+    console.log(chalk.bold('AI Model Verification') + ' (checking auth & connectivity)');
+    console.log('');
+
+    for (const cliName of installedAiClis) {
+      console.log(chalk.blue(`  ⋯ ${cliName.padEnd(12)} verifying...`));
+      // Move cursor up to overwrite the "verifying" line
+      process.stdout.write('\x1b[1A\x1b[2K');
+
+      const result = verifyAiModel(cliName);
+      printStatus(cliName, result);
+
+      if (result.status === 'ok') {
+        aiCliCount++;
+      } else if (result.status === 'fail') {
+        warnings++;
+      }
+    }
+
+    if (aiCliCount === 0) {
+      console.log('');
+      console.log(chalk.red('  ✗') + ' No AI CLI operational! Check API keys and authentication.');
+      errors++;
+    }
   }
 
   console.log('');
