@@ -2,7 +2,7 @@
 
 **Status:** integrated
 **Protocol:** SPIDER
-**Amended:** 2025-12-11 (TICK-004)
+**Amended:** 2025-12-11 (TICK-005)
 **Priority:** High
 **Dependencies:** 0005 (TypeScript CLI), 0022 (Consult Tool)
 **Blocks:** None
@@ -558,3 +558,74 @@ For offline scenarios, `codev init --offline` could:
 - [ ] `codev update` fetches from GitHub
 - [ ] Tests updated for new behavior
 - [ ] Offline behavior documented (or fallback implemented)
+
+---
+
+## TICK Amendment: 2025-12-11 (TICK-005)
+
+### Problem
+
+Two agents exist for keeping codev up-to-date:
+- `codev-updater` - Updates from main codev repo (obsolete with TICK-004's GitHub fetch)
+- `spider-protocol-updater` - Imports protocol improvements from other repos
+
+These are awkward to use and don't leverage AI for intelligent merging.
+
+### Amendment Scope
+
+**Add `codev import` command** - AI-assisted protocol import from other codev projects:
+
+```bash
+# Import from local directory
+codev import /path/to/other-project
+
+# Import from GitHub
+codev import github:cluesmith/ansari-project
+codev import https://github.com/cluesmith/ansari-project
+```
+
+**How it works:**
+
+1. **Fetch source**: Download/read the source codev/ directory
+   - Local: Read directly from filesystem
+   - GitHub: Use GitHub API or clone sparse checkout
+
+2. **Spawn interactive Claude session**: The command launches Claude with context:
+   ```
+   You are helping import protocol improvements from another codev project.
+
+   SOURCE: [contents of source codev/protocols/, codev/resources/, etc.]
+   TARGET: [contents of local codev/protocols/, codev/resources/, etc.]
+
+   Analyze the differences and help the user decide what to import.
+   Focus on: protocol improvements, lessons learned, architectural patterns.
+   ```
+
+3. **Interactive merge**: Claude discusses with user:
+   - "Their SPIDER protocol has an additional consultation checkpoint - worth adopting?"
+   - "They've added a lesson about test isolation - want to add to lessons-learned.md?"
+   - "Their arch.md has a better structure for documenting utilities - merge this pattern?"
+
+4. **Apply changes**: Claude makes approved changes to local files
+
+**Key design choices:**
+- NOT a dumb file copy - Claude analyzes and recommends
+- Interactive, not autonomous - user approves each change
+- Works with local dirs AND GitHub repos
+- Replaces both codev-updater and spider-protocol-updater agents
+
+**Delete obsolete agents:**
+- Remove `codev/agents/codev-updater.md`
+- Remove `codev/agents/spider-protocol-updater.md`
+- Remove from `codev-skeleton/agents/` and `.claude/agents/`
+
+### Success Criteria (TICK-005)
+
+- [ ] `codev import <path>` works with local directories
+- [ ] `codev import <github-url>` works with GitHub repos
+- [ ] Command spawns interactive Claude session with source/target context
+- [ ] Claude analyzes differences and recommends imports
+- [ ] User can approve/reject each suggested change
+- [ ] `codev-updater` agent deleted
+- [ ] `spider-protocol-updater` agent deleted
+- [ ] Documentation updated

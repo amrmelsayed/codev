@@ -142,7 +142,7 @@ Projects currently in development (conceived through committed), sorted by prior
       spec: codev/specs/0039-codev-cli.md
       plan: codev/plans/0039-codev-cli.md
       review: codev/reviews/0039-codev-cli.md
-    ticks: [001, 002, 003, 004]
+    ticks: [001, 002, 003, 004, 005]
     dependencies: ["0005", "0022"]
     tags: [cli, npm, architecture]
     timestamps:
