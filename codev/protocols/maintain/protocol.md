@@ -117,6 +117,8 @@ Scan the actual codebase and update `codev/resources/arch.md`:
 1. `git log --oneline <base-commit>..HEAD` - what changed since last maintenance
 2. `ls -R` key directories to find new files/modules
 3. `grep` for new exports, classes, key functions
+4. Review new/modified specs: `git diff <base-commit>..HEAD --name-only -- codev/specs/`
+5. Review new/modified plans: `git diff <base-commit>..HEAD --name-only -- codev/plans/`
 
 **Update arch.md**:
 1. Verify directory structure matches documented structure
@@ -125,6 +127,7 @@ Scan the actual codebase and update `codev/resources/arch.md`:
 4. Remove references to deleted code
 5. Update technology stack if dependencies changed
 6. Document new integration points or APIs
+7. Capture architectural decisions from new specs/plans
 
 **What to include**:
 - File locations and their purpose
