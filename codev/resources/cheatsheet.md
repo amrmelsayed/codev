@@ -81,21 +81,13 @@ A **role** defines who does what work and what tools/permissions they have.
 - `impl-review` - Review code for spec adherence
 - `integration-review` - Review for architectural fit
 
-### Information Hierarchy
+### Context Hierarchy
 
-```
-┌─────────────────────────────────────────┐
-│  arch.md, lessons-learned.md            │  ← System understanding
-├─────────────────────────────────────────┤
-│  projectlist.md                         │  ← Project tracking
-├─────────────────────────────────────────┤
-│  specs/, plans/, reviews/               │  ← Feature artifacts
-├─────────────────────────────────────────┤
-│  Source code                            │  ← Implementation
-└─────────────────────────────────────────┘
-```
+In much the same way an operating system has a memory hierarchy, Codev repos have a context hierarchy. The codev/ directory holds the top 3 layers. This allows both humans and agents to think about problems at different levels of detail. 
 
-**Key insight**: Higher levels inform lower levels. Start at the top, work down. Changes also propagate up—if source code changes, specs and plans should be updated to match.
+![Context Hierarchy](context-hierarchy.png)
+
+**Key insight**: We build from the top down, and we propagate information from the bottom up. We start with an entry in the project list, then spec and plan out the feature, generate the code, and then propagate what we learned through the reviews. 
 
 ---
 

@@ -169,6 +169,14 @@ cp $(npm root -g)/@cluesmith/codev/skeleton/roles/consultant.md codev/roles/
 
 This approach keeps your project clean while allowing full customization when needed.
 
+### Context Hierarchy
+
+In much the same way an operating system has a memory hierarchy, Codev repos have a context hierarchy. The codev/ directory holds the top 3 layers. This allows both humans and agents to think about problems at different levels of detail.
+
+![Context Hierarchy](codev/resources/context-hierarchy.png)
+
+**Key insight**: We build from the top down, and we propagate information from the bottom up. We start with an entry in the project list, then spec and plan out the feature, generate the code, and then propagate what we learned through the reviews.
+
 ## Key Features
 
 ### 📄 Documents Are First-Class Citizens
