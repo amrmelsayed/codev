@@ -71,12 +71,14 @@ The file records:
 | Clean unused flags | Yes | No | Remove feature flags that are always on/off |
 | Fix flaky tests | No | Yes | Investigate and fix intermittently failing tests |
 | Update outdated dependencies | Yes | Yes | Bump dependencies with breaking change review |
+| Identify duplicate code | Yes | Yes | Find repeated patterns that should be utility functions |
 
 **Tools**:
 ```bash
 # TypeScript/JavaScript
 npx ts-prune          # Find unused exports
 npx depcheck          # Find unused dependencies
+npx jscpd .           # Find copy-paste code (optional)
 
 # Python
 ruff check --select F401   # Find unused imports
@@ -146,6 +148,84 @@ Scan the actual codebase and update `codev/resources/arch.md`:
 - Implementation details that change frequently
 - Line numbers (they go stale)
 - Full API documentation (use JSDoc/docstrings for that)
+
+**Recommended Document Structure**:
+```markdown
+# Project Architecture
+
+## Overview
+[High-level description of the application architecture and design philosophy]
+
+## Technology Stack
+[Detailed list of technologies, frameworks, and key dependencies with versions]
+
+## Directory Structure
+[Complete directory tree with explanations for each major directory]
+
+## Core Components
+### [Component Category]
+- **Location**: path/to/component
+- **Purpose**: What it does
+- **Key Files**: List of important files
+- **Dependencies**: What it depends on
+- **Used By**: What uses it
+
+## Utility Functions & Helpers
+### [Utility Category]
+- **File**: path/to/utility.ts
+- **Functions**: `functionName()` - Description and use case
+- **When to Use**: Guidance on appropriate usage
+
+## Data Flow
+[Diagrams or descriptions of how data moves through the system]
+
+## API Structure
+[Organization of API routes, endpoints, and their purposes]
+
+## Key Design Decisions
+[Important architectural choices and their rationale]
+
+## Integration Points
+[External services, APIs, databases, and how they connect]
+
+## Development Patterns
+[Common patterns used throughout the codebase]
+```
+
+**Content Quality Standards**:
+- **Be Specific**: Include exact file paths, actual function names, concrete examples
+- **Maintain Accuracy**: Cross-reference specs/plans with actual implementation; flag discrepancies
+- **Optimize for Quick Understanding**: Use clear hierarchy, highlight commonly used components
+- **Stay Current**: Reflect actual state, not aspirational; remove deprecated components
+
+**Special Attention Areas**:
+
+1. **Utility Functions** (critical for productivity):
+   - Document every utility function with exact location
+   - Explain what each does and when to use it
+   - Include parameter types and return types
+
+2. **Directory Structure** (often first thing referenced):
+   - Keep directory tree up-to-date and complete
+   - Explain purpose of each major directory
+   - Highlight where specific types of files should be placed
+
+3. **Integration Points** (critical for understanding system boundaries):
+   - Document all external dependencies and APIs
+   - Explain how different parts connect
+   - Note special configuration requirements
+
+**Quality Assurance Before Finalizing**:
+- [ ] All file paths are correct and current
+- [ ] All documented functions actually exist
+- [ ] Directory structure matches reality
+- [ ] Architectural decisions are accurately represented
+- [ ] Document is internally consistent
+
+**Constraints**:
+- Never invent structure - only document what exists or is in specs/plans
+- Never make architectural decisions - document them, don't make them
+- Always verify documentation against actual implementation
 
 ### Generate lessons-learned.md
 
