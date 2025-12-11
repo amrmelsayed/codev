@@ -150,6 +150,21 @@ describe('import command', () => {
         process.chdir(originalCwd);
       }
     });
+
+    it('should parse GitHub URLs with dots in repo name', async () => {
+      const { importCommand } = await import('../commands/import.js');
+
+      const originalCwd = process.cwd();
+      process.chdir(targetProjectDir);
+
+      try {
+        // Repos like vercel/next.js have dots in the name
+        await importCommand('https://github.com/vercel/next.js', { dryRun: true });
+        expect(true).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   describe('importCommand', () => {

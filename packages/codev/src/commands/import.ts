@@ -33,7 +33,8 @@ function parseSource(source: string): { type: 'local' | 'github'; path: string; 
 
   if (source.includes('github.com')) {
     // Extract owner/repo from URL
-    const match = source.match(/github\.com[/:]([\w-]+\/[\w-]+)/);
+    // Regex captures owner/repo including dots (e.g., vercel/next.js, owner/repo.name)
+    const match = source.match(/github\.com[/:]([\w.-]+\/[\w.-]+)/);
     if (match) {
       const repo = match[1].replace(/\.git$/, '');
       return { type: 'github', path: repo, repo };
