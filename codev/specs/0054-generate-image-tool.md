@@ -2,7 +2,7 @@
 
 ## Summary
 
-Add a `generate-image` CLI tool to codev for AI-powered image generation using Google's Gemini/Imagen models.
+Add a `generate-image` CLI tool to codev for AI-powered image generation using Google's Nano Banana models (Gemini native image generation).
 
 ## Background
 
@@ -15,7 +15,7 @@ We have an existing Python implementation at `../../writing/tools/generate_image
    - Output path option (-o/--output)
    - Resolution option (-r/--resolution): 1K, 2K, 4K
    - Aspect ratio option (-a/--aspect): 1:1, 16:9, 9:16, 3:2, 2:3, etc.
-   - Model option (-m/--model): gemini-3-pro-image-preview, gemini-2.5-flash-image, imagen-4.0-generate-001
+   - Model option (-m/--model): gemini-3-pro-image-preview (default), gemini-2.5-flash-image
    - Reference image option (--ref): for image-to-image generation
 
 2. **API Integration** - Use `@google/genai` npm package with GEMINI_API_KEY from environment
