@@ -403,24 +403,24 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0053"
     title: "af open Image Support"
     summary: "Extend af open to display images (PNG, JPG, GIF, WebP, SVG) with zoom controls"
-    status: planned
+    status: committed
     priority: medium
     release: null
     files:
       spec: codev/specs/0053-af-open-image-support.md
       plan: codev/plans/0053-af-open-image-support.md
-      review: null
+      review: codev/reviews/0053-af-open-image-support.md
     dependencies: []
     tags: [agent-farm, dashboard, ui]
     timestamps:
       conceived_at: "2025-12-11T15:00:00-08:00"
       specified_at: "2025-12-11T15:00:00-08:00"
       planned_at: "2025-12-11T15:00:00-08:00"
-      implementing_at: null
-      implemented_at: null
-      committed_at: null
+      implementing_at: "2025-12-13T11:02:00-08:00"
+      implemented_at: "2025-12-13T11:20:00-08:00"
+      committed_at: "2025-12-13T11:25:00-08:00"
       integrated_at: null
-    notes: ""
+    notes: "PR #103 merged 2025-12-13"
 
   - id: "0052"
     title: "Agent Farm Internals Documentation"
