@@ -2989,10 +2989,18 @@
     }
 
     // Render the files tab (entry point)
+    // Only fetches on first load; use refreshFilesTree() to force reload
     async function renderFilesTab() {
       const content = document.getElementById('tab-content');
-      content.innerHTML = '<div class="files-loading">Loading files...</div>';
 
+      // If already loaded, just render cached data (no network request)
+      if (filesTreeLoaded) {
+        renderFilesTabContent();
+        return;
+      }
+
+      // First load - show loading state and fetch
+      content.innerHTML = '<div class="files-loading">Loading files...</div>';
       await loadFilesTree();
       renderFilesTabContent();
     }
