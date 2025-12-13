@@ -1399,11 +1399,33 @@ Projects that are paused or canceled.
       committed_at: null
       integrated_at: null
     notes: "Import from ../../writing/tools/generate_image.py. Builder spawned."
+
+  - id: "0055"
+    title: "Dashboard File Browser"
+    summary: "VSCode-like file browser tab with collapsible tree and expand/collapse all controls"
+    status: conceived
+    priority: medium
+    release: null
+    files:
+      spec: codev/specs/0055-dashboard-file-browser.md
+      plan: codev/plans/0055-dashboard-file-browser.md
+      review: null
+    dependencies: []
+    tags: [dashboard, ui, files]
+    timestamps:
+      conceived_at: "2025-12-13T13:00:00-08:00"
+      specified_at: null
+      planned_at: null
+      implementing_at: null
+      implemented_at: null
+      committed_at: null
+      integrated_at: null
+    notes: ""
 ```
 
 ## Next Available Number
 
-**0055** - Reserve this number for your next project
+**0056** - Reserve this number for your next project
 
 ---
 
