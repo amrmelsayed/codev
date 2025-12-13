@@ -403,7 +403,7 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0053"
     title: "af open Image Support"
     summary: "Extend af open to display images (PNG, JPG, GIF, WebP, SVG) with zoom controls"
-    status: committed
+    status: integrated
     priority: medium
     release: null
     files:
@@ -419,8 +419,8 @@ Projects currently in development (conceived through committed), sorted by prior
       implementing_at: "2025-12-13T11:02:00-08:00"
       implemented_at: "2025-12-13T11:20:00-08:00"
       committed_at: "2025-12-13T11:25:00-08:00"
-      integrated_at: null
-    notes: "PR #103 merged 2025-12-13"
+      integrated_at: "2025-12-13T12:30:00-08:00"
+    notes: "PR #103 merged 2025-12-13. Image support validated."
 
   - id: "0052"
     title: "Agent Farm Internals Documentation"
@@ -1377,11 +1377,33 @@ Projects that are paused or canceled.
       committed_at: null
       integrated_at: null
     notes: "ON HOLD - 3-way review (Codex, Gemini) both REQUEST_CHANGES. Need prototype to verify marked.js line tracking feasibility before proceeding."
+
+  - id: "0054"
+    title: "Generate Image Tool"
+    summary: "CLI tool for AI image generation using Gemini/Imagen models with reference image support"
+    status: conceived
+    priority: medium
+    release: null
+    files:
+      spec: codev/specs/0054-generate-image-tool.md
+      plan: codev/plans/0054-generate-image-tool.md
+      review: null
+    dependencies: []
+    tags: [cli, tools, ai, images]
+    timestamps:
+      conceived_at: "2025-12-13T12:35:00-08:00"
+      specified_at: null
+      planned_at: null
+      implementing_at: null
+      implemented_at: null
+      committed_at: null
+      integrated_at: null
+    notes: "Import from ../../writing/tools/generate_image.py"
 ```
 
 ## Next Available Number
 
-**0053** - Reserve this number for your next project
+**0055** - Reserve this number for your next project
 
 ---
 
