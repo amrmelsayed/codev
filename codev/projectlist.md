@@ -1381,7 +1381,7 @@ Projects that are paused or canceled.
   - id: "0054"
     title: "Generate Image Tool"
     summary: "CLI tool for AI image generation using Nano Banana Pro (gemini-3-pro-image-preview)"
-    status: committed
+    status: integrated
     priority: medium
     release: null
     files:
@@ -1397,8 +1397,8 @@ Projects that are paused or canceled.
       implementing_at: "2025-12-13T12:40:00-08:00"
       implemented_at: "2025-12-13T17:00:00-08:00"
       committed_at: "2025-12-13T17:08:00-08:00"
-      integrated_at: null
-    notes: "PR #104 merged. Uses Nano Banana Pro model only."
+      integrated_at: "2025-12-13T18:15:00-08:00"
+    notes: "PR #104 merged. Validated with logo generation test."
 
   - id: "0055"
     title: "Dashboard File Browser"
