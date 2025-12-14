@@ -2,6 +2,8 @@
 
 > **Important**: This protocol is **specific to the Codev project itself**. It lives only in `codev/protocols/` and is intentionally NOT included in `codev-skeleton/`. It serves as an example of how projects can create custom protocols tailored to their specific needs.
 
+> **Role**: This protocol is executed by the **Architect**, not by Builders. Releases are high-level coordination tasks that should not be delegated to isolated worktrees.
+
 The RELEASE protocol is used when preparing a new version of Codev for publication to npm.
 
 ## When to Use
