@@ -792,17 +792,44 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // API: Create shell tab
+    // API: Create shell tab (supports worktree parameter for Spec 0057)
     if (req.method === 'POST' && url.pathname === '/api/tabs/shell') {
       const body = await parseJsonBody(req);
       const name = (body.name as string) || undefined;
       const command = (body.command as string) || undefined;
+      const worktree = body.worktree === true;
+      const branch = (body.branch as string) || undefined;
 
       // Validate name if provided (prevent command injection)
       if (name && !/^[a-zA-Z0-9_-]+$/.test(name)) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('Invalid name format');
         return;
+      }
+
+      // Validate branch name if provided (prevent command injection)
+      // Allow: letters, numbers, underscores, hyphens, slashes, dots
+      // Reject: control chars, spaces, .., @{, trailing/leading slashes
+      if (branch) {
+        const invalidPatterns = [
+          /[\x00-\x1f\x7f]/,     // Control characters
+          /\s/,                   // Whitespace
+          /\.\./,                 // Parent directory traversal
+          /@\{/,                  // Git reflog syntax
+          /^\//,                  // Leading slash
+          /\/$/,                  // Trailing slash
+          /\/\//,                 // Double slash
+          /^-/,                   // Leading hyphen (could be flag)
+        ];
+        const isInvalid = invalidPatterns.some(p => p.test(branch));
+        if (isInvalid) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Invalid branch name. Avoid spaces, control characters, .., @{, and leading/trailing slashes.'
+          }));
+          return;
+        }
       }
 
       const shellState = loadState();
@@ -814,9 +841,85 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Determine working directory (project root or worktree)
+      let cwd = projectRoot;
+      let worktreePath: string | undefined;
+
+      if (worktree) {
+        // Create worktree for the shell
+        const worktreesDir = path.join(projectRoot, '.worktrees');
+        if (!fs.existsSync(worktreesDir)) {
+          fs.mkdirSync(worktreesDir, { recursive: true });
+        }
+
+        // Generate worktree name
+        const worktreeName = branch || `temp-${Date.now()}`;
+        worktreePath = path.join(worktreesDir, worktreeName);
+
+        // Check if worktree already exists
+        if (fs.existsSync(worktreePath)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `Worktree '${worktreeName}' already exists at ${worktreePath}`
+          }));
+          return;
+        }
+
+        // Create worktree
+        try {
+          let gitCmd: string;
+          if (branch) {
+            // Check if branch already exists
+            let branchExists = false;
+            try {
+              execSync(`git rev-parse --verify "${branch}"`, { cwd: projectRoot, stdio: 'pipe' });
+              branchExists = true;
+            } catch {
+              // Branch doesn't exist
+            }
+
+            if (branchExists) {
+              // Checkout existing branch into worktree
+              gitCmd = `git worktree add "${worktreePath}" "${branch}"`;
+            } else {
+              // Create new branch and worktree
+              gitCmd = `git worktree add "${worktreePath}" -b "${branch}"`;
+            }
+          } else {
+            // Detached HEAD worktree
+            gitCmd = `git worktree add "${worktreePath}" --detach`;
+          }
+          execSync(gitCmd, { cwd: projectRoot, stdio: 'pipe' });
+
+          // Symlink .env from project root into worktree (if it exists)
+          const rootEnvPath = path.join(projectRoot, '.env');
+          const worktreeEnvPath = path.join(worktreePath, '.env');
+          if (fs.existsSync(rootEnvPath) && !fs.existsSync(worktreeEnvPath)) {
+            try {
+              fs.symlinkSync(rootEnvPath, worktreeEnvPath);
+            } catch {
+              // Non-fatal: continue without .env symlink
+            }
+          }
+
+          cwd = worktreePath;
+        } catch (gitError: unknown) {
+          const errorMsg = gitError instanceof Error
+            ? (gitError as { stderr?: Buffer }).stderr?.toString() || gitError.message
+            : 'Unknown error';
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `Git worktree creation failed: ${errorMsg}`
+          }));
+          return;
+        }
+      }
+
       // Generate ID and name
       const id = generateId('U');
-      const utilName = name || `shell-${shellState.utils.length + 1}`;
+      const utilName = name || (worktree ? `worktree-${shellState.utils.length + 1}` : `shell-${shellState.utils.length + 1}`);
       const sessionName = `af-shell-${id}`;
 
       // Get shell command - if command provided, run it then keep shell open
@@ -835,8 +938,8 @@ const server = http.createServer(async (req, res) => {
         const currentState = loadState();
         const candidatePort = await findAvailablePort(CONFIG.utilPortStart, currentState);
 
-        // Start tmux session with ttyd attached
-        const spawnedPid = spawnTmuxWithTtyd(sessionName, shellCommand, candidatePort, projectRoot);
+        // Start tmux session with ttyd attached (use cwd which may be worktree)
+        const spawnedPid = spawnTmuxWithTtyd(sessionName, shellCommand, candidatePort, cwd);
 
         if (!spawnedPid) {
           res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -854,6 +957,7 @@ const server = http.createServer(async (req, res) => {
           port: candidatePort,
           pid: spawnedPid,
           tmuxSession: sessionName,
+          worktreePath: worktreePath, // Track for cleanup on tab close
         };
 
         if (tryAddUtil(util)) {
@@ -875,7 +979,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       res.writeHead(201, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ id, port: utilPort, name: utilName }));
+      res.end(JSON.stringify({ success: true, id, port: utilPort, name: utilName }));
       return;
     }
 
@@ -914,6 +1018,8 @@ const server = http.createServer(async (req, res) => {
         const util = tabUtils.find((u) => u.id === utilId);
         if (util) {
           await killProcessGracefully(util.pid, util.tmuxSession);
+          // Note: worktrees are NOT cleaned up on tab close - they may contain useful context
+          // Users can manually clean up with `git worktree list` and `git worktree remove`
           removeUtil(utilId);
           found = true;
         }

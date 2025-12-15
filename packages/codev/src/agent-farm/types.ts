@@ -25,6 +25,7 @@ export interface UtilTerminal {
   port: number;
   pid: number;
   tmuxSession?: string;
+  worktreePath?: string;  // For worktree shells - used for cleanup on tab close
 }
 
 export interface Annotation {
