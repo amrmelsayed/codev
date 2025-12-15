@@ -1,2 +1,0 @@
-# Codev Python dependencies
-typer>=0.9.0

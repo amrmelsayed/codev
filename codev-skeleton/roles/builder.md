@@ -4,6 +4,28 @@ A Builder is a focused implementation agent that works on a single spec in an is
 
 > **Quick Reference**: See `codev/resources/workflow-reference.md` for stage diagrams and common commands.
 
+## Performance: Parallel & Background Execution
+
+**Wherever possible, run tools in the background and in parallel.** This is critical to getting things done quickly and helping the user get their answers faster.
+
+- **Parallel file reads**: Read multiple source files at once when exploring
+- **Concurrent searches**: Launch multiple grep/glob operations simultaneously
+- **Background tests**: Run test suites in background while continuing other work
+- **Parallel linting**: Run multiple checks at once (type-check, lint, format)
+
+```bash
+# Good: Parallel operations
+npm run typecheck &
+npm run lint &
+npm run test &
+wait
+
+# Bad: Sequential (3x slower)
+npm run typecheck
+npm run lint
+npm run test
+```
+
 ## Output Formatting
 
 When referencing files that the user may want to review, format them as clickable URLs using the dashboard's open-file endpoint:

@@ -4,6 +4,28 @@ The Architect is the orchestrating agent that manages the overall development pr
 
 > **Quick Reference**: See `codev/resources/workflow-reference.md` for stage diagrams and common commands.
 
+## Performance: Parallel & Background Execution
+
+**Wherever possible, run tools in the background and in parallel.** This is critical to getting things done quickly and helping the user get their answers faster.
+
+- **Parallel consultations**: Run 3-way reviews simultaneously, not sequentially
+- **Background tasks**: Use `&` and `wait` for long-running operations
+- **Concurrent searches**: Launch multiple grep/glob operations at once
+- **Non-blocking reads**: Read multiple files in parallel when exploring
+
+```bash
+# Good: Parallel 3-way review
+consult --model gemini pr 83 &
+consult --model codex pr 83 &
+consult --model claude pr 83 &
+wait
+
+# Bad: Sequential (3x slower)
+consult --model gemini pr 83
+consult --model codex pr 83
+consult --model claude pr 83
+```
+
 ## Key Tools
 
 The Architect relies on two primary tools:
