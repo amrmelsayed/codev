@@ -132,6 +132,28 @@ Projects currently in development (conceived through committed), sorted by prior
 
 ```yaml
 # High Priority
+  - id: "0058"
+    title: "File Search Autocomplete"
+    summary: "VSCode-like Cmd+P quick file finder with substring matching and autocomplete"
+    status: planned
+    priority: medium
+    release: null
+    files:
+      spec: codev/specs/0058-file-search-autocomplete.md
+      plan: codev/plans/0058-file-search-autocomplete.md
+      review: null
+    dependencies: ["0055"]
+    tags: [dashboard, ui, search]
+    timestamps:
+      conceived_at: "2025-12-15T00:00:00-08:00"
+      specified_at: "2025-12-15T16:00:00-08:00"
+      planned_at: "2025-12-15T16:30:00-08:00"
+      implementing_at: null
+      implemented_at: null
+      committed_at: null
+      integrated_at: null
+    notes: "Quick file finder (Cmd+P + Files tab). Substring matching (no fuzzy). Plan reviewed by Gemini/Codex."
+
   - id: "0039"
     title: "Codev CLI (First-Class Command)"
     summary: "Unified codev command as primary entry point: init, adopt, doctor, update, tower, consult"
@@ -1481,7 +1503,7 @@ Projects that are paused or canceled.
 
 ## Next Available Number
 
-**0058** - Reserve this number for your next project
+**0059** - Reserve this number for your next project
 
 ---
 
