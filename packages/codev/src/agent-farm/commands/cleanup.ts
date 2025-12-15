@@ -97,23 +97,12 @@ async function cleanupBuilder(builder: Builder, force?: boolean): Promise<void> 
     logger.kv('Branch', builder.branch);
   }
 
-  // Check for uncommitted changes before cleanup (skip for shell mode - no worktree)
-  let useForce = force || false;
+  // Check for uncommitted changes (informational - worktree is preserved)
   if (!isShellMode) {
-    const { dirty, scaffoldOnly, details } = await hasUncommittedChanges(builder.worktree);
-    if (dirty && !force) {
-      logger.error(`Worktree has uncommitted changes: ${details}`);
-      logger.error('Use --force to delete anyway (WARNING: changes will be lost!)');
-      fatal('Cleanup aborted to prevent data loss.');
+    const { dirty, details } = await hasUncommittedChanges(builder.worktree);
+    if (dirty) {
+      logger.info(`Worktree has uncommitted changes: ${details}`);
     }
-
-    if (dirty && force) {
-      logger.warn(`Worktree has uncommitted changes: ${details}`);
-      logger.warn('Proceeding with --force (changes will be lost!)');
-    }
-
-    // Use force for git worktree if only scaffold files present (or explicit force)
-    useForce = force || scaffoldOnly;
   }
 
   // Kill ttyd process if running
@@ -135,42 +124,18 @@ async function cleanupBuilder(builder: Builder, force?: boolean): Promise<void> 
     // Session may not exist
   }
 
-  // Remove worktree (skip for shell mode - no worktree created)
+  // Note: worktrees are NOT automatically removed - they may contain useful context
+  // Users can manually clean up with: git worktree remove <path>
   if (!isShellMode && existsSync(builder.worktree)) {
-    logger.info('Removing worktree...');
-    try {
-      await run(`git worktree remove "${builder.worktree}"${useForce ? ' --force' : ''}`, {
-        cwd: config.projectRoot,
-      });
-    } catch (error) {
-      if (useForce) {
-        // Force remove directory if git worktree remove fails
-        await rm(builder.worktree, { recursive: true, force: true });
-        await run('git worktree prune', { cwd: config.projectRoot });
-      } else {
-        fatal(`Failed to remove worktree: ${error}. Use --force to override.`);
-      }
-    }
+    logger.info(`Worktree preserved at: ${builder.worktree}`);
+    logger.info('To remove: git worktree remove "' + builder.worktree + '"');
   }
 
-  // Delete branch (skip for shell mode)
+  // Note: branches are NOT automatically deleted - they may be needed for reference
+  // Users can manually delete with: git branch -d <branch>
   if (!isShellMode && builder.branch) {
-    logger.info('Deleting branch...');
-    try {
-      // Try -d first (safe delete, only if merged)
-      await run(`git branch -d "${builder.branch}"`, { cwd: config.projectRoot });
-    } catch {
-      if (force) {
-        // Force delete with -D
-        try {
-          await run(`git branch -D "${builder.branch}"`, { cwd: config.projectRoot });
-        } catch {
-          logger.warn(`Could not delete branch ${builder.branch}`);
-        }
-      } else {
-        logger.warn(`Branch ${builder.branch} not fully merged. Use --force to delete anyway.`);
-      }
-    }
+    logger.info(`Branch preserved: ${builder.branch}`);
+    logger.info('To delete: git branch -d "' + builder.branch + '"');
   }
 
   // Remove from state
