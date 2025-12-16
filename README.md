@@ -3,6 +3,8 @@
 [![npm version](https://img.shields.io/npm/v/@cluesmith/codev.svg)](https://www.npmjs.com/package/@cluesmith/codev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+![Agent Farm Dashboard](docs/assets/agent-farm-hero.png)
+
 Codev is an operating system for structured human-AI collaboration. You write specs and plans that AI agents execute reliably.
 
 > **Results**: In head-to-head comparison, SPIDER scored 92-95 vs VIBE's 12-15 on the same task. [See case study](#-example-implementations)
