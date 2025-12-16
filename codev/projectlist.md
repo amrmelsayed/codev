@@ -137,7 +137,7 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0060"
     title: "Dashboard Modularization"
     summary: "Split dashboard-split.html into separate CSS and JS files for maintainability"
-    status: planned
+    status: implementing
     priority: medium
     release: null
     files:
