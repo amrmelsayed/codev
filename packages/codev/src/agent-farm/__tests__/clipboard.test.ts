@@ -22,12 +22,12 @@ function findProjectRoot(): string {
 const projectRoot = findProjectRoot();
 
 describe('Dashboard clipboard permissions', () => {
-  const templates = [
-    'agent-farm/templates/dashboard-split.html',
+  // Legacy templates have static iframes
+  const legacyTemplates = [
     'agent-farm/templates/dashboard.html',
   ];
 
-  templates.forEach((templatePath) => {
+  legacyTemplates.forEach((templatePath) => {
     it(`${templatePath} includes clipboard permissions on iframes`, () => {
       const fullPath = resolve(projectRoot, templatePath);
 
@@ -49,6 +49,29 @@ describe('Dashboard clipboard permissions', () => {
         expect(iframe).toMatch(/allow="[^"]*clipboard-read[^"]*"/);
         expect(iframe).toMatch(/allow="[^"]*clipboard-write[^"]*"/);
       });
+    });
+  });
+
+  // Modular dashboard (Spec 0060) creates iframes dynamically in JS
+  it('modular dashboard tabs.js includes clipboard permissions on dynamic iframes', () => {
+    const tabsJsPath = resolve(projectRoot, 'agent-farm/templates/dashboard/js/tabs.js');
+
+    if (!existsSync(tabsJsPath)) {
+      return;
+    }
+
+    const content = readFileSync(tabsJsPath, 'utf-8');
+
+    // Find all iframe string templates (in JS)
+    const iframeRegex = /<iframe[^>]*>/g;
+    const iframes = content.match(iframeRegex) || [];
+
+    expect(iframes.length).toBeGreaterThan(0);
+
+    // Each iframe should have clipboard permissions
+    iframes.forEach((iframe) => {
+      expect(iframe).toMatch(/allow="[^"]*clipboard-read[^"]*"/);
+      expect(iframe).toMatch(/allow="[^"]*clipboard-write[^"]*"/);
     });
   });
 });

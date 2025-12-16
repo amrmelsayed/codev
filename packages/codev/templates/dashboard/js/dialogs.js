@@ -1,0 +1,328 @@
+// Dialog, Context Menu, and Tab Close Functions
+
+// Close tab
+function closeTab(tabId, event) {
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+
+  // Shift+click bypasses confirmation
+  if (event && event.shiftKey) {
+    doCloseTab(tabId);
+    return;
+  }
+
+  // Files don't need confirmation
+  if (tab.type === 'file') {
+    doCloseTab(tabId);
+    return;
+  }
+
+  // Show confirmation for builders and shells
+  pendingCloseTabId = tabId;
+  const dialog = document.getElementById('close-dialog');
+  const title = document.getElementById('close-dialog-title');
+  const message = document.getElementById('close-dialog-message');
+
+  if (tab.type === 'builder') {
+    title.textContent = `Stop builder ${tab.name}?`;
+    message.textContent = 'This will terminate the builder process.';
+  } else {
+    title.textContent = `Close shell ${tab.name}?`;
+    message.textContent = 'This will terminate the shell process.';
+  }
+
+  dialog.classList.remove('hidden');
+}
+
+// Actually close the tab
+async function doCloseTab(tabId) {
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+
+  try {
+    await fetch(`/api/tabs/${encodeURIComponent(tabId)}`, { method: 'DELETE' });
+
+    tabs = tabs.filter(t => t.id !== tabId);
+
+    if (activeTabId === tabId) {
+      activeTabId = tabs.length > 0 ? tabs[tabs.length - 1].id : null;
+    }
+
+    renderTabs();
+    renderTabContent();
+    showToast('Tab closed', 'success');
+  } catch (err) {
+    showToast('Failed to close tab: ' + err.message, 'error');
+  }
+}
+
+// Confirm close from dialog
+function confirmClose() {
+  if (pendingCloseTabId) {
+    doCloseTab(pendingCloseTabId);
+    hideCloseDialog();
+  }
+}
+
+function hideCloseDialog() {
+  document.getElementById('close-dialog').classList.add('hidden');
+  pendingCloseTabId = null;
+}
+
+// Context menu
+function showContextMenu(event, tabId) {
+  event.preventDefault();
+  contextMenuTabId = tabId;
+
+  const menu = document.getElementById('context-menu');
+  menu.style.left = event.clientX + 'px';
+  menu.style.top = event.clientY + 'px';
+  menu.classList.remove('hidden');
+
+  const tab = tabs.find(t => t.id === tabId);
+  const reloadItem = document.getElementById('context-reload');
+  if (reloadItem) {
+    reloadItem.style.display = (tab && tab.type === 'file') ? 'block' : 'none';
+  }
+
+  const firstItem = menu.querySelector('.context-menu-item');
+  if (firstItem) firstItem.focus();
+
+  setTimeout(() => {
+    document.addEventListener('click', hideContextMenu, { once: true });
+  }, 0);
+}
+
+// Reload file tab content
+function reloadContextTab() {
+  if (contextMenuTabId) {
+    refreshFileTab(contextMenuTabId);
+    showToast('Reloaded', 'success');
+  }
+  hideContextMenu();
+}
+
+function hideContextMenu() {
+  document.getElementById('context-menu').classList.add('hidden');
+  contextMenuTabId = null;
+}
+
+// Handle keyboard navigation in context menu
+function handleContextMenuKeydown(event) {
+  const menu = document.getElementById('context-menu');
+  const items = Array.from(menu.querySelectorAll('.context-menu-item'));
+  const currentIndex = items.findIndex(item => item === document.activeElement);
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+      items[nextIndex].focus();
+      break;
+    case 'ArrowUp':
+      event.preventDefault();
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+      items[prevIndex].focus();
+      break;
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      const actionName = event.target.dataset.action;
+      if (actionName && typeof window[actionName] === 'function') {
+        window[actionName]();
+      }
+      break;
+    case 'Escape':
+      event.preventDefault();
+      hideContextMenu();
+      break;
+    case 'Tab':
+      hideContextMenu();
+      break;
+  }
+}
+
+function closeActiveTab() {
+  if (contextMenuTabId) {
+    closeTab(contextMenuTabId);
+  }
+  hideContextMenu();
+}
+
+function closeOtherTabs() {
+  if (contextMenuTabId) {
+    const otherTabs = tabs.filter(t => t.id !== contextMenuTabId && t.closeable !== false);
+    otherTabs.forEach(t => doCloseTab(t.id));
+  }
+  hideContextMenu();
+}
+
+function closeAllTabs() {
+  tabs.filter(t => t.closeable !== false).forEach(t => doCloseTab(t.id));
+  hideContextMenu();
+}
+
+// Open context menu tab in new tab
+function openContextTab() {
+  if (contextMenuTabId) {
+    openInNewTab(contextMenuTabId);
+  }
+  hideContextMenu();
+}
+
+// File dialog
+function showFileDialog() {
+  document.getElementById('file-dialog').classList.remove('hidden');
+  document.getElementById('file-path-input').focus();
+}
+
+function hideFileDialog() {
+  document.getElementById('file-dialog').classList.add('hidden');
+  document.getElementById('file-path-input').value = '';
+}
+
+function setFilePath(path) {
+  document.getElementById('file-path-input').value = path;
+  document.getElementById('file-path-input').focus();
+}
+
+async function openFile() {
+  const path = document.getElementById('file-path-input').value.trim();
+  if (!path) return;
+
+  try {
+    const response = await fetch('/api/tabs/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    hideFileDialog();
+    await refresh();
+    showToast(`Opened ${path}`, 'success');
+  } catch (err) {
+    showToast('Failed to open file: ' + err.message, 'error');
+  }
+}
+
+// Spawn worktree builder
+async function spawnBuilder() {
+  try {
+    const response = await fetch('/api/tabs/builder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const result = await response.json();
+
+    const newTab = {
+      id: `builder-${result.id}`,
+      type: 'builder',
+      name: result.name,
+      port: result.port
+    };
+    tabs.push(newTab);
+    activeTabId = newTab.id;
+    renderTabs();
+    renderTabContent();
+    showToast(`Builder ${result.name} spawned`, 'success');
+  } catch (err) {
+    showToast('Failed to spawn builder: ' + err.message, 'error');
+  }
+}
+
+// Spawn shell
+async function spawnShell() {
+  try {
+    const response = await fetch('/api/tabs/shell', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const result = await response.json();
+
+    const newTab = {
+      id: `shell-${result.id}`,
+      type: 'shell',
+      name: result.name,
+      port: result.port,
+      utilId: result.id,
+      pendingLoad: true
+    };
+    tabs.push(newTab);
+    activeTabId = newTab.id;
+    renderTabs();
+
+    const content = document.getElementById('tab-content');
+    content.innerHTML = '<div class="empty-state"><p>Starting shell...</p></div>';
+
+    setTimeout(() => {
+      delete newTab.pendingLoad;
+      currentTabPort = null;
+      renderTabContent();
+    }, 800);
+
+    showToast('Shell spawned', 'success');
+  } catch (err) {
+    showToast('Failed to spawn shell: ' + err.message, 'error');
+  }
+}
+
+// Create new utility shell (quick action button)
+async function createNewShell() {
+  try {
+    const response = await fetch('/api/tabs/shell', { method: 'POST' });
+    const data = await response.json();
+    if (!data.success && data.error) {
+      showToast(data.error || 'Failed to create shell', 'error');
+      return;
+    }
+    await refresh();
+    if (data.id) {
+      selectTab(`shell-${data.id}`);
+    }
+    showToast('Shell created', 'success');
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+
+// Create new worktree shell (quick action button)
+async function createNewWorktreeShell() {
+  const branch = prompt('Branch name (leave empty for temp worktree):');
+  if (branch === null) return;
+
+  try {
+    const response = await fetch('/api/tabs/shell', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ worktree: true, branch: branch || undefined })
+    });
+    const data = await response.json();
+    if (!data.success && data.error) {
+      showToast(data.error || 'Failed to create worktree shell', 'error');
+      return;
+    }
+    await refresh();
+    if (data.id) {
+      selectTab(`shell-${data.id}`);
+    }
+    showToast('Worktree shell created', 'success');
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}

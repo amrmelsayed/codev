@@ -132,7 +132,9 @@ function findTemplatePath(filename: string, required = false): string | null {
 }
 
 const projectRoot = findProjectRoot();
-const templatePath = findTemplatePath('dashboard-split.html', true);
+// Use modular dashboard template (Spec 0060)
+const templatePath = findTemplatePath('dashboard/index.html', true);
+// Keep legacy paths for backwards compatibility (will be removed in cleanup)
 const legacyTemplatePath = findTemplatePath('dashboard.html', true);
 
 // Clean up dead processes from state (called on state load)
@@ -1858,6 +1860,88 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: (err as Error).message }));
       }
+      return;
+    }
+
+    // API: Hot reload check (Spec 0060)
+    // Returns modification times for all dashboard CSS/JS files
+    if (req.method === 'GET' && url.pathname === '/api/hot-reload') {
+      try {
+        const dashboardDir = path.join(__dirname, '../../../templates/dashboard');
+        const cssDir = path.join(dashboardDir, 'css');
+        const jsDir = path.join(dashboardDir, 'js');
+
+        const mtimes: Record<string, number> = {};
+
+        // Collect CSS file modification times
+        if (fs.existsSync(cssDir)) {
+          for (const file of fs.readdirSync(cssDir)) {
+            if (file.endsWith('.css')) {
+              const stat = fs.statSync(path.join(cssDir, file));
+              mtimes[`css/${file}`] = stat.mtimeMs;
+            }
+          }
+        }
+
+        // Collect JS file modification times
+        if (fs.existsSync(jsDir)) {
+          for (const file of fs.readdirSync(jsDir)) {
+            if (file.endsWith('.js')) {
+              const stat = fs.statSync(path.join(jsDir, file));
+              mtimes[`js/${file}`] = stat.mtimeMs;
+            }
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ mtimes }));
+      } catch (err) {
+        console.error('Hot reload check error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: (err as Error).message }));
+      }
+      return;
+    }
+
+    // Serve dashboard CSS files
+    if (req.method === 'GET' && url.pathname.startsWith('/dashboard/css/')) {
+      const filename = url.pathname.replace('/dashboard/css/', '');
+      // Validate filename to prevent path traversal
+      if (!filename || filename.includes('..') || filename.includes('/') || !filename.endsWith('.css')) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Invalid filename');
+        return;
+      }
+      const cssPath = path.join(__dirname, '../../../templates/dashboard/css', filename);
+      if (fs.existsSync(cssPath)) {
+        const content = fs.readFileSync(cssPath, 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
+        res.end(content);
+        return;
+      }
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('CSS file not found');
+      return;
+    }
+
+    // Serve dashboard JS files
+    if (req.method === 'GET' && url.pathname.startsWith('/dashboard/js/')) {
+      const filename = url.pathname.replace('/dashboard/js/', '');
+      // Validate filename to prevent path traversal
+      if (!filename || filename.includes('..') || filename.includes('/') || !filename.endsWith('.js')) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Invalid filename');
+        return;
+      }
+      const jsPath = path.join(__dirname, '../../../templates/dashboard/js', filename);
+      if (fs.existsSync(jsPath)) {
+        const content = fs.readFileSync(jsPath, 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+        res.end(content);
+        return;
+      }
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('JS file not found');
       return;
     }
 
