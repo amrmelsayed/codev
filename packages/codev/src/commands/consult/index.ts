@@ -302,11 +302,6 @@ async function runConsultation(
     fs.writeFileSync(tempFile, role);
     env['GEMINI_SYSTEM_MD'] = tempFile;
 
-    // Handle GOOGLE_API_KEY vs GEMINI_API_KEY conflict
-    if (process.env['GOOGLE_API_KEY'] && process.env['GEMINI_API_KEY']) {
-      env['GEMINI_API_KEY'] = '';
-    }
-
     cmd = [config.cli, ...config.args, query];
   } else if (model === 'codex') {
     // Codex uses experimental_instructions_file config flag (not env var)
