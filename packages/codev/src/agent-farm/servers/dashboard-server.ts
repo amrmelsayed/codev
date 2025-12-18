@@ -134,8 +134,6 @@ function findTemplatePath(filename: string, required = false): string | null {
 const projectRoot = findProjectRoot();
 // Use modular dashboard template (Spec 0060)
 const templatePath = findTemplatePath('dashboard/index.html', true);
-// Keep legacy paths for backwards compatibility (will be removed in cleanup)
-const legacyTemplatePath = findTemplatePath('dashboard.html', true);
 
 // Clean up dead processes from state (called on state load)
 function cleanupDeadProcesses(): void {
@@ -1112,8 +1110,6 @@ async function collectActivitySummary(projectRoot: string): Promise<ActivitySumm
   };
 }
 
-// Use split template as main, legacy is already loaded via findTemplatePath
-const finalTemplatePath = templatePath;
 
 // Security: Validate request origin
 function isRequestAllowed(req: http.IncomingMessage): boolean {
@@ -1948,7 +1944,7 @@ const server = http.createServer(async (req, res) => {
     // Serve dashboard
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       try {
-        let template = fs.readFileSync(finalTemplatePath, 'utf-8');
+        let template = fs.readFileSync(templatePath, 'utf-8');
         const state = loadStateWithCleanup();
 
         // Inject project name into template (HTML-escaped for security)
