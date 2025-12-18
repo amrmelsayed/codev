@@ -8,6 +8,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
+import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import { getTemplatesDir } from '../lib/templates.js';
 
@@ -212,6 +213,8 @@ projects:
   const claudeMdDest = path.join(targetDir, 'CLAUDE.md');
   const agentsMdDest = path.join(targetDir, 'AGENTS.md');
 
+  const rootConflicts: string[] = [];
+
   // CLAUDE.md
   if (!fs.existsSync(claudeMdDest) && fs.existsSync(claudeMdSrc)) {
     const content = fs.readFileSync(claudeMdSrc, 'utf-8')
@@ -219,8 +222,13 @@ projects:
     fs.writeFileSync(claudeMdDest, content);
     console.log(chalk.green('  +'), 'CLAUDE.md');
     fileCount++;
-  } else if (fs.existsSync(claudeMdDest)) {
-    console.log(chalk.yellow('  ~'), 'CLAUDE.md', chalk.dim('(exists, skipped)'));
+  } else if (fs.existsSync(claudeMdDest) && fs.existsSync(claudeMdSrc)) {
+    // Create .codev-new for merge
+    const content = fs.readFileSync(claudeMdSrc, 'utf-8')
+      .replace(/\{\{PROJECT_NAME\}\}/g, projectName);
+    fs.writeFileSync(claudeMdDest + '.codev-new', content);
+    console.log(chalk.yellow('  !'), 'CLAUDE.md', chalk.dim('(conflict - .codev-new created)'));
+    rootConflicts.push('CLAUDE.md');
     skippedCount++;
   }
 
@@ -231,8 +239,13 @@ projects:
     fs.writeFileSync(agentsMdDest, content);
     console.log(chalk.green('  +'), 'AGENTS.md');
     fileCount++;
-  } else if (fs.existsSync(agentsMdDest)) {
-    console.log(chalk.yellow('  ~'), 'AGENTS.md', chalk.dim('(exists, skipped)'));
+  } else if (fs.existsSync(agentsMdDest) && fs.existsSync(agentsMdSrc)) {
+    // Create .codev-new for merge
+    const content = fs.readFileSync(agentsMdSrc, 'utf-8')
+      .replace(/\{\{PROJECT_NAME\}\}/g, projectName);
+    fs.writeFileSync(agentsMdDest + '.codev-new', content);
+    console.log(chalk.yellow('  !'), 'AGENTS.md', chalk.dim('(conflict - .codev-new created)'));
+    rootConflicts.push('AGENTS.md');
     skippedCount++;
   }
 
@@ -270,4 +283,30 @@ codev/.update-hashes.json
   console.log('  af start               # Start the architect dashboard');
   console.log('');
   console.log(chalk.dim('For more info, see: https://github.com/cluesmith/codev'));
+
+  // If there are root conflicts (CLAUDE.md, AGENTS.md), spawn Claude to merge
+  if (rootConflicts.length > 0) {
+    console.log('');
+    console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
+    console.log(chalk.cyan('  Launching Claude to merge conflicts...'));
+    console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
+    console.log('');
+
+    const mergePrompt = `Merge ${rootConflicts.join(' and ')} from the .codev-new versions. Add new sections from the .codev-new files, preserve my customizations, then delete the .codev-new files when done.`;
+
+    // Spawn Claude interactively with merge instructions as initial prompt
+    const claude = spawn('claude', [mergePrompt], {
+      stdio: 'inherit',
+      cwd: targetDir,
+    });
+
+    claude.on('error', (err) => {
+      console.error(chalk.red('Failed to launch Claude:'), err.message);
+      console.log('');
+      console.log('Please merge the conflicts manually:');
+      for (const file of rootConflicts) {
+        console.log(chalk.dim(`  ${file} ← ${file}.codev-new`));
+      }
+    });
+  }
 }
