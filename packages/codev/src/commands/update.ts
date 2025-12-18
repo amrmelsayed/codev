@@ -237,24 +237,18 @@ export async function update(options: UpdateOptions = {}): Promise<void> {
   // If there are root conflicts (CLAUDE.md, AGENTS.md), spawn Claude to merge
   if (result.rootConflicts.length > 0) {
     console.log('');
-    console.log(chalk.cyan('Launching Claude to merge conflicts...'));
+    console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
+    console.log(chalk.cyan('  Launching Claude to merge conflicts...'));
+    console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
+    console.log('');
+    console.log(chalk.bold('Tell Claude:'));
+    console.log('');
+    console.log(chalk.white(`  Merge ${result.rootConflicts.join(' and ')} from the .codev-new versions.`));
+    console.log(chalk.white('  Add new sections, preserve my customizations, then delete the .codev-new files.'));
     console.log('');
 
-    const mergeInstructions = `You need to merge updates into the following files:
-
-${result.rootConflicts.map(f => `- ${f} (new version in ${f}.codev-new)`).join('\n')}
-
-For each file:
-1. Read the current file and the .codev-new version
-2. Merge the new sections (like "CLI Commands" and "Configuration") into the existing file
-3. Preserve any user customizations
-4. Delete the .codev-new file after successful merge
-5. Report what you merged
-
-Focus on adding new sections that don't exist in the current file, and updating sections that have changed.`;
-
-    // Spawn Claude interactively (no --print so it can use tools)
-    const claude = spawn('claude', ['-p', mergeInstructions], {
+    // Spawn Claude fully interactive
+    const claude = spawn('claude', [], {
       stdio: 'inherit',
       cwd: targetDir,
     });
