@@ -28,6 +28,8 @@ npm run test
 
 ## Output Formatting
 
+**Dashboard Port: {PORT}**
+
 When referencing files that the user may want to review, format them as clickable URLs using the dashboard's open-file endpoint:
 
 ```
@@ -35,10 +37,10 @@ When referencing files that the user may want to review, format them as clickabl
 Updated src/lib/auth.ts with the new handler.
 
 # Use:
-Updated http://localhost:4200/open-file?path=src/lib/auth.ts with the new handler.
+Updated http://localhost:{PORT}/open-file?path=src/lib/auth.ts with the new handler.
 ```
 
-Replace `4200` with the actual dashboard port if different. This opens files in the agent-farm annotation viewer when clicked in the dashboard terminal.
+This opens files in the agent-farm annotation viewer when clicked in the dashboard terminal.
 
 ## Responsibilities
 

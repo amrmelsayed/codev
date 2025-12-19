@@ -73,7 +73,9 @@ export async function start(options: StartOptions = {}): Promise<void> {
       // Write role to a file and create a launch script to avoid shell escaping issues
       // The architect.md file contains backticks, $variables, and other shell-sensitive chars
       const roleFile = resolve(config.stateDir, 'architect-role.md');
-      writeFileSync(roleFile, role.content, 'utf-8');
+      // Inject the actual dashboard port into the role prompt
+      const roleContent = role.content.replace(/\{PORT\}/g, String(config.dashboardPort));
+      writeFileSync(roleFile, roleContent, 'utf-8');
 
       const launchScript = resolve(config.stateDir, 'launch-architect.sh');
       writeFileSync(launchScript, `#!/bin/bash

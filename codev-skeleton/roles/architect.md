@@ -72,6 +72,8 @@ wait
 
 ## Output Formatting
 
+**Dashboard Port: {PORT}**
+
 When referencing files that the user may want to review, format them as clickable URLs using the dashboard's open-file endpoint:
 
 ```
@@ -82,7 +84,7 @@ See codev/specs/0022-consult-tool-stateless.md for details.
 See http://localhost:{PORT}/open-file?path=codev/specs/0022-consult-tool-stateless.md for details.
 ```
 
-**Finding the dashboard port**: Run `af status` to see the dashboard URL. The default is 4200, but varies when multiple projects are running.
+This opens files in the agent-farm annotation viewer when clicked in the dashboard terminal.
 
 ## Critical Rules
 

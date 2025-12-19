@@ -260,7 +260,9 @@ async function startBuilderSession(
   if (roleContent) {
     // Write role to a file and use $(cat) to avoid shell escaping issues
     const roleFile = resolve(worktreePath, '.builder-role.md');
-    writeFileSync(roleFile, roleContent);
+    // Inject the actual dashboard port into the role prompt
+    const roleWithPort = roleContent.replace(/\{PORT\}/g, String(config.dashboardPort));
+    writeFileSync(roleFile, roleWithPort);
     logger.info(`Loaded role (${roleSource})`);
     scriptContent = `#!/bin/bash
 exec ${baseCmd} --append-system-prompt "$(cat '${roleFile}')" "$(cat '${promptFile}')"
@@ -633,7 +635,9 @@ async function spawnWorktree(options: SpawnOptions, config: Config): Promise<voi
 
   if (role) {
     const roleFile = resolve(worktreePath, '.builder-role.md');
-    writeFileSync(roleFile, role.content);
+    // Inject the actual dashboard port into the role prompt
+    const roleWithPort = role.content.replace(/\{PORT\}/g, String(config.dashboardPort));
+    writeFileSync(roleFile, roleWithPort);
     logger.info(`Loaded role (${role.source})`);
     scriptContent = `#!/bin/bash
 exec ${commands.builder} --append-system-prompt "$(cat '${roleFile}')"
