@@ -1,7 +1,7 @@
 # Specification: Secure Remote Access
 
 ## Metadata
-- **ID**: 0055
+- **ID**: 0062
 - **Status**: approved
 - **Created**: 2025-12-23
 - **Protocol**: SPIDER

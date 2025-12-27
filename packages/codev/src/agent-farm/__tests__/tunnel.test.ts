@@ -16,12 +16,6 @@ vi.mock('../state.js', () => ({
   getArchitect: vi.fn(),
 }));
 
-// Mock the config module
-vi.mock('../utils/config.js', () => ({
-  getConfig: vi.fn(() => ({
-    dashboardPort: 4200,
-  })),
-}));
 
 // Mock the logger
 const mockLogger = {
@@ -57,9 +51,10 @@ describe('tunnel command', () => {
   describe('when Agent Farm is not running', () => {
     it('should exit with error', () => {
       vi.mocked(getArchitect).mockReturnValue(null);
+      // Mock process.exit to throw to stop execution
+      processExitSpy.mockImplementation(() => { throw new Error('process.exit'); });
 
-      tunnel({});
-
+      expect(() => tunnel({})).toThrow('process.exit');
       expect(processExitSpy).toHaveBeenCalledWith(1);
     });
   });
