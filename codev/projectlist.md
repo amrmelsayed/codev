@@ -167,7 +167,7 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0062"
     title: "Secure Remote Access"
     summary: "SSH tunnel + reverse proxy: af start --remote for one-command remote access"
-    status: implementing
+    status: committed
     priority: high
     release: null
     files:
@@ -181,8 +181,8 @@ Projects currently in development (conceived through committed), sorted by prior
       specified_at: "2025-12-27T00:00:00-08:00"
       planned_at: "2025-12-27T00:00:00-08:00"
       implementing_at: "2025-12-27T00:00:00-08:00"
-      implemented_at: "2025-12-27T00:00:00-08:00"
-      committed_at: "2025-12-27T00:00:00-08:00"
+      implemented_at: "2025-12-28T00:00:00-08:00"
+      committed_at: "2025-12-28T00:00:00-08:00"
       integrated_at: null
     notes: "Reverse proxy consolidates ttyd instances behind one port. af start --remote for one-command iPad/remote access."
 
