@@ -1799,7 +1799,6 @@ const server = http.createServer(async (req, res) => {
         '.venv',
         'venv',
         'env',
-        '.env',
       ]);
 
       interface FileNode {
