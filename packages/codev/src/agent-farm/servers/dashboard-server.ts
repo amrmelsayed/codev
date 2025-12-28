@@ -2067,6 +2067,18 @@ terminalProxy.on('error', (err, req, socket) => {
   }
 });
 
+// Handle server errors (e.g., port already in use)
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Error: Port ${port} is already in use.`);
+    console.error(`Run 'lsof -i :${port}' to find the process, or use 'af ports cleanup' to clean up orphans.`);
+    process.exit(1);
+  } else {
+    console.error(`Server error: ${err.message}`);
+    process.exit(1);
+  }
+});
+
 if (bindHost) {
   server.listen(port, bindHost, () => {
     console.log(`Dashboard: http://${bindHost}:${port}`);

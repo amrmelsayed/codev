@@ -49,6 +49,15 @@ export async function update(options: UpdateOptions = {}): Promise<void> {
   }
   console.log('');
 
+  // Clean up legacy codev/bin directory (bash-based agent farm is deprecated)
+  const legacyBinDir = path.join(codevDir, 'bin');
+  if (fs.existsSync(legacyBinDir)) {
+    if (!dryRun) {
+      fs.rmSync(legacyBinDir, { recursive: true });
+    }
+    console.log(chalk.red('  - (removed)'), 'codev/bin/ (deprecated bash scripts)');
+  }
+
   const templatesDir = getTemplatesDir();
   const templateFiles = getTemplateFiles(templatesDir);
   const currentHashes = loadHashStore(targetDir);

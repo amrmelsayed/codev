@@ -8,7 +8,6 @@
 import { getConfig } from '../utils/index.js';
 import { logger, fatal } from '../utils/logger.js';
 import { loadState } from '../state.js';
-import path from 'node:path';
 
 interface ConsultOptions {
   model: string;
@@ -32,9 +31,8 @@ export async function consult(
   const config = getConfig();
   const dashboardPort = config.dashboardPort;
 
-  // Build the consult command
-  const consultBin = path.join(config.projectRoot, 'codev/bin/consult');
-  let cmd = `${consultBin} --model ${options.model}`;
+  // Build the consult command (consult is now a proper CLI binary)
+  let cmd = `consult --model ${options.model}`;
   if (options.type) {
     cmd += ` --type ${options.type}`;
   }

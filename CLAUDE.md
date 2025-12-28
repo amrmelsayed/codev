@@ -34,6 +34,7 @@ Codev releases are named after **great examples of architecture** from around th
 | Version | Codename | Inspiration |
 |---------|----------|-------------|
 | 1.0.0 | Alhambra | Moorish palace complex in Granada, Spain - intricate detail and harmonious design |
+| 1.5.2 | Florence | Brunelleschi's dome atop the Florence Cathedral - engineering innovation enabling remote collaboration |
 
 Future releases will continue this tradition, drawing from architectural wonders across cultures and eras.
 
