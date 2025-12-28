@@ -81,3 +81,35 @@ If issues arise:
 - ~200 lines HTML/JS for viewer template
 - ~20 lines TypeScript for open-server changes
 - Total: ~220 lines
+
+---
+
+## Amendment History
+
+### TICK-001: Quaternion-based Trackball Rotation (2025-12-27)
+
+**Changes**:
+- Replace OrbitControls with TrackballControls in stl-viewer.html
+- TrackballControls uses quaternion math internally, eliminating gimbal lock
+- Update CDN imports to include TrackballControls.js instead of OrbitControls.js
+
+**Implementation Steps**:
+1. Update CDN script tag from OrbitControls.js to TrackballControls.js
+2. Change `new THREE.OrbitControls(...)` to `new THREE.TrackballControls(...)`
+3. Configure TrackballControls settings:
+   - `controls.rotateSpeed = 2.0`
+   - `controls.zoomSpeed = 1.2`
+   - `controls.panSpeed = 0.8`
+   - `controls.staticMoving = true` (no inertia)
+   - `controls.dynamicDampingFactor = 0.3`
+4. Update reset view function to use `controls.reset()` method
+5. Test rotation at all orientations including poles
+
+**CDN URL**:
+```html
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
+```
+
+Note: Using Three.js r128 for global builds compatibility (r129+ dropped non-module builds).
+
+**Review**: See `reviews/0061-stl-viewer-tick-001.md`

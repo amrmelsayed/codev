@@ -90,3 +90,24 @@ STL files are identified by:
 
 - Three.js (loaded via CDN or bundled)
 - Existing open-server.ts infrastructure
+
+---
+
+## Amendments
+
+### TICK-001: Quaternion-based Trackball Rotation (2025-12-27)
+
+**Summary**: Replace Euler angle rotation with quaternion math to eliminate gimbal lock
+
+**Problem Addressed**:
+The initial implementation uses OrbitControls with Euler angles for rotation, which causes gimbal lock when the camera approaches certain orientations (e.g., looking straight down). This makes the 3D navigation feel broken and unprofessional.
+
+**Spec Changes**:
+- Technical Approach: Use TrackballControls instead of OrbitControls, or implement custom quaternion-based rotation
+- Acceptance Criteria: Add "Smooth rotation without gimbal lock at any orientation"
+
+**Plan Changes**:
+- Phase 1: Replace OrbitControls with TrackballControls (uses quaternions internally)
+- Alternative: Implement custom quaternion rotation if TrackballControls has issues
+
+**Review**: See `reviews/0061-stl-viewer-tick-001.md`
