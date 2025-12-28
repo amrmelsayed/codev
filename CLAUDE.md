@@ -538,13 +538,7 @@ consult --model codex pr 95
 consult --model claude pr 95
 ```
 
-Or use background processes in a single shell:
-```bash
-consult --model gemini pr 95 &
-consult --model codex pr 95 &
-consult --model claude pr 95 &
-wait
-```
+**Important**: When using the Bash tool, you MUST set `run_in_background: true` in the tool parameters. Using `&` at the end of the command alone does NOT work - the tool will still block.
 
 **Why background?** Each consultation takes 60-250 seconds. Running sequentially wastes time; running in foreground blocks other work.
 
