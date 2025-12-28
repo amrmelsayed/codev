@@ -75,18 +75,52 @@ function loadRolePrompt(config: { codevDir: string; bundledRolesDir: string }, r
 }
 
 /**
+ * Check if passwordless SSH is configured for a host
+ * Returns true if SSH works without password, false otherwise
+ */
+async function checkPasswordlessSSH(user: string, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ssh = spawn('ssh', [
+      '-o', 'ConnectTimeout=5',
+      '-o', 'BatchMode=yes',  // Fail immediately if password required
+      '-o', 'StrictHostKeyChecking=accept-new',
+      `${user}@${host}`,
+      'true',  // Just run 'true' to test connection
+    ], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+
+    let stderr = '';
+    ssh.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    ssh.on('error', () => resolve(false));
+    ssh.on('exit', (code) => resolve(code === 0));
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      ssh.kill();
+      resolve(false);
+    }, 10000);
+  });
+}
+
+/**
  * Check remote CLI versions and warn about mismatches
  */
 async function checkRemoteVersions(user: string, host: string): Promise<void> {
   const commands = ['codev', 'af', 'consult', 'generate-image'];
   const versionCmd = commands.map(cmd => `${cmd} --version 2>/dev/null || echo "${cmd}: not found"`).join(' && echo "---" && ');
+  // Wrap in bash -l to source login environment (gets PATH from .profile)
+  const wrappedCmd = `bash -l -c '${versionCmd.replace(/'/g, "'\\''")}'`;
 
   return new Promise((resolve) => {
     const ssh = spawn('ssh', [
       '-o', 'ConnectTimeout=5',
       '-o', 'BatchMode=yes',
       `${user}@${host}`,
-      versionCmd,
+      wrappedCmd,
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -171,12 +205,28 @@ async function startRemote(options: StartOptions): Promise<void> {
     ? `cd ${remotePath}`
     : `cd ${projectName} 2>/dev/null || cd ~/${projectName} 2>/dev/null`;
   // Always pass --no-browser to remote since we open browser locally
-  const remoteCommand = `${cdCommand} && af start --port ${localPort} --no-browser`;
+  // Wrap in bash -l to source login environment (gets PATH from .profile)
+  const innerCommand = `${cdCommand} && af start --port ${localPort} --no-browser`;
+  const remoteCommand = `bash -l -c '${innerCommand.replace(/'/g, "'\\''")}'`;
 
   // Check if local port is already in use
   const portAvailable = await isPortAvailable(localPort);
   if (!portAvailable) {
     fatal(`Port ${localPort} is already in use locally. Stop the existing service or use --port to specify a different port.`);
+  }
+
+  // Check passwordless SSH is configured
+  logger.info('Checking SSH connection...');
+  const sshOk = await checkPasswordlessSSH(user, host);
+  if (!sshOk) {
+    logger.blank();
+    fatal(`Cannot connect to ${user}@${host} without a password.
+
+Passwordless SSH is required for remote access. Set it up with:
+  ssh-copy-id ${user}@${host}
+
+Then verify with:
+  ssh ${user}@${host} "echo connected"`);
   }
 
   // Check remote CLI versions (non-blocking warning)
