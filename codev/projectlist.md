@@ -162,7 +162,7 @@ Projects currently in development (conceived through committed), sorted by prior
       implemented_at: "2025-12-26T00:00:00-08:00"
       committed_at: null
       integrated_at: null
-    notes: "Three.js STL viewer with standard views, wireframe, axes, grid toggles. Uses r128 for global builds. TICK-001 in progress: quaternion trackball to fix gimbal lock."
+    notes: "Three.js STL viewer with standard views, wireframe, axes, grid toggles. Uses r128 for global builds. TICK-001: quaternion trackball (merged). TICK-002: 3MF multi-color support (in progress)."
 
   - id: "0023"
     title: "Consult Tool (Stateful)"

@@ -51,6 +51,18 @@ function findTemplatePath(filename: string): string {
 
 const templatePath = findTemplatePath('open.html');
 
+/**
+ * Escape string for safe HTML insertion
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Validate file exists
 if (!fs.existsSync(fullFilePath)) {
   console.error(`File not found: ${fullFilePath}`);
@@ -76,9 +88,12 @@ const isImage = imageExtensions.includes(ext);
 const videoExtensions = ['webm', 'mp4', 'mov', 'avi'];
 const isVideo = videoExtensions.includes(ext);
 
-// STL (3D model) detection
+// 3D model detection (STL and 3MF)
 const isSTL = ext === 'stl';
-const stlTemplatePath = isSTL ? findTemplatePath('stl-viewer.html') : null;
+const is3MF = ext === '3mf';
+const is3D = isSTL || is3MF;
+const format3D = isSTL ? 'stl' : '3mf';
+const viewerTemplatePath3D = is3D ? findTemplatePath('3d-viewer.html') : null;
 
 // MIME type mapping for images
 const imageMimeTypes: Record<string, string> = {
@@ -111,20 +126,24 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Serve STL viewer for STL files
-  if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html') && isSTL && stlTemplatePath) {
+  // Serve 3D viewer for STL and 3MF files
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html') && is3D && viewerTemplatePath3D) {
     try {
-      let template = fs.readFileSync(stlTemplatePath, 'utf-8');
+      let template = fs.readFileSync(viewerTemplatePath3D, 'utf-8');
 
-      // Replace placeholders
-      template = template.replace(/\{\{FILE_PATH\}\}/g, fullFilePath);
-      template = template.replace(/\{\{FILE\}\}/g, displayPath);
+      // Replace placeholders with proper escaping for security
+      // FILE_PATH_JSON: JSON-encoded for JavaScript string context
+      template = template.replace(/\{\{FILE_PATH_JSON\}\}/g, JSON.stringify(fullFilePath));
+      // FILE: HTML-escaped for HTML context (title, visible text)
+      template = template.replace(/\{\{FILE\}\}/g, escapeHtml(displayPath));
+      // FORMAT: hardcoded 'stl' or '3mf', no escaping needed
+      template = template.replace(/\{\{FORMAT\}\}/g, format3D);
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(template);
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Error loading STL viewer: ' + (err as Error).message);
+      res.end('Error loading 3D viewer: ' + (err as Error).message);
     }
     return;
   }
@@ -258,7 +277,31 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Handle STL content (GET /api/stl)
+  // Handle 3D model content (GET /api/model) - supports STL and 3MF
+  if (req.method === 'GET' && req.url?.startsWith('/api/model')) {
+    if (!is3D) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Not a 3D model file');
+      return;
+    }
+
+    try {
+      const modelData = fs.readFileSync(fullFilePath);
+      const mimeType = isSTL ? 'model/stl' : 'model/3mf';
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Content-Length': modelData.length,
+        'Cache-Control': 'no-cache'
+      });
+      res.end(modelData);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Error reading 3D model: ' + (err as Error).message);
+    }
+    return;
+  }
+
+  // Handle legacy STL endpoint (GET /api/stl) - redirects to /api/model
   if (req.method === 'GET' && req.url?.startsWith('/api/stl')) {
     if (!isSTL) {
       res.writeHead(400, { 'Content-Type': 'text/plain' });

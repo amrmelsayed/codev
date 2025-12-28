@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{FILE}} - 3D Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #header {
+      background: #16213e;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+    }
+
+    #filename {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    #info {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    #controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 4px;
+      padding: 0 8px;
+      border-right: 1px solid #0f3460;
+    }
+
+    .control-group:last-child {
+      border-right: none;
+    }
+
+    .control-label {
+      font-size: 10px;
+      color: #64748b;
+      margin-right: 4px;
+      align-self: center;
+    }
+
+    button {
+      background: #0f3460;
+      color: #e0e0e0;
+      border: 1px solid #1e4976;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.2s;
+      min-width: 28px;
+    }
+
+    button:hover {
+      background: #1e4976;
+    }
+
+    button.active {
+      background: #2563eb;
+      border-color: #3b82f6;
+    }
+
+    button.view-btn {
+      font-family: monospace;
+      font-weight: bold;
+    }
+
+    button.view-btn.positive {
+      color: #4ade80;
+    }
+
+    button.view-btn.negative {
+      color: #f87171;
+    }
+
+    #canvas-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #94a3b8;
+    }
+
+    #loading .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #0f3460;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #error {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #ef4444;
+      display: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Axes legend */
+    #axes-legend {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(22, 33, 62, 0.9);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: monospace;
+    }
+
+    #axes-legend div {
+      margin: 2px 0;
+    }
+
+    .axis-x { color: #ef4444; }
+    .axis-y { color: #22c55e; }
+    .axis-z { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div>
+      <span id="filename">{{FILE}}</span>
+      <span id="info"></span>
+    </div>
+    <div id="controls">
+      <div class="control-group">
+        <span class="control-label">View:</span>
+        <button id="viewTop" class="view-btn positive" title="Top (+Y)">+Y</button>
+        <button id="viewBottom" class="view-btn negative" title="Bottom (-Y)">-Y</button>
+        <button id="viewFront" class="view-btn positive" title="Front (+Z)">+Z</button>
+        <button id="viewBack" class="view-btn negative" title="Back (-Z)">-Z</button>
+        <button id="viewRight" class="view-btn positive" title="Right (+X)">+X</button>
+        <button id="viewLeft" class="view-btn negative" title="Left (-X)">-X</button>
+      </div>
+      <div class="control-group">
+        <button id="viewIso" title="Isometric view">Iso</button>
+        <button id="resetBtn" title="Fit model to view">Fit</button>
+      </div>
+      <div class="control-group">
+        <button id="wireframeBtn" title="Toggle wireframe mode">Wire</button>
+        <button id="axesBtn" class="active" title="Toggle axes">Axes</button>
+        <button id="gridBtn" class="active" title="Toggle grid">Grid</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+    <div id="loading">
+      <div class="spinner"></div>
+      <div id="loading-text">Loading 3D model...</div>
+    </div>
+    <div id="error">
+      <div style="font-size: 48px; margin-bottom: 12px;">&#9888;</div>
+      <div id="error-message">Failed to load 3D model</div>
+    </div>
+    <div id="axes-legend">
+      <div class="axis-x">X &#8594; Right</div>
+      <div class="axis-y">Y &#8594; Up</div>
+      <div class="axis-z">Z &#8594; Front</div>
+    </div>
+  </div>
+
+  <!-- Three.js ES Modules via import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+    import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+
+    // Configuration (injected by server with proper escaping)
+    const FILE_PATH = {{FILE_PATH_JSON}};  // JSON-encoded by server
+    const FILE_NAME = '{{FILE}}';
+    const FORMAT = '{{FORMAT}}';  // 'stl' or '3mf'
+
+    // Three.js setup
+    let scene, camera, renderer, controls;
+    let model = null;  // Can be mesh (STL) or group (3MF)
+    let wireframeMesh = null;  // Wireframe overlay mesh
+    let axesHelper, gridHelper;
+    let viewMode = 'solid';  // 'solid', 'wireframe', or 'both'
+    let showAxes = true;
+    let showGrid = true;
+    let modelCenter = new THREE.Vector3();
+    let cameraDistance = 100;
+
+    // DOM elements
+    const canvas = document.getElementById('canvas');
+    const container = document.getElementById('canvas-container');
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loading-text');
+    const error = document.getElementById('error');
+    const errorMessage = document.getElementById('error-message');
+    const info = document.getElementById('info');
+
+    // Buttons
+    const resetBtn = document.getElementById('resetBtn');
+    const wireframeBtn = document.getElementById('wireframeBtn');
+    const axesBtn = document.getElementById('axesBtn');
+    const gridBtn = document.getElementById('gridBtn');
+    const viewTop = document.getElementById('viewTop');
+    const viewBottom = document.getElementById('viewBottom');
+    const viewFront = document.getElementById('viewFront');
+    const viewBack = document.getElementById('viewBack');
+    const viewRight = document.getElementById('viewRight');
+    const viewLeft = document.getElementById('viewLeft');
+    const viewIso = document.getElementById('viewIso');
+
+    function init() {
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a1a2e);
+
+      // Camera
+      camera = new THREE.PerspectiveCamera(
+        45,
+        container.clientWidth / container.clientHeight,
+        0.1,
+        10000
+      );
+      camera.position.set(100, 100, 100);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      // Controls - TrackballControls uses quaternions, eliminating gimbal lock
+      controls = new TrackballControls(camera, renderer.domElement);
+      controls.rotateSpeed = 2.0;
+      controls.zoomSpeed = 1.2;
+      controls.panSpeed = 0.8;
+      controls.staticMoving = true;  // No inertia for precise control
+      controls.dynamicDampingFactor = 0.3;
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+
+      const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight1.position.set(1, 1, 1);
+      scene.add(directionalLight1);
+
+      const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+      directionalLight2.position.set(-1, -1, -1);
+      scene.add(directionalLight2);
+
+      // Grid
+      gridHelper = new THREE.GridHelper(200, 20, 0x0f3460, 0x0f3460);
+      scene.add(gridHelper);
+
+      // Axes helper (X=red, Y=green, Z=blue)
+      axesHelper = new THREE.AxesHelper(50);
+      scene.add(axesHelper);
+
+      // Load model based on format
+      loadModel();
+
+      // Event listeners
+      window.addEventListener('resize', onResize);
+
+      // Control buttons
+      resetBtn.addEventListener('click', fitToView);
+      wireframeBtn.addEventListener('click', toggleWireframe);
+      axesBtn.addEventListener('click', toggleAxes);
+      gridBtn.addEventListener('click', toggleGrid);
+
+      // View buttons
+      viewTop.addEventListener('click', () => setView(0, 1, 0));
+      viewBottom.addEventListener('click', () => setView(0, -1, 0));
+      viewFront.addEventListener('click', () => setView(0, 0, 1));
+      viewBack.addEventListener('click', () => setView(0, 0, -1));
+      viewRight.addEventListener('click', () => setView(1, 0, 0));
+      viewLeft.addEventListener('click', () => setView(-1, 0, 0));
+      viewIso.addEventListener('click', () => setView(1, 1, 1));
+
+      // Animation loop
+      animate();
+    }
+
+    function loadModel() {
+      loadingText.textContent = `Loading ${FORMAT.toUpperCase()} model...`;
+
+      if (FORMAT === '3mf') {
+        load3MF();
+      } else {
+        loadSTL();
+      }
+    }
+
+    function loadSTL() {
+      const loader = new STLLoader();
+
+      loader.load(
+        '/api/model',
+        (geometry) => {
+          // Center geometry
+          geometry.computeBoundingBox();
+          const center = new THREE.Vector3();
+          geometry.boundingBox.getCenter(center);
+          geometry.translate(-center.x, -center.y, -center.z);
+
+          // Move to sit on grid
+          const minY = geometry.boundingBox.min.y - center.y;
+          geometry.translate(0, -minY, 0);
+
+          // Recalculate bounding box after translation
+          geometry.computeBoundingBox();
+
+          // Material
+          const material = new THREE.MeshPhongMaterial({
+            color: 0x3b82f6,
+            specular: 0x111111,
+            shininess: 30,
+            flatShading: false
+          });
+
+          model = new THREE.Mesh(geometry, material);
+          scene.add(model);
+
+          setupAfterLoad(model);
+
+          // Update info
+          const triangles = geometry.attributes.position.count / 3;
+          info.textContent = ` - ${triangles.toLocaleString()} triangles`;
+        },
+        undefined,
+        (err) => {
+          showError('Failed to load STL file: ' + (err.message || 'Unknown error'));
+        }
+      );
+    }
+
+    function load3MF() {
+      const loader = new ThreeMFLoader();
+
+      loader.load(
+        '/api/model',
+        (group) => {
+          // 3MFLoader returns a Group with meshes
+          // 3MF uses Z-up, Three.js uses Y-up - rotate to match
+          group.rotation.set(-Math.PI / 2, 0, 0);
+
+          // Center the group
+          const box = new THREE.Box3().setFromObject(group);
+          const center = box.getCenter(new THREE.Vector3());
+          group.position.sub(center);
+
+          // Move to sit on grid (after centering)
+          const newBox = new THREE.Box3().setFromObject(group);
+          group.position.y -= newBox.min.y;
+
+          model = group;
+          scene.add(model);
+
+          setupAfterLoad(model);
+
+          // Count triangles and objects
+          let triangleCount = 0;
+          let objectCount = 0;
+          group.traverse((child) => {
+            if (child.isMesh) {
+              objectCount++;
+              const geom = child.geometry;
+              if (geom.index) {
+                triangleCount += geom.index.count / 3;
+              } else if (geom.attributes.position) {
+                triangleCount += geom.attributes.position.count / 3;
+              }
+            }
+          });
+
+          info.textContent = ` - ${triangleCount.toLocaleString()} triangles, ${objectCount} object${objectCount !== 1 ? 's' : ''}`;
+        },
+        undefined,
+        (err) => {
+          showError('Failed to load 3MF file: ' + (err.message || 'Unknown error'));
+        }
+      );
+    }
+
+    function setupAfterLoad(object) {
+      // Calculate model center and size
+      const box = new THREE.Box3().setFromObject(object);
+      box.getCenter(modelCenter);
+      const size = box.getSize(new THREE.Vector3());
+      cameraDistance = Math.max(size.x, size.y, size.z) * 2;
+
+      // Scale grid and axes to model size
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const gridSize = Math.ceil(maxDim * 2 / 10) * 10; // Round up to nearest 10
+      scene.remove(gridHelper);
+      gridHelper = new THREE.GridHelper(gridSize, gridSize / 5, 0x0f3460, 0x0f3460);
+      gridHelper.visible = showGrid;
+      scene.add(gridHelper);
+
+      scene.remove(axesHelper);
+      axesHelper = new THREE.AxesHelper(gridSize / 2);
+      axesHelper.visible = showAxes;
+      scene.add(axesHelper);
+
+      // Fit camera to model
+      fitToView();
+
+      // Hide loading
+      loading.classList.add('hidden');
+    }
+
+    function showError(message) {
+      console.error('Error:', message);
+      loading.classList.add('hidden');
+      error.style.display = 'block';
+      errorMessage.textContent = message;
+    }
+
+    function fitToView() {
+      if (!model) return;
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const fov = camera.fov * (Math.PI / 180);
+      cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * 1.5;
+
+      // Isometric view
+      setView(1, 1, 1);
+    }
+
+    function setView(x, y, z) {
+      if (!model) return;
+
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+
+      // Normalize direction
+      const dir = new THREE.Vector3(x, y, z).normalize();
+
+      // Set camera position
+      camera.position.copy(center).add(dir.multiplyScalar(cameraDistance));
+
+      // Set up vector (handle top/bottom views)
+      if (Math.abs(y) > 0.9) {
+        camera.up.set(0, 0, y > 0 ? -1 : 1);
+      } else {
+        camera.up.set(0, 1, 0);
+      }
+
+      // Look at center
+      controls.target.copy(center);
+      camera.lookAt(center);
+      controls.update();
+    }
+
+    function toggleWireframe() {
+      // Cycle through modes: solid -> wireframe -> both -> solid
+      if (viewMode === 'solid') {
+        viewMode = 'wireframe';
+      } else if (viewMode === 'wireframe') {
+        viewMode = 'both';
+      } else {
+        viewMode = 'solid';
+      }
+      applyViewMode();
+    }
+
+    function applyViewMode() {
+      if (!model) return;
+
+      // Remove existing wireframe overlay if any
+      if (wireframeMesh) {
+        scene.remove(wireframeMesh);
+        wireframeMesh.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            child.material.dispose();
+          }
+        });
+        wireframeMesh = null;
+      }
+
+      if (viewMode === 'solid') {
+        // Solid mode: no wireframe
+        model.traverse((child) => {
+          if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.wireframe = false);
+            } else {
+              child.material.wireframe = false;
+            }
+          }
+        });
+        wireframeBtn.textContent = 'Wire';
+        wireframeBtn.classList.remove('active');
+      } else if (viewMode === 'wireframe') {
+        // Wireframe only mode
+        model.traverse((child) => {
+          if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.wireframe = true);
+            } else {
+              child.material.wireframe = true;
+            }
+          }
+        });
+        wireframeBtn.textContent = 'Wire';
+        wireframeBtn.classList.add('active');
+      } else {
+        // Both mode: solid + black wireframe overlay
+        model.traverse((child) => {
+          if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.wireframe = false);
+            } else {
+              child.material.wireframe = false;
+            }
+          }
+        });
+        // Create wireframe overlay
+        wireframeMesh = createWireframeOverlay(model);
+        if (wireframeMesh) {
+          scene.add(wireframeMesh);
+        }
+        wireframeBtn.textContent = 'Both';
+        wireframeBtn.classList.add('active');
+      }
+    }
+
+    function createWireframeOverlay(sourceModel) {
+      // Create a group to hold wireframe meshes
+      const wireframeGroup = new THREE.Group();
+      wireframeGroup.position.copy(sourceModel.position);
+      wireframeGroup.rotation.copy(sourceModel.rotation);
+      wireframeGroup.scale.copy(sourceModel.scale);
+
+      sourceModel.traverse((child) => {
+        if (child.isMesh) {
+          const wireGeom = child.geometry.clone();
+          const wireMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3
+          });
+          const wireMesh = new THREE.Mesh(wireGeom, wireMat);
+          wireMesh.position.copy(child.position);
+          wireMesh.rotation.copy(child.rotation);
+          wireMesh.scale.copy(child.scale);
+          // Slight offset to prevent z-fighting
+          wireMesh.renderOrder = 1;
+          wireframeGroup.add(wireMesh);
+        }
+      });
+
+      return wireframeGroup;
+    }
+
+    function toggleAxes() {
+      showAxes = !showAxes;
+      axesHelper.visible = showAxes;
+      axesBtn.classList.toggle('active', showAxes);
+      document.getElementById('axes-legend').style.display = showAxes ? 'block' : 'none';
+    }
+
+    function toggleGrid() {
+      showGrid = !showGrid;
+      gridHelper.visible = showGrid;
+      gridBtn.classList.toggle('active', showGrid);
+    }
+
+    function onResize() {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      controls.handleResize();  // TrackballControls needs this to update screen dimensions
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Auto-reload: poll file mtime and reload model when changed
+    let lastMtime = null;
+    const POLL_INTERVAL = 1000; // 1 second
+
+    async function checkForChanges() {
+      try {
+        const res = await fetch('/api/mtime');
+        if (res.ok) {
+          const data = await res.json();
+          if (lastMtime === null) {
+            lastMtime = data.mtime;
+          } else if (data.mtime !== lastMtime) {
+            lastMtime = data.mtime;
+            reloadModel();
+          }
+        }
+      } catch (err) {
+        // Ignore fetch errors (server may be restarting)
+      }
+    }
+
+    function reloadModel() {
+      // Remove old wireframe overlay
+      if (wireframeMesh) {
+        scene.remove(wireframeMesh);
+        wireframeMesh.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            child.material.dispose();
+          }
+        });
+        wireframeMesh = null;
+      }
+
+      // Remove old model
+      if (model) {
+        scene.remove(model);
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.dispose());
+            } else if (child.material) {
+              child.material.dispose();
+            }
+          }
+        });
+        model = null;
+      }
+
+      // Reload based on format
+      if (FORMAT === '3mf') {
+        reload3MF();
+      } else {
+        reloadSTL();
+      }
+    }
+
+    function reloadSTL() {
+      const loader = new STLLoader();
+      loader.load('/api/model?t=' + Date.now(), (geometry) => {
+        // Center geometry
+        geometry.computeBoundingBox();
+        const center = new THREE.Vector3();
+        geometry.boundingBox.getCenter(center);
+        geometry.translate(-center.x, -center.y, -center.z);
+
+        // Move to sit on grid
+        const minY = geometry.boundingBox.min.y - center.y;
+        geometry.translate(0, -minY, 0);
+
+        // Recalculate bounding box after translation
+        geometry.computeBoundingBox();
+
+        // Create new material
+        const material = new THREE.MeshPhongMaterial({
+          color: 0x3b82f6,
+          specular: 0x111111,
+          shininess: 30,
+          flatShading: false
+        });
+
+        model = new THREE.Mesh(geometry, material);
+        scene.add(model);
+
+        // Re-apply current view mode
+        applyViewMode();
+
+        // Update info
+        const triangles = geometry.attributes.position.count / 3;
+        info.textContent = ` - ${triangles.toLocaleString()} triangles (reloaded)`;
+
+        // Brief flash to indicate reload
+        setTimeout(() => {
+          info.textContent = ` - ${triangles.toLocaleString()} triangles`;
+        }, 1000);
+      }, undefined, (err) => {
+        console.error('Error reloading STL:', err);
+      });
+    }
+
+    function reload3MF() {
+      const loader = new ThreeMFLoader();
+      loader.load('/api/model?t=' + Date.now(), (group) => {
+        // Z-up to Y-up rotation
+        group.rotation.set(-Math.PI / 2, 0, 0);
+
+        // Center the group
+        const box = new THREE.Box3().setFromObject(group);
+        const center = box.getCenter(new THREE.Vector3());
+        group.position.sub(center);
+
+        // Move to sit on grid
+        const newBox = new THREE.Box3().setFromObject(group);
+        group.position.y -= newBox.min.y;
+
+        model = group;
+        scene.add(model);
+
+        // Re-apply current view mode
+        applyViewMode();
+
+        // Count triangles and objects
+        let triangleCount = 0;
+        let objectCount = 0;
+        group.traverse((child) => {
+          if (child.isMesh) {
+            objectCount++;
+            const geom = child.geometry;
+            if (geom.index) {
+              triangleCount += geom.index.count / 3;
+            } else if (geom.attributes.position) {
+              triangleCount += geom.attributes.position.count / 3;
+            }
+          }
+        });
+
+        info.textContent = ` - ${triangleCount.toLocaleString()} triangles, ${objectCount} object${objectCount !== 1 ? 's' : ''} (reloaded)`;
+
+        setTimeout(() => {
+          info.textContent = ` - ${triangleCount.toLocaleString()} triangles, ${objectCount} object${objectCount !== 1 ? 's' : ''}`;
+        }, 1000);
+      }, undefined, (err) => {
+        console.error('Error reloading 3MF:', err);
+      });
+    }
+
+    // Start polling for changes
+    setInterval(checkForChanges, POLL_INTERVAL);
+
+    // Start
+    init();
+  </script>
+</body>
+</html>

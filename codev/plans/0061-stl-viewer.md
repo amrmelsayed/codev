@@ -1,115 +1,159 @@
-# Plan 0061: STL Viewer Support
+# Plan 0061: 3D Model Viewer (STL + 3MF)
 
 ## Overview
 
-Implement STL 3D file viewing in the dashboard annotation viewer using Three.js.
+Implement 3D model viewing in the dashboard annotation viewer using Three.js with ES Modules. Supports STL and 3MF formats with multi-color rendering.
+
+## Current State
+
+STL viewer is implemented and working with:
+- TrackballControls (quaternion-based, no gimbal lock)
+- Three.js r128 (legacy global scripts)
+- Auto-reload on file change
+
+**This plan covers adding 3MF support**, which requires migrating to ES Modules.
 
 ## Implementation Phases
 
-### Phase 1: Create STL Viewer Template
+### Phase 1: Migrate to ES Modules
 
-**File**: `packages/codev/templates/stl-viewer.html`
+**File**: `packages/codev/templates/stl-viewer.html` → `packages/codev/templates/3d-viewer.html`
 
-Create standalone HTML template with:
-1. Three.js loaded from CDN (unpkg or cdnjs)
-2. STLLoader and OrbitControls
-3. Scene setup with:
-   - Perspective camera
-   - Ambient + directional lighting
-   - Grid helper for floor
-   - Axes helper (optional)
-4. STL loading from URL parameter
-5. Auto-center and fit to view
-6. Dark theme styling to match dashboard
+Convert from legacy global scripts to ES Modules:
 
-**CDN URLs**:
 ```html
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/loaders/STLLoader.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+  import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+  import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+
+  // ... existing viewer code adapted to module scope
+</script>
 ```
 
-### Phase 2: Update Open Server
+**Why ES Modules**:
+- 3MFLoader requires fflate for ZIP decompression (handled automatically in module builds)
+- Modern Three.js (r129+) only provides module builds
+- Better dependency management
+
+### Phase 2: Add 3MF Support to Viewer
+
+Modify the viewer to detect format and load appropriately:
+
+```javascript
+const FORMAT = '{{FORMAT}}'; // 'stl' or '3mf'
+
+function loadModel() {
+  if (FORMAT === '3mf') {
+    const loader = new ThreeMFLoader();
+    loader.load('/api/model', (group) => {
+      // 3MFLoader returns a Group with colored meshes
+      // Z-up to Y-up conversion
+      group.rotation.set(-Math.PI / 2, 0, 0);
+      scene.add(group);
+      fitToView(group);
+    });
+  } else {
+    const loader = new STLLoader();
+    loader.load('/api/model', (geometry) => {
+      // STL handling (existing code)
+      material = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
+      mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+      fitToView(mesh);
+    });
+  }
+}
+```
+
+**Multi-color handling**: 3MFLoader automatically creates meshes with correct materials/colors. No additional processing needed.
+
+### Phase 3: Update open-server.ts
 
 **File**: `packages/codev/src/agent-farm/servers/open-server.ts`
 
-1. Add STL to supported extensions detection
-2. For `.stl` files, serve `stl-viewer.html` template
-3. Pass file path as query parameter: `?file=/path/to/model.stl`
-4. Add route to serve raw STL file content
+1. Add 3MF detection:
+```typescript
+const is3MF = ext === '3mf';
+const is3D = isSTL || is3MF;
+const format = isSTL ? 'stl' : '3mf';
+const viewerTemplatePath = is3D ? findTemplatePath('3d-viewer.html') : null;
+```
 
-### Phase 3: Viewer Features
+2. Update template serving to pass format:
+```typescript
+template = template.replace(/\{\{FORMAT\}\}/g, format);
+```
 
-Add to `stl-viewer.html`:
-1. **Reset View button** - Reset camera to initial position
-2. **Wireframe toggle** - Toggle between solid and wireframe
-3. **Info display** - Show filename and triangle count
-4. **Loading indicator** - Show while STL loads
-5. **Error handling** - Display message if file fails to load
+3. Generalize API endpoint:
+```typescript
+// Handle model content (GET /api/model)
+if (req.method === 'GET' && req.url?.startsWith('/api/model')) {
+  if (!is3D) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Not a 3D model file');
+    return;
+  }
+  // Serve file with appropriate MIME type
+  const mimeType = isSTL ? 'model/stl' : 'application/octet-stream';
+  // ... rest of serving code
+}
+```
 
-### Phase 4: Polish
+### Phase 4: Testing
 
-1. Match dashboard color scheme (dark background)
-2. Responsive canvas sizing
-3. Touch support for mobile (OrbitControls handles this)
-4. Handle large files gracefully
+**Manual test plan**:
 
-## Files to Create/Modify
+| Test | File Type | Expected Result |
+|------|-----------|-----------------|
+| Binary STL | `test.stl` | Renders with blue material |
+| ASCII STL | `ascii.stl` | Renders with blue material |
+| Single-color 3MF | `openscad.3mf` | Renders with assigned color |
+| Multi-color 3MF | `bambu.3mf` | Each part has correct color |
+| Multi-object 3MF | `assembly.3mf` | All objects visible |
+| Large file | `>10MB` | Loads without crash |
+| Corrupt file | `bad.3mf` | Shows error message |
+| Gimbal lock test | Any | Smooth rotation at poles |
+
+**Create test fixtures**: `tests/fixtures/3d/` with sample files.
+
+## Files to Modify
 
 | File | Action | Description |
 |------|--------|-------------|
-| `packages/codev/templates/stl-viewer.html` | Create | STL viewer template |
-| `packages/codev/src/agent-farm/servers/open-server.ts` | Modify | Add STL detection and serving |
-
-## Testing
-
-1. Test with binary STL file (most common)
-2. Test with ASCII STL file
-3. Test with large file (>10MB)
-4. Test mouse controls: rotate, zoom, pan
-5. Test reset view button
-6. Test in Chrome, Firefox, Safari
+| `packages/codev/templates/stl-viewer.html` | Rename → `3d-viewer.html` | Migrate to ES Modules, add 3MF support |
+| `packages/codev/src/agent-farm/servers/open-server.ts` | Modify | Add 3MF detection, generalize API |
 
 ## Rollback
 
 If issues arise:
-- STL files fall back to text view (current behavior)
-- No changes to existing annotation viewer
+- Keep `stl-viewer.html` as backup
+- 3MF files fall back to binary view
+- STL files continue working
 
 ## Estimated Scope
 
-- ~200 lines HTML/JS for viewer template
-- ~20 lines TypeScript for open-server changes
-- Total: ~220 lines
+- ~50 lines modified in viewer template (module migration + 3MF branch)
+- ~30 lines modified in open-server.ts (3MF detection + API)
+- Total: ~80 lines changed
 
 ---
 
 ## Amendment History
 
-### TICK-001: Quaternion-based Trackball Rotation (2025-12-27)
+### TICK-001: Quaternion-based Trackball Rotation (2025-12-27) ✅ MERGED
 
-**Changes**:
-- Replace OrbitControls with TrackballControls in stl-viewer.html
-- TrackballControls uses quaternion math internally, eliminating gimbal lock
-- Update CDN imports to include TrackballControls.js instead of OrbitControls.js
+Replaced OrbitControls with TrackballControls to eliminate gimbal lock.
 
-**Implementation Steps**:
-1. Update CDN script tag from OrbitControls.js to TrackballControls.js
-2. Change `new THREE.OrbitControls(...)` to `new THREE.TrackballControls(...)`
-3. Configure TrackballControls settings:
-   - `controls.rotateSpeed = 2.0`
-   - `controls.zoomSpeed = 1.2`
-   - `controls.panSpeed = 0.8`
-   - `controls.staticMoving = true` (no inertia)
-   - `controls.dynamicDampingFactor = 0.3`
-4. Update reset view function to use `controls.reset()` method
-5. Test rotation at all orientations including poles
+### TICK-002: 3MF Format Support with Multi-Color (2025-12-27) 🔄 IN PROGRESS
 
-**CDN URL**:
-```html
-<script src="https://unpkg.com/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
-```
-
-Note: Using Three.js r128 for global builds compatibility (r129+ dropped non-module builds).
-
-**Review**: See `reviews/0061-stl-viewer-tick-001.md`
+Added native 3MF file viewing with multi-color/multi-material support. This plan covers the implementation.
