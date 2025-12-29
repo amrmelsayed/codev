@@ -207,9 +207,9 @@
       <div id="error-message">Failed to load 3D model</div>
     </div>
     <div id="axes-legend">
-      <div class="axis-x">X &#8594; Right</div>
-      <div class="axis-y">Y &#8594; Up</div>
-      <div class="axis-z">Z &#8594; Front</div>
+      <div class="axis-x">X &#8594; Left</div>
+      <div class="axis-y">Y &#8594; Front</div>
+      <div class="axis-z">Z &#8594; Up</div>
     </div>
   </div>
 
@@ -272,13 +272,14 @@
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x1a1a2e);
 
-      // Camera
+      // Camera (Z-up coordinate system)
       camera = new THREE.PerspectiveCamera(
         45,
         container.clientWidth / container.clientHeight,
         0.1,
         10000
       );
+      camera.up.set(0, 0, 1);  // Z is up
       camera.position.set(100, 100, 100);
 
       // Renderer
@@ -306,8 +307,9 @@
       directionalLight2.position.set(-1, -1, -1);
       scene.add(directionalLight2);
 
-      // Grid
+      // Grid (on XY plane for Z-up coordinate system)
       gridHelper = new THREE.GridHelper(200, 20, 0x0f3460, 0x0f3460);
+      gridHelper.rotation.x = Math.PI / 2;  // Rotate to XY plane
       scene.add(gridHelper);
 
       // Axes helper (X=red, Y=green, Z=blue)
@@ -326,14 +328,14 @@
       axesBtn.addEventListener('click', toggleAxes);
       gridBtn.addEventListener('click', toggleGrid);
 
-      // View buttons
-      viewTop.addEventListener('click', () => setView(0, 1, 0));
-      viewBottom.addEventListener('click', () => setView(0, -1, 0));
-      viewFront.addEventListener('click', () => setView(0, 0, 1));
-      viewBack.addEventListener('click', () => setView(0, 0, -1));
-      viewRight.addEventListener('click', () => setView(1, 0, 0));
-      viewLeft.addEventListener('click', () => setView(-1, 0, 0));
-      viewIso.addEventListener('click', () => setView(1, 1, 1));
+      // View buttons (Z-up coordinate system: X=left, Y=front, Z=up)
+      viewTop.addEventListener('click', () => setView(0, 0, 1));     // Looking down from +Z
+      viewBottom.addEventListener('click', () => setView(0, 0, -1)); // Looking up from -Z
+      viewFront.addEventListener('click', () => setView(0, -1, 0));  // Looking from -Y (front)
+      viewBack.addEventListener('click', () => setView(0, 1, 0));    // Looking from +Y (back)
+      viewRight.addEventListener('click', () => setView(1, 0, 0));   // Looking from +X
+      viewLeft.addEventListener('click', () => setView(-1, 0, 0));   // Looking from -X
+      viewIso.addEventListener('click', () => setView(1, -1, 1));    // Isometric from front-right-above
 
       // Animation loop
       animate();
@@ -355,15 +357,15 @@
       loader.load(
         'api/model',
         (geometry) => {
-          // Center geometry
+          // Center geometry in XY, keep Z base at 0
           geometry.computeBoundingBox();
           const center = new THREE.Vector3();
           geometry.boundingBox.getCenter(center);
           geometry.translate(-center.x, -center.y, -center.z);
 
-          // Move to sit on grid
-          const minY = geometry.boundingBox.min.y - center.y;
-          geometry.translate(0, -minY, 0);
+          // Move to sit on grid (Z=0 plane)
+          const minZ = geometry.boundingBox.min.z - center.z;
+          geometry.translate(0, 0, -minZ);
 
           // Recalculate bounding box after translation
           geometry.computeBoundingBox();
@@ -399,17 +401,16 @@
         'api/model',
         (group) => {
           // 3MFLoader returns a Group with meshes
-          // 3MF uses Z-up, Three.js uses Y-up - rotate to match
-          group.rotation.set(-Math.PI / 2, 0, 0);
+          // 3MF uses Z-up natively, which matches our coordinate system
 
-          // Center the group
+          // Center the group in XY
           const box = new THREE.Box3().setFromObject(group);
           const center = box.getCenter(new THREE.Vector3());
           group.position.sub(center);
 
-          // Move to sit on grid (after centering)
+          // Move to sit on grid (Z=0 plane)
           const newBox = new THREE.Box3().setFromObject(group);
-          group.position.y -= newBox.min.y;
+          group.position.z -= newBox.min.z;
 
           model = group;
           scene.add(model);
@@ -452,6 +453,7 @@
       const gridSize = Math.ceil(maxDim * 2 / 10) * 10; // Round up to nearest 10
       scene.remove(gridHelper);
       gridHelper = new THREE.GridHelper(gridSize, gridSize / 5, 0x0f3460, 0x0f3460);
+      gridHelper.rotation.x = Math.PI / 2;  // Rotate to XY plane for Z-up
       gridHelper.visible = showGrid;
       scene.add(gridHelper);
 
@@ -484,8 +486,8 @@
       const fov = camera.fov * (Math.PI / 180);
       cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * 1.5;
 
-      // Isometric view
-      setView(1, 1, 1);
+      // Isometric view from front-right-above (Z-up system)
+      setView(1, -1, 1);
     }
 
     function setView(x, y, z) {
@@ -500,11 +502,12 @@
       // Set camera position
       camera.position.copy(center).add(dir.multiplyScalar(cameraDistance));
 
-      // Set up vector (handle top/bottom views)
-      if (Math.abs(y) > 0.9) {
-        camera.up.set(0, 0, y > 0 ? -1 : 1);
+      // Set up vector (Z-up coordinate system)
+      // When looking straight up/down along Z, use Y as up reference
+      if (Math.abs(z) > 0.9) {
+        camera.up.set(0, z > 0 ? 1 : -1, 0);
       } else {
-        camera.up.set(0, 1, 0);
+        camera.up.set(0, 0, 1);
       }
 
       // Look at center
@@ -703,15 +706,15 @@
     function reloadSTL() {
       const loader = new STLLoader();
       loader.load('api/model?t=' + Date.now(), (geometry) => {
-        // Center geometry
+        // Center geometry in XY
         geometry.computeBoundingBox();
         const center = new THREE.Vector3();
         geometry.boundingBox.getCenter(center);
         geometry.translate(-center.x, -center.y, -center.z);
 
-        // Move to sit on grid
-        const minY = geometry.boundingBox.min.y - center.y;
-        geometry.translate(0, -minY, 0);
+        // Move to sit on grid (Z=0 plane)
+        const minZ = geometry.boundingBox.min.z - center.z;
+        geometry.translate(0, 0, -minZ);
 
         // Recalculate bounding box after translation
         geometry.computeBoundingBox();
@@ -746,17 +749,16 @@
     function reload3MF() {
       const loader = new ThreeMFLoader();
       loader.load('api/model?t=' + Date.now(), (group) => {
-        // Z-up to Y-up rotation
-        group.rotation.set(-Math.PI / 2, 0, 0);
+        // 3MF uses Z-up natively, which matches our coordinate system
 
-        // Center the group
+        // Center the group in XY
         const box = new THREE.Box3().setFromObject(group);
         const center = box.getCenter(new THREE.Vector3());
         group.position.sub(center);
 
-        // Move to sit on grid
+        // Move to sit on grid (Z=0 plane)
         const newBox = new THREE.Box3().setFromObject(group);
-        group.position.y -= newBox.min.y;
+        group.position.z -= newBox.min.z;
 
         model = group;
         scene.add(model);
