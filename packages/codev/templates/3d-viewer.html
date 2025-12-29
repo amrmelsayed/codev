@@ -353,7 +353,7 @@
       const loader = new STLLoader();
 
       loader.load(
-        '/api/model',
+        'api/model',
         (geometry) => {
           // Center geometry
           geometry.computeBoundingBox();
@@ -396,7 +396,7 @@
       const loader = new ThreeMFLoader();
 
       loader.load(
-        '/api/model',
+        'api/model',
         (group) => {
           // 3MFLoader returns a Group with meshes
           // 3MF uses Z-up, Three.js uses Y-up - rotate to match
@@ -648,7 +648,7 @@
 
     async function checkForChanges() {
       try {
-        const res = await fetch('/api/mtime');
+        const res = await fetch('api/mtime');
         if (res.ok) {
           const data = await res.json();
           if (lastMtime === null) {
@@ -702,7 +702,7 @@
 
     function reloadSTL() {
       const loader = new STLLoader();
-      loader.load('/api/model?t=' + Date.now(), (geometry) => {
+      loader.load('api/model?t=' + Date.now(), (geometry) => {
         // Center geometry
         geometry.computeBoundingBox();
         const center = new THREE.Vector3();
@@ -745,7 +745,7 @@
 
     function reload3MF() {
       const loader = new ThreeMFLoader();
-      loader.load('/api/model?t=' + Date.now(), (group) => {
+      loader.load('api/model?t=' + Date.now(), (group) => {
         // Z-up to Y-up rotation
         group.rotation.set(-Math.PI / 2, 0, 0);
 
