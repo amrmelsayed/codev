@@ -258,7 +258,7 @@ When facing high-risk technical unknowns, use **spikes** - short, time-boxed exp
 
 **Quick reference:**
 - Store in `codev/spikes/{spec-number}/`
-- Time-box: 1-2 hours max per spike
+- Typically 1-2 hours; check in if taking longer
 - Output: PASS/FAIL + learnings (code is throwaway)
 - Use when: Untested APIs, architectural uncertainty, integration questions
 

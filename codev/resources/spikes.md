@@ -7,7 +7,7 @@
 The term comes from Extreme Programming (XP), coined in the late 1990s. The metaphor: a spike is like driving a railroad spike through all layers of a problem to see what's underneath. You're not building the whole foundation - you're just poking through to answer a specific question.
 
 **Key characteristics:**
-- **Time-boxed** - 1-2 hours max per spike. If it takes longer, escalate.
+- **Time-boxed** - Typically 1-2 hours; check in if taking longer
 - **Throwaway** - The code is discarded; only the knowledge is kept
 - **Focused** - Answers ONE specific question
 - **Reduces risk** - Done before committing to full implementation
@@ -17,19 +17,15 @@ The term comes from Extreme Programming (XP), coined in the late 1990s. The meta
 | Spike | "Can we?" / "Does it work?" |
 | Implementation | "Build it" |
 
-## Time-Boxing (Critical)
+## Time-Boxing
 
-**Every spike has a hard time limit: 1-2 hours maximum.**
+**Spikes should typically take 1-2 hours.** If you're spending significantly longer, consider:
 
-If the spike exceeds the time box:
-1. **STOP** - Don't keep going hoping for a breakthrough
-2. **Document what you learned** - Even partial results are valuable
-3. **Escalate** - Ask the user whether to:
-   - Extend the spike (with a new time box)
-   - Change the approach
-   - Accept the uncertainty and proceed with a fallback plan
+1. **Is the question too big?** Break it into smaller spikes
+2. **Is the answer "not easily"?** That's valuable information - document it
+3. **Do you need more time?** That's fine, but check in with the user first
 
-**Why time-boxing matters:** Spikes answer "can we?" questions. If you can't answer it in 1-2 hours, either the question is too big (break it down) or the answer is "not easily" (which is itself valuable information).
+Time-boxing helps prevent spikes from becoming open-ended research. The goal is a quick answer, not perfection.
 
 ## When to Use Spikes
 
