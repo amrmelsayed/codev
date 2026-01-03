@@ -260,7 +260,7 @@ Projects currently in development (conceived through committed), sorted by prior
   - id: "0065"
     title: "BUGFIX Protocol and CLI Support"
     summary: "Lightweight protocol for minor bugfixes with af spawn --issue support"
-    status: committed
+    status: integrated
     priority: high
     release: v1.6.0
     files:
@@ -276,8 +276,8 @@ Projects currently in development (conceived through committed), sorted by prior
       implementing_at: "2026-01-03T12:00:00-08:00"
       implemented_at: "2026-01-03T14:00:00-08:00"
       committed_at: "2026-01-04T00:00:00-08:00"
-      integrated_at: null
-    notes: "BUGFIX protocol for GitHub issues + af spawn --issue CLI support. CMAP reviewed: 2 APPROVE, 1 COMMENT (minor refinements suggested)."
+      integrated_at: "2026-01-04T09:00:00-08:00"
+    notes: "BUGFIX protocol for GitHub issues + af spawn --issue CLI support. CMAP reviewed: 2 APPROVE, 1 COMMENT. Key feature for v1.6.0."
 
 
 
@@ -299,7 +299,7 @@ releases:
     name: "TBD"
     status: planning
     target_date: null
-    notes: "Next release - Tower Dashboard improvements"
+    notes: "Key features: BUGFIX protocol (af spawn --issue), CMAP 3-way parallel reviews, Tower Dashboard improvements"
 
   - version: "v1.5.8"
     name: "Florence"
