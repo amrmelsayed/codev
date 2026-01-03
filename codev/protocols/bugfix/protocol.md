@@ -98,12 +98,16 @@ gh issue view 42
    # or
    af spawn -i 42
    ```
-2. The command automatically:
+2. **Continue working immediately** - Do NOT wait for the builder. The spawn is non-blocking. Move on to other work.
+
+3. The command automatically:
    - Fetches issue content via `gh issue view`
    - Creates branch `builder/bugfix-42-<slug-from-title>`
    - Creates worktree at `.builders/bugfix-42/`
    - Comments "On it!" on the issue (unless `--no-comment`)
    - Spawns builder with issue context
+
+**Key Principle**: Spawn and forget. The builder will notify you via `af send` when the PR is ready. Don't poll, don't watch, don't block.
 
 **Branch Naming**: `builder/bugfix-<issue-number>-<slug>`
 
@@ -405,12 +409,19 @@ wait
 gh issue view 42
 # → Clear bug report, simple fix expected → BUGFIX appropriate
 
-# 2. Architect spawns builder
+# 2. Architect spawns builder (NON-BLOCKING - architect continues other work)
 af spawn --issue 42
 # → Creates .builders/bugfix-42/
 # → Creates branch builder/bugfix-42-login-fails-when-userna
 # → Comments "On it!" on issue #42
 # → Spawns builder with issue context
+#
+# Architect immediately moves on to other tasks. Does NOT wait.
+# Will be notified via "af send" when PR is ready.
+
+# ─────────────────────────────────────────────────────────────────
+# Meanwhile, in the builder's worktree (.builders/bugfix-42):
+# ─────────────────────────────────────────────────────────────────
 
 # 3. Builder investigates (in worktree)
 cd .builders/bugfix-42
@@ -474,12 +485,13 @@ af cleanup --issue 42
 
 ## Best Practices
 
-1. **Comment early** - Let the reporter know someone is working on it
-2. **Keep fixes minimal** - Fix the bug, don't refactor surrounding code
-3. **Add regression tests** - Prevent the bug from recurring
-4. **Reference the issue** - Use "Fixes #N" in PR to auto-close
-5. **Escalate promptly** - Don't waste time on complex issues
-6. **Clean up promptly** - Merge and cleanup shouldn't linger
+1. **Spawn and forget** - Architect spawns builder and immediately continues other work. Never block waiting for builder progress.
+2. **Comment early** - Let the reporter know someone is working on it
+3. **Keep fixes minimal** - Fix the bug, don't refactor surrounding code
+4. **Add regression tests** - Prevent the bug from recurring
+5. **Reference the issue** - Use "Fixes #N" in PR to auto-close
+6. **Escalate promptly** - Don't waste time on complex issues
+7. **Clean up promptly** - Merge and cleanup shouldn't linger
 
 ## Projectlist Integration
 
