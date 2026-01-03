@@ -83,9 +83,7 @@ A **role** defines who does what work and what tools/permissions they have.
 
 ### Context Hierarchy
 
-In much the same way an operating system has a memory hierarchy, Codev repos have a context hierarchy. The codev/ directory holds the top 3 layers. This allows both humans and agents to think about problems at different levels of detail. 
-
-![Context Hierarchy](context-hierarchy.png)
+In much the same way an operating system has a memory hierarchy, Codev repos have a context hierarchy. The codev/ directory holds the top 3 layers. This allows both humans and agents to think about problems at different levels of detail.
 
 **Key insight**: We build from the top down, and we propagate information from the bottom up. We start with an entry in the project list, then spec and plan out the feature, generate the code, and then propagate what we learned through the reviews. 
 
