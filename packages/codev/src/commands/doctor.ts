@@ -295,7 +295,7 @@ const VERIFY_CONFIGS: Record<string, VerifyConfig> = {
     args: ['login', 'status'],
     timeout: 10000,
     successCheck: (r) => r.status === 0,
-    authHint: 'Try running "codex" in this directory to debug',
+    authHint: 'Run "codex" in this directory and confirm it works without codev first',
   },
   'Claude': {
     // claude --version is a quick check that the CLI is functional
