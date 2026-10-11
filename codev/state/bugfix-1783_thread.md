@@ -20,3 +20,7 @@
   vitest-setup imports BUILDER_WORKTREE_ENV; identityPath requires an absolute path (relative value falls back to cwd).
 - Out of scope, raised to architect as follow-ups: consult's `isBuilderContext()` (commands/consult/index.ts:296) is the
   same cwd-only derivation; `codev doctor`'s Tower env check is blind to CODEV_BUILDER_WORKTREE.
+
+## Ruling (2026-10-05, main)
+- Dir-gone/row-present edge: KEEP as is, no existsSync. Registry row is source of truth; that half-torn-down state (#1712 class) is for cleanup tooling, not identity resolution.
+- Owner (2026-10-12): rule-then-exception wording was confusing. Rescoped the root-only rule to `afx spawn`/`afx cleanup` with the builder `afx send` case as its own sentence (CLAUDE/AGENTS, architect roles, scar-rules canonical, arch-critical); trimmed builder role + afx skill note to one sentence. Head moved off f277d603e with the owner's approval.
