@@ -9,3 +9,7 @@
 ## Spec gate
 - spec-approval approved 2026-10-12T20:28:58Z (owner word relayed by main). OQ 1-5 stand as resolved in spec.
 - Main's addition for the PLAN: the three universal lessons seeded in lessons-critical.md SURVIVE the bootstrap unless a project-specific lesson displaces one under the cap.
+
+## Plan
+- Plan drafted: 5 phases (classifier/validator lib → skill bootstrap mode + prompt template → harness `buildInteractiveTaskLaunch` capability → `codev bootstrap-docs` command → adopt/update integration + docs). Real-repo verification stays a review-phase gate item.
+- Decisions: git-log digest computed by the CLI (last 300 subjects + ≤150 fix/revert/incident subjects), inlined into the prompt. `claude` and `codex` both verified (2026-10-13 `--help`) to accept a positional prompt for interactive sessions; OpenCode/custom → prompt-file fallback at `.consult/bootstrap-docs/prompt.md`. Seeded universal lessons survive unless displaced under the cap (demoted to cold, never dropped). Only earlier starter variant is the pre-#1012 cold text.
