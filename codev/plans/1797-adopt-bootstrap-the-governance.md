@@ -103,6 +103,11 @@ decide about eligibility and validity comes from here.
 
 - Create `packages/codev/src/lib/governance-bootstrap.ts`
 - Create `packages/codev/src/__tests__/governance-bootstrap.test.ts`
+- Modify `packages/codev/src/__tests__/hot-tier.test.ts`: import the cap constants and the
+  section/map helpers from the new library instead of its private copies (`CAP_*`,
+  `bulletsUnder`, `topLevelHeadings`, `mapTopics`, `isRealSection`), so there is one
+  definition of the hot-cap and map rules (CMAP iter2, Claude). Its stricter raw line count
+  for shipped placements (comments included) stays as a test-local policy on top.
 - Modify `packages/codev/src/lib/scaffold.ts` only if a shared constant (the four file names /
   starter source mapping) needs exporting; `HOT_TIER_FILES` and `COLD_TIER_FILES` are reused
   as-is.
@@ -134,16 +139,17 @@ decide about eligibility and validity comes from here.
       when the cold doc has ≤ 12 top-level sections).
 - [ ] `validateColdFile(content)` → leftover markers; > 12 top-level sections flagged only
       when the file was written by the pass (caller passes a flag).
-- [ ] Map-entry matching rule, documented in code and fixed by tests:
-  - the entry's **name part** is the text after `- ` up to the first ` — `, ` - ` or `: `
-    (or the whole entry when none occurs, so `- Security` alone is valid);
-  - a cold section's **short name** is its `## ` heading text truncated at the first ` (`,
-    `: ` or ` — ` (so `## Critical (Prevent Major Failures)` has short name `Critical`);
-  - an entry is valid when its name part equals a section's full heading or short name
-    (case-sensitive, trimmed) and that resolves to **exactly one** section; zero or several
-    matches are violations.
-  - This was corrected after CMAP iter1: a plain "starts with the heading" rule fails our own
-    `lessons-critical.md` (`- Critical — …` vs `## Critical (Prevent Major Failures)`).
+- [ ] Map-entry matching rule: the one already shipped in `hot-tier.test.ts`, promoted and
+      tightened, documented in code and fixed by tests:
+  - the entry's **topic** is the text after `- ` up to the first ` — ` (the whole entry
+    when there is none, so `- Security` alone is valid);
+  - a topic names a section when it equals the `## ` heading text or is a word-boundary
+    prefix of it (`heading.startsWith(topic + ' ')`), so `Critical` names
+    `Critical (Prevent Major Failures)`;
+  - new: the topic must name **exactly one** section; several matches are a violation
+    (ambiguity), zero matches are a violation (non-existent section).
+  - The existing hot-tier test keeps passing on our own files with this rule (verified
+    shape: `- Critical — …` vs `## Critical (Prevent Major Failures)`).
 
 #### Acceptance Criteria
 
@@ -151,8 +157,9 @@ decide about eligibility and validity comes from here.
 - [ ] `lessons-critical.md` exactly as shipped (three seeded lessons) is `placeholder`.
 - [ ] A starter with one added real line, or with one slot line edited, is `curated`.
 - [ ] A line with changed trailing whitespace is `curated`; a CRLF copy of a starter is
-      `placeholder`; a file mixing lines from the current and the pre-#1012 cold starter is
-      `curated`.
+      `placeholder`. (The single-version rule is still implemented, but the pre-#1012 cold
+      lines are a subset of the current starter's, so no shipped mix is distinguishable; the
+      rule is tested with a synthetic two-version starter set instead.)
 - [ ] A missing file classifies as `missing`.
 - [ ] A starter with all markers removed but no other edits is `curated` (no marker ⇒ doubt).
 - [ ] This repo's `codev/resources/arch-critical.md` + `arch.md` and
@@ -160,8 +167,8 @@ decide about eligibility and validity comes from here.
       `arch.md` has 19 sections, so unmapped sections appear as information only).
 - [ ] Each of: leftover slot, 11th fact, 13th map entry, 36 non-comment lines, map entry
       naming a non-existent section produces exactly the expected violation (scenario 11);
-      an ambiguous name part (matching two sections' short names) is a violation; a bare
-      `- Section` entry is valid.
+      an ambiguous topic (prefix of two headings) is a violation; a bare `- Section` entry is
+      valid; `hot-tier.test.ts` stays green on the shared helpers.
 - [ ] `isNonEmptyRepo`: only Codev-generated files ⇒ false; one untracked source file in a
       repo with no commits ⇒ true; an ignored file only ⇒ false; non-git directory with one
       source file ⇒ true.
@@ -170,8 +177,8 @@ decide about eligibility and validity comes from here.
 #### Test Plan
 
 Unit tests in `governance-bootstrap.test.ts` using temp directories (`fs.mkdtempSync`) and
-real `git init` for the repo rule, reading starters from the built skeleton
-(`packages/codev/skeleton`, so run `pnpm build` first). Fixtures for over-cap and bad-map
+real `git init` for the repo rule, reading starters from `codev-skeleton/templates/` via a
+repo-root path (as `hot-tier.test.ts` does), so the tests need no prior `pnpm build`. Fixtures for over-cap and bad-map
 cases are built inline from the real arch-critical file with targeted edits.
 
 ---
@@ -282,6 +289,10 @@ Claude flags, with the fallback decided by capability absence.
       silent fall-through to `CLAUDE_HARNESS` for an unrecognised command is treated as
       unsupported, so `aider …` never receives Claude's positional prompt (CMAP iter1,
       Claude). Retired names surface the retirement message as "unsupported".
+- [ ] A configured command that would run headless is unsupported too: for Claude, any of
+      `-p` / `--print` among its flags; for Codex, a subcommand (first non-flag token after
+      the executable, e.g. `exec`, `review`). The fallback message names the reason
+      (CMAP iter2, Claude).
 - [ ] Command tokenisation reuses the existing pattern for `shell.architect` (string split on
       whitespace as in `agent-farm/commands/architect.ts`, or the array form when config
       gives `string[]`): executable = first token, then configured flags, then the
@@ -294,7 +305,8 @@ Claude flags, with the fallback decided by capability absence.
       for the capability.
 - [ ] `resolveInteractiveTaskLauncher`: `claude --dangerously-skip-permissions` and
       `/opt/homebrew/bin/codex` resolve; `aider --model x` and a custom harness resolve to
-      unsupported; an explicit `architectHarness: "codex"` with an odd command path resolves.
+      unsupported; an explicit `architectHarness: "codex"` with an odd command path resolves;
+      `claude -p`, `claude --print` and `codex exec` resolve to unsupported with a reason.
 - [ ] Existing harness tests stay green; type check passes.
 
 #### Test Plan
@@ -366,14 +378,19 @@ reported and nothing destructive. The draft review is added in Phase 5.
 - [ ] Change report, built on `lib/tree-snapshot.ts` plus direct content hashes of the four
       governance files (clean tracked files do not appear in porcelain, so curated files are
       hashed explicitly):
-  - **exit-bearing**: a curated governance file changed; HEAD or branch moved; any path
-    other than an eligible file changed status or content (porcelain XY codes also move
-    on staging, which covers the index);
-  - **exempt**: eligible files, `.consult/` (the tripwire's existing consult-owned prefix);
-  - **informational** (named, does not change the exit code): harness-owned local scratch
-    paths, initially `.claude/settings.local.json`, which a non-bypass Claude session writes
-    on a "don't ask again" answer and which is not gitignored (CMAP iter1, Claude). The list
-    is a named constant with this rationale.
+  - **exit-bearing**: a curated governance file changed; HEAD or branch moved; the index
+    changed (SHA-256 of `git ls-files --stage -z`, because porcelain XY codes plus working
+    hashes cannot see a re-stage of an already-staged path; CMAP iter2, Codex); any path
+    other than an eligible file changed status or content;
+  - **exempt**: eligible files and `.consult/` (the tripwire's existing consult-owned
+    prefix), the only exemptions the spec allows;
+  - known harness scratch paths (initially `.claude/settings.local.json`, which a
+    non-bypass Claude session writes on a "don't ask again" answer) remain **exit-bearing**
+    per the spec, but are annotated "written by the agent harness itself, usually benign" so
+    the human can judge quickly. (Iter1 proposed making them informational; iter2 Codex
+    pointed out the spec allows no such exemption.)
+  - the agent's own exit status: a non-zero exit or spawn error is reported and is
+    exit-bearing, with whatever drafts exist still kept and validated (CMAP iter2, Gemini).
   - The summary states the detector's scope: gitignored paths are not watched (git), or the
     walk's exclusions (non-git).
 - [ ] Tests for this phase.
@@ -396,7 +413,11 @@ reported and nothing destructive. The draft review is added in Phase 5.
       byte-identical; map entries checked against real sections; unmapped listed as info
       (scenario 3).
 - [ ] A stub agent writing `.claude/settings.local.json` alongside valid drafts ⇒ path
-      named as informational, exit 0.
+      named with the harness annotation, exit non-zero.
+- [ ] Pre-staged path re-staged with different content (working file unchanged) ⇒ index
+      change reported.
+- [ ] Stub agent exiting non-zero after writing valid drafts ⇒ reported, drafts kept, exit
+      non-zero.
 - [ ] Non-git directory: a stub agent editing a source file ⇒ named, exit non-zero.
 - [ ] Existing `tree-tripwire` tests and `consult-readonly-review.e2e.test.ts` green after the
       move.
@@ -411,7 +432,7 @@ the scenario's writes in-process and resolves, so no real model runs and no prom
 input (`confirm()` has no TTY guard and would never settle on EOF). `lib/tree-snapshot.ts`
 gets unit tests for the non-git fallback; the git path is covered by the moved tripwire tests
 plus: pre-existing dirt left alone ⇒ clean; new untracked file ⇒ reported; modified tracked
-file ⇒ reported; commit ⇒ HEAD change; `git add` ⇒ reported.
+file ⇒ reported; commit ⇒ HEAD change; `git add` ⇒ reported; index-only change ⇒ reported.
 
 ---
 
@@ -480,7 +501,10 @@ document it.
   merge child never settles (the conflict test would time out) — it must invoke the `exit`
   handler; and the `node:readline` mock answers `y` to every question, which would
   auto-accept the new bootstrap offer in every non-`-y` test — the offer must go through
-  the injected seam and default to declining in existing tests.
+  the injected seam and default to declining in existing tests. Third (CMAP iter2, Claude):
+  the `node:child_process` mock exports only `spawn`, so `isNonEmptyRepo`'s `execFileSync`
+  would be `undefined`; the mock must also export `execFileSync` (passing through to the real
+  one via `vi.importActual`), or the repo check goes through the injected seam.
 - Modify `codev/resources/commands/codev.md` (command reference; `codev/resources/commands/`
   has no skeleton twin, verified during the phase) and the skeleton's adopt-facing docs if
   they describe post-adopt steps (grep both trees for "codev adopt")
