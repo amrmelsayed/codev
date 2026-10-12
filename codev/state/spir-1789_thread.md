@@ -52,3 +52,4 @@
 - Verified against the real pre-npm server (built-in sidebar): the refusal ("is a built-in extension and not allowed to be updated") goes to stderr, exit 1, so surfacing stderr is the right channel.
 - Embedded-layout constants redeclared in src with a parity test against `scripts/ide-extension-manifest.mjs` (the .mjs is not shipped).
 - Main filed the session-manager flake as #1800 and the porch stdout defect as #1801.
+- Phase 3 full-suite run: build green; 6283 passed, 1 failed: `session-manager.test.ts` "logs session exit without stderr tail" (15s timeout under full-suite load, real shellper, already skipIf(CI)); passes 3/3 in isolation. Same family as #1800; unrelated to phase 3.
