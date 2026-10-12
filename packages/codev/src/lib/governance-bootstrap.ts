@@ -60,13 +60,18 @@ const EARLIER_STARTERS: Record<string, string[]> = {
   ],
 };
 
-/** Every starter text ever shipped for `file`: the current skeleton starter first. */
+/**
+ * Every starter text ever shipped for `file`: the current skeleton starter first.
+ *
+ * Throws when the current starter is absent: with no starters every file would classify
+ * as curated, and a mis-resolved templates directory would pass for a legitimate no-op.
+ */
 export function knownStarterTexts(file: GovernanceFile, templatesDir: string): string[] {
-  const texts: string[] = [];
   const current = path.join(templatesDir, file.starter);
-  if (fs.existsSync(current)) texts.push(fs.readFileSync(current, 'utf-8'));
-  texts.push(...(EARLIER_STARTERS[file.name] ?? []));
-  return texts;
+  if (!fs.existsSync(current)) {
+    throw new Error(`Governance starter not found: ${current}`);
+  }
+  return [fs.readFileSync(current, 'utf-8'), ...(EARLIER_STARTERS[file.name] ?? [])];
 }
 
 // =============================================================================
@@ -78,9 +83,14 @@ export type GovernanceClass = 'missing' | 'placeholder' | 'curated';
 const SLOT_LINE = /^- <.+>/;
 const NOTHING_YET_LINE = /^_No .+ yet\._$/;
 
-/** A line that only a starter carries: a `- <…>` slot, `_No … yet._`, or `STARTER:` text. */
+/**
+ * A line that only a starter carries: a `- <…>` slot, `_No … yet._`, or `STARTER:` text.
+ * Surrounding whitespace is ignored, so re-indenting or padding a marker does not hide it
+ * from the validator.
+ */
 export function isStarterMarker(line: string): boolean {
-  return SLOT_LINE.test(line) || NOTHING_YET_LINE.test(line) || line.includes('STARTER:');
+  const trimmed = line.trim();
+  return SLOT_LINE.test(trimmed) || NOTHING_YET_LINE.test(trimmed) || trimmed.includes('STARTER:');
 }
 
 function toLines(content: string): string[] {
@@ -225,7 +235,13 @@ function isIgnored(rel: string, isDirectory: boolean, rules: IgnoreRule[]): bool
 }
 
 function walkFindsProjectFile(root: string, rules: IgnoreRule[], dir = ''): boolean {
-  const entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true });
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true });
+  } catch {
+    // An unreadable directory holds nothing we can see; keep walking the rest.
+    return false;
+  }
   for (const entry of entries) {
     const rel = dir === '' ? entry.name : `${dir}/${entry.name}`;
     if (entry.name === '.git' || isCodevGenerated(rel)) continue;
@@ -268,9 +284,17 @@ export function topLevelHeadings(content: string): string[] {
     .map(line => line.slice(3).trim());
 }
 
-/** The topic each map entry points at: its text before the ` — consult when…` guidance. */
+/** Separators between a map topic and its `consult when…` guidance, em dash first. */
+const MAP_SEPARATORS = [' — ', ' – ', ' - '];
+
+/** The topic each map entry points at: its text before the `consult when…` guidance. */
 export function mapTopics(content: string): string[] {
-  return bulletsUnder(content, 'Map').map(line => line.slice(2).split(' — ')[0].trim());
+  return bulletsUnder(content, 'Map').map(line => {
+    const entry = line.slice(2);
+    const cuts = MAP_SEPARATORS.map(sep => entry.indexOf(sep)).filter(index => index >= 0);
+    if (cuts.length === 0) return entry.trim();
+    return entry.slice(0, Math.min(...cuts)).trim();
+  });
 }
 
 /**

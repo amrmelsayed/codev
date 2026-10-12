@@ -255,6 +255,12 @@ describe('validateHotFile', () => {
     expect(kinds(partial, cold)).toEqual(['unmapped-section']);
   });
 
+  it('accepts en-dash and hyphen separators in map entries', () => {
+    const cold = '## Services\nx\n## Storage Layer\ny\n';
+    const hot = '# h\n\n## Critical facts\n- A fact.\n\n## Map of arch.md (consult when…)\n- Services – when routing.\n- Storage Layer - when persisting.\n';
+    expect(kinds(hot, cold)).toEqual([]);
+  });
+
   it('flags a missing section', () => {
     const noMap = archCritical.slice(0, archCritical.indexOf('## Map of arch.md'));
     expect(kinds(noMap)).toContain('missing-section');
@@ -263,6 +269,21 @@ describe('validateHotFile', () => {
   it('flags the untouched starter', () => {
     const starter = fs.readFileSync(path.join(templatesDir, 'arch-critical.md'), 'utf-8');
     expect(kinds(starter)).toContain('leftover-marker');
+  });
+});
+
+describe('starter markers survive whitespace edits', () => {
+  it('flags a padded or indented marker left in a cold draft', () => {
+    const padded = '# Architecture\n\n## Services\nx\n\n_No architecture documented yet._   \n';
+    expect(validateColdFile(padded, true).map(v => v.kind)).toContain('leftover-marker');
+    const indented = '# Architecture\n\n  - <Top-level arch.md section> — consult when <situation>.\n';
+    expect(validateColdFile(indented, true).map(v => v.kind)).toContain('leftover-marker');
+  });
+});
+
+describe('knownStarterTexts', () => {
+  it('throws when the current starter cannot be found', () => {
+    expect(() => knownStarterTexts(ARCH, path.join(os.tmpdir(), 'no-such-templates'))).toThrow(/starter not found/);
   });
 });
 

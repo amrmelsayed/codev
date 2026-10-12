@@ -23,3 +23,4 @@
 - Plan-phase refresh task was emitted once and not captured; skipped (no state lost).
 - phase_1: lib/governance-bootstrap.ts (classifier, isNonEmptyRepo, validators) + tests; hot-tier.test.ts now imports the shared cap/map helpers.
 - Side fix: agent-farm cloud-config.test.ts "enforces 0600" failed deterministically under umask 077 (writeFileSync mode is umask-filtered) and blocked porch's test check. Added chmodSync(0o644) to set the precondition explicitly. Unrelated to 1797; flagged to architect.
+- phase_1 iter1: Codex RC (files untracked at review time) -> committed c4b0ac538; Claude minors fixed (comment-line cap count, guarded ls-files). One porch test-check failure after the rebuttal did not reproduce (full suite green twice); failing test not captured; watch for recurrence.
