@@ -80,7 +80,8 @@ export function knownStarterTexts(file: GovernanceFile, templatesDir: string): s
 
 export type GovernanceClass = 'missing' | 'placeholder' | 'curated';
 
-const SLOT_LINE = /^- <.+>/;
+// A `- <…>` slot; a bullet that opens with a markdown autolink (`- <https://…>`) is content.
+const SLOT_LINE = /^- <(?!(?:https?|mailto):)[^>]+>/;
 const NOTHING_YET_LINE = /^_No .+ yet\._$/;
 
 /**
@@ -328,6 +329,7 @@ export function nonCommentLineCount(content: string): number {
 export type ViolationKind =
   | 'leftover-marker'
   | 'missing-section'
+  | 'empty-section'
   | 'too-many-entries'
   | 'too-many-map-topics'
   | 'too-many-lines'
@@ -360,8 +362,9 @@ function entriesHeading(file: GovernanceFile): string {
 }
 
 /**
- * Check a drafted hot file: no starter text, both sections present, the cap (per section,
- * comment lines excluded), and every map topic naming exactly one real cold section.
+ * Check a drafted hot file: no starter text, both sections present and non-empty, the cap
+ * (per section, comment lines excluded), and every map topic naming exactly one real cold
+ * section.
  */
 export function validateHotFile(content: string, coldContent: string, file: GovernanceFile): HotValidation {
   const violations = leftoverMarkers(content);
@@ -373,10 +376,17 @@ export function validateHotFile(content: string, coldContent: string, file: Gove
   if (!hasMap) violations.push({ kind: 'missing-section', message: `missing "## Map of ${file.coldDoc}" section` });
 
   const entries = bulletsUnder(content, 'Critical').length;
+  const topics = mapTopics(content);
+  // A heading with nothing under it is a draft that was never filled in, not a pass.
+  if (hasEntries && entries === 0) {
+    violations.push({ kind: 'empty-section', message: `"## ${heading}" has no entries` });
+  }
+  if (hasMap && topics.length === 0) {
+    violations.push({ kind: 'empty-section', message: `"## Map of ${file.coldDoc}" has no entries` });
+  }
   if (entries > HOT_CAP_ENTRIES) {
     violations.push({ kind: 'too-many-entries', message: `${entries} entries under "${heading}" (cap ${HOT_CAP_ENTRIES})` });
   }
-  const topics = mapTopics(content);
   if (topics.length > HOT_CAP_MAP_TOPICS) {
     violations.push({ kind: 'too-many-map-topics', message: `${topics.length} map entries (cap ${HOT_CAP_MAP_TOPICS})` });
   }
@@ -410,11 +420,15 @@ export function validateHotFile(content: string, coldContent: string, file: Gove
 
 /**
  * Check a drafted cold file: no starter text, and — for a file the bootstrap itself wrote —
- * at most 12 top-level sections so its hot map can cover all of them.
+ * between 1 and 12 top-level sections, so its hot map has something to cover and can cover
+ * all of it.
  */
 export function validateColdFile(content: string, writtenByBootstrap: boolean): Violation[] {
   const violations = leftoverMarkers(content);
   const sections = topLevelHeadings(content).length;
+  if (writtenByBootstrap && sections === 0) {
+    violations.push({ kind: 'empty-section', message: 'no top-level "## " sections for a hot map to point at' });
+  }
   if (writtenByBootstrap && sections > HOT_CAP_MAP_TOPICS) {
     violations.push({ kind: 'too-many-cold-sections', message: `${sections} top-level sections (keep to ${HOT_CAP_MAP_TOPICS} so the map can cover them)` });
   }

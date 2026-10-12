@@ -18,6 +18,7 @@ import {
   isNonEmptyRepo,
   validateHotFile,
   validateColdFile,
+  isStarterMarker,
   nonCommentLineCount,
   type GovernanceFile,
 } from '../lib/governance-bootstrap.js';
@@ -303,6 +304,39 @@ describe('validateColdFile', () => {
     const sections = Array.from({ length: 13 }, (_, i) => `## Section ${i}\ntext\n`).join('\n');
     expect(validateColdFile(sections, true).map(v => v.kind)).toEqual(['too-many-cold-sections']);
     expect(validateColdFile(sections, false)).toEqual([]);
+  });
+
+  it('flags a written cold file with no top-level sections', () => {
+    expect(validateColdFile('# Architecture\n\nProse only.\n', true).map(v => v.kind)).toEqual(['empty-section']);
+    expect(validateColdFile('# Architecture\n\nProse only.\n', false)).toEqual([]);
+  });
+});
+
+describe('slot markers', () => {
+  it('does not mistake an autolink bullet for a slot', () => {
+    expect(isStarterMarker('- <https://example.com/runbook> — the on-call runbook')).toBe(false);
+    expect(isStarterMarker('- <mailto:team@example.com>')).toBe(false);
+    expect(isStarterMarker('- <A system-shape fact>')).toBe(true);
+  });
+});
+
+describe('empty hot sections', () => {
+  it('flags a facts section and a map section with no entries', () => {
+    const hot = [
+      '# arch-critical.md',
+      '',
+      '## Critical facts (consult before deciding)',
+      '',
+      '## Map of arch.md (consult when…)',
+      '',
+    ].join('\n');
+    const messages = validateHotFile(hot, '# Architecture\n', ARCH_CRITICAL).violations
+      .filter(v => v.kind === 'empty-section')
+      .map(v => v.message);
+    expect(messages).toEqual([
+      '"## Critical facts" has no entries',
+      '"## Map of arch.md" has no entries',
+    ]);
   });
 });
 

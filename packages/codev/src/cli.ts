@@ -89,6 +89,22 @@ program
     }
   });
 
+// Bootstrap-docs command (Spec 1797). Deliberately no -y: it always confirms before
+// launching an agent.
+program
+  .command('bootstrap-docs')
+  .description('Draft the governance docs (arch/lessons, hot + cold) from this codebase')
+  .option('-n, --dry-run', 'Report which files are eligible and what would launch, without launching')
+  .action(async (options) => {
+    try {
+      const { bootstrapDocs } = await import('./commands/bootstrap-docs.js');
+      process.exitCode = await bootstrapDocs({ dryRun: options.dryRun });
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
 // Update command
 program
   .command('update')
