@@ -12,7 +12,7 @@
  * `ide-server.ts` imports this module, never the reverse.
  */
 
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { delimiter, dirname } from 'node:path';
 import { sanitizeAgentEnv } from '../../lib/agent-env.js';
 
@@ -110,53 +110,113 @@ export interface CheckIdeServerVersionOptions {
   env?: Record<string, string>;
 }
 
-interface VersionRun {
+/** Captured output of a server CLI command that exited zero. */
+export interface IdeServerCommandRun {
   stdout: string;
   stderr: string;
 }
 
-/** Why `--version` produced no usable output. */
-type VersionRunFailure =
-  | { kind: 'timeout' }
-  | { kind: 'error'; message: string; stderr: string };
+/** Thrown by `runIdeServerCommand` when the command times out or fails. */
+export class IdeServerCommandError extends Error {
+  constructor(
+    readonly kind: 'timeout' | 'error',
+    message: string,
+    readonly stderr: string,
+  ) {
+    super(message);
+    this.name = 'IdeServerCommandError';
+  }
+}
+
+export interface RunIdeServerCommandOptions {
+  timeoutMs: number;
+  env: Record<string, string>;
+}
+
+/** Longest stderr kept from a failed command; a wedged server can print without end. */
+const MAX_CAPTURED_STDERR = 4_000;
+
+/** SIGKILL the child's whole process group, falling back to the child alone. */
+function killProcessGroup(pid: number | undefined, kill: () => void): void {
+  if (pid !== undefined) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+      return;
+    } catch {
+      // Group already gone or not a group leader: fall through.
+    }
+  }
+  kill();
+}
 
 /**
- * Run `--version` under a hard bound. `execFile`'s own `timeout` is not used:
- * it sends SIGTERM, which a wedged server may ignore, and its callback waits
- * for stdio to close, which a surviving grandchild can hold open. Instead a
- * timer SIGKILLs the child, releases its pipes and rejects immediately.
+ * Run one server CLI command under a hard bound. `execFile`'s own `timeout` is
+ * not used: it sends SIGTERM, which a wedged server may ignore, and its
+ * callback waits for stdio to close, which a surviving grandchild can hold
+ * open. Instead the command runs as its own process group, and a timer
+ * SIGKILLs the whole group, releases the pipes and rejects immediately.
  */
-function runVersion(serverPath: string, timeoutMs: number, env: Record<string, string>): Promise<VersionRun> {
+export function runIdeServerCommand(
+  serverPath: string,
+  args: string[],
+  opts: RunIdeServerCommandOptions,
+): Promise<IdeServerCommandRun> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const child = execFile(serverPath, ['--version'], { env }, (error, stdout, stderr) => {
+    let stdout = '';
+    let stderr = '';
+    const child = spawn(serverPath, args, { env: opts.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+
+    function settle(outcome: () => void): void {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (error) {
-        const failure: VersionRunFailure = {
-          kind: 'error',
-          message: error.message.split('\n', 1)[0],
-          stderr: String(stderr).trim(),
-        };
-        reject(failure);
-        return;
-      }
-      resolve({ stdout: String(stdout), stderr: String(stderr) });
+      outcome();
+    }
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
     });
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < MAX_CAPTURED_STDERR) {
+        stderr = (stderr + chunk).slice(0, MAX_CAPTURED_STDERR);
+      }
+    });
+
+    child.on('error', (error) => {
+      settle(() => reject(new IdeServerCommandError('error', error.message.split('\n', 1)[0], stderr.trim())));
+    });
+    child.on('close', (code, signal) => {
+      settle(() => {
+        if (code === 0) {
+          resolve({ stdout, stderr });
+          return;
+        }
+        let reason = `exit code ${code}`;
+        if (code === null) {
+          reason = `killed by ${signal}`;
+        }
+        reject(new IdeServerCommandError('error', reason, stderr.trim()));
+      });
+    });
+
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill('SIGKILL');
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      const failure: VersionRunFailure = { kind: 'timeout' };
-      reject(failure);
-    }, timeoutMs);
+      settle(() => {
+        killProcessGroup(child.pid, () => child.kill('SIGKILL'));
+        child.stdout.destroy();
+        child.stderr.destroy();
+        reject(new IdeServerCommandError('timeout', `timed out after ${opts.timeoutMs / 1000}s`, stderr.trim()));
+      });
+    }, opts.timeoutMs);
   });
 }
 
-function describeRunFailure(serverPath: string, failure: VersionRunFailure, timeoutMs: number): string {
+/** Longest line 1 quoted back in an unparseable-version refusal. */
+const MAX_QUOTED_VERSION_LINE = 200;
+
+function describeVersionFailure(serverPath: string, failure: IdeServerCommandError, timeoutMs: number): string {
   if (failure.kind === 'timeout') {
     return `IDE server at ${serverPath} did not answer --version within ${timeoutMs / 1000}s`;
   }
@@ -179,16 +239,17 @@ export async function checkIdeServerVersion(
   const timeoutMs = opts.timeoutMs ?? IDE_VERSION_TIMEOUT_MS;
   const env = opts.env ?? buildIdeServerEnv();
 
-  let run: VersionRun;
+  let run: IdeServerCommandRun;
   try {
-    run = await runVersion(serverPath, timeoutMs, env);
+    run = await runIdeServerCommand(serverPath, ['--version'], { timeoutMs, env });
   } catch (failure) {
-    throw new IdeServerVersionError(describeRunFailure(serverPath, failure as VersionRunFailure, timeoutMs));
+    if (!(failure instanceof IdeServerCommandError)) throw failure;
+    throw new IdeServerVersionError(describeVersionFailure(serverPath, failure, timeoutMs));
   }
 
   const version = parseIdeServerVersion(run.stdout);
   if (version === null) {
-    const firstLine = run.stdout.split(/\r?\n/, 1)[0].trim();
+    const firstLine = run.stdout.split(/\r?\n/, 1)[0].trim().slice(0, MAX_QUOTED_VERSION_LINE);
     throw new IdeServerVersionError(
       `IDE server at ${serverPath} printed an unrecognized version (${JSON.stringify(firstLine)})`,
     );

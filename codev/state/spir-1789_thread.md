@@ -44,3 +44,11 @@
 - Spawn env wiring into ide-server.ts left for phase 3 (plan lists only ide-version.ts for this phase).
 - Porch `tests` check failed intermittently twice (porch prints only stderr, so the test was unnamed). Bounded repro loop per main caught it on run 4 of 6: `src/terminal/__tests__/session-manager.test.ts > SessionManager > auto-restart logic > applies crashLoopFallback after repeated fast failures` (10.4s; `expect(fs.existsSync(sentinel)).toBe(true)` at :1430 got false). Already `skipIf(CI)`; unrelated to this lane (no terminal files touched). Reported to main for filing; goes under Flaky Tests in the review.
 - phase_2 iter2 CMAP: gemini/codex/claude all APPROVE. Claude's non-blocking notes carried into phase 3: extract the bounded-run (timer + SIGKILL + pipe destroy) into a shared helper for the 60s install call; consider killing the process group so grandchildren are not orphaned; cap the quoted unparseable line 1; reject with an Error-shaped value.
+
+## Phase 3 (2026-10-13): extensions dir + idempotent sidebar install
+
+- New `lib/ide-extensions.ts`: `getIdeExtensionsDir`, `ensureIdeExtensionsDir` (0700 + explicit chmod; refuses symlink incl. dangling, non-dir, foreign uid), `locateEmbeddedSidebar`, `readInstalledExtensionVersion` (case-insensitive id), `ensureSidebarInstalled` (skip when indexed == embedded, else `--install-extension <vsix> --force --extensions-dir <dir>`; re-reads the index after install and throws if the embedded version is still not listed).
+- Bounded-run extracted from phase 2's `runVersion` into exported `runIdeServerCommand` in `ide-version.ts` (spawn as own process group, SIGKILL the group on timeout, stderr capped, rejects with an Error subclass). Both `--version` and `--install-extension` use it. Unparseable `--version` line 1 now quoted capped at 200 chars.
+- Verified against the real pre-npm server (built-in sidebar): the refusal ("is a built-in extension and not allowed to be updated") goes to stderr, exit 1, so surfacing stderr is the right channel.
+- Embedded-layout constants redeclared in src with a parity test against `scripts/ide-extension-manifest.mjs` (the .mjs is not shipped).
+- Main filed the session-manager flake as #1800 and the porch stdout defect as #1801.
