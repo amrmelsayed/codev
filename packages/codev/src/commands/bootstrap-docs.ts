@@ -525,7 +525,7 @@ function printSummary(
   } else {
     log('  No changes outside the eligible files.');
   }
-  log(`  ${report.scope}`);
+  if (report.detectionLost === undefined) log(`  ${report.scope}`);
 
   log('');
   if (report.identityChanges.length > 0 || report.indexChanged) {

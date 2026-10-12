@@ -146,6 +146,16 @@ describe('snapshotFilesystem (non-git fallback)', () => {
     expect(keys).toEqual(['.gitignore', 'src/a.ts']);
   });
 
+  it('reports a retargeted symlink', () => {
+    write('a.txt', 'a\n');
+    write('b.txt', 'b\n');
+    fs.symlinkSync('a.txt', path.join(dir, 'link'));
+    const before = snapshotFilesystem(dir);
+    fs.rmSync(path.join(dir, 'link'));
+    fs.symlinkSync('b.txt', path.join(dir, 'link'));
+    expect(diffSnapshotEntries(before, snapshotFilesystem(dir))).toEqual(['link']);
+  });
+
   it('stops at its bound and says so', () => {
     for (let i = 0; i < 5; i++) write(`f${i}.txt`, `${i}\n`);
     const snapshot = snapshotFilesystem(dir, 3);

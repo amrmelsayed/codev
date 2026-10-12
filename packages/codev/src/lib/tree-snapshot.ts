@@ -143,6 +143,8 @@ function readRepoPrefix(workspaceRoot: string): string {
 export function hashPath(absolute: string): string {
   try {
     const stat = fs.lstatSync(absolute);
+    // A symlink is compared by where it points, so retargeting one is a change.
+    if (stat.isSymbolicLink()) return `<link:${fs.readlinkSync(absolute)}>`;
     if (!stat.isFile()) return `<${stat.isDirectory() ? 'dir' : 'special'}>`;
     return crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
   } catch {
