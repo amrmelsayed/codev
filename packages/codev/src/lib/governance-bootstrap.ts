@@ -299,11 +299,13 @@ export function mapTopics(content: string): string[] {
 
 /**
  * The cold-doc headings a map topic names: an exact heading, or one it is a word-boundary
- * prefix of (so `Critical` names `Critical (Prevent Major Failures)`). A valid topic names
- * exactly one.
+ * prefix of (so `Critical` names `Critical (Prevent Major Failures)`). An exact match wins,
+ * so `Data` still names `## Data` alone when `## Data Flow` also exists. A valid topic
+ * names exactly one.
  */
 export function sectionsNamedBy(topic: string, headings: string[]): string[] {
-  return headings.filter(heading => heading === topic || heading.startsWith(`${topic} `));
+  if (headings.includes(topic)) return [topic];
+  return headings.filter(heading => heading.startsWith(`${topic} `));
 }
 
 /** Lines that count toward the hot cap: everything outside HTML comments. */

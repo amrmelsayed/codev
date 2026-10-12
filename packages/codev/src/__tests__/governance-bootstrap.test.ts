@@ -255,6 +255,12 @@ describe('validateHotFile', () => {
     expect(kinds(partial, cold)).toEqual(['unmapped-section']);
   });
 
+  it('lets an exact heading win over a longer heading it prefixes', () => {
+    const cold = '## Data\nx\n## Data Flow\ny\n';
+    const hot = '# h\n\n## Critical facts\n- A fact.\n\n## Map of arch.md (consult when…)\n- Data — when modelling.\n- Data Flow — when routing.\n';
+    expect(kinds(hot, cold)).toEqual([]);
+  });
+
   it('accepts en-dash and hyphen separators in map entries', () => {
     const cold = '## Services\nx\n## Storage Layer\ny\n';
     const hot = '# h\n\n## Critical facts\n- A fact.\n\n## Map of arch.md (consult when…)\n- Services – when routing.\n- Storage Layer - when persisting.\n';
