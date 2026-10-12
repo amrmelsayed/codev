@@ -72,6 +72,8 @@ Opening an untrusted folder no longer leaves the Codev sidebar inert until you t
 
 - **Block navigation on the artifact canvas no longer skips the first item of a list or blockquote** (#1738, PR #1741). Stepping one block at a time (the Stream Deck fine-review dial, or `n`/`p` across marked blocks) used to jump the whole list and land on the second item, and a marker on a first list item decorated the entire list. Every first child is now individually navigable and markable, the same as items two onward. Tables keep their existing behaviour for now.
 
+- **Builders keep their identity when running `afx` from the workspace root** (#1783, PR #1784). A builder that followed the "run `afx` from the main workspace root" rule used to lose its identity the moment it left its worktree: `afx send architect` routed to `main` instead of its own architect, and the guard against addressing a different architect was skipped. Each builder session now carries its spawn-time worktree in its environment, and `afx send`, `afx whoami`, `afx interrupt`, `afx reset` and `afx self-refresh` resolve the builder from that before falling back to the current directory. Builders spawned before this change pick it up on `afx spawn <id> --resume`.
+
 ## Breaking changes
 
 - **Minimum VS Code raised to 1.128** (#1608, PR #1764). Hosts below 1.128 stay on the last 3.3.x release and stop receiving extension updates until the editor rebases. Cursor 3.22 (VS Code 1.128) is supported; Antigravity and Kiro were on 1.107 in May 2026 and were not re-verified.
