@@ -14,14 +14,14 @@ plan_phases:
     status: complete
   - id: phase_4
     title: Transactional, serialized spawn preflight on all spawn paths
-    status: in_progress
+    status: complete
   - id: phase_5
     title: CLI discovery, afx ide install, and richer status
-    status: pending
+    status: in_progress
   - id: phase_6
     title: Documentation and end-to-end verification
     status: pending
-current_plan_phase: phase_4
+current_plan_phase: phase_5
 gates:
   spec-approval:
     status: approved
@@ -35,8 +35,8 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 2
-build_complete: true
+iteration: 1
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -87,7 +87,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1789/codev/projects/1789-tower-managed-codev-ide-server/1789-phase_4-iter1-claude.txt
 started_at: '2026-10-06T01:04:39.827Z'
-updated_at: '2026-10-12T22:43:24.215Z'
+updated_at: '2026-10-12T22:46:33.656Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:22:35.464Z'
@@ -104,3 +104,5 @@ context_refreshes:
   - boundary: plan-phase:phase_4
     at: '2026-10-12T22:28:01.683Z'
     acknowledged_at: '2026-10-12T22:28:45.312Z'
+  - boundary: plan-phase:phase_5
+    at: '2026-10-12T22:46:33.656Z'
