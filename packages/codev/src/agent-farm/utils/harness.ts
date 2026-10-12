@@ -56,6 +56,18 @@ export interface HarnessProvider {
   supportsContextReset?: boolean;
 
   /**
+   * Optional: the extra args that launch this harness as an INTERACTIVE session
+   * whose first user turn is `prompt` (Spec 1797 — the governance bootstrap pass).
+   * The caller appends them after the executable and its configured flags.
+   *
+   * Absence means "unsupported": a harness that has not declared it must not be
+   * handed a prompt by guesswork, and callers fall back to writing the prompt to a
+   * file with manual instructions. Use `resolveInteractiveTaskLauncher` rather than
+   * reading this directly, so an unrecognised command never inherits Claude's form.
+   */
+  buildInteractiveTaskLaunch?(prompt: string): { args: string[] };
+
+  /**
    * Optional: files to write in the worktree before launching the agent.
    * Used by harnesses that rely on file-based configuration (e.g., OpenCode
    * uses opencode.json's instructions field for role injection; Claude uses it
@@ -152,6 +164,11 @@ export const CLAUDE_HARNESS: HarnessProvider = {
   // therefore the --append-system-prompt role below — intact. That is what makes
   // an in-session reset possible here and nowhere else today.
   supportsContextReset: true,
+  // Spec 1797: `claude [options] [prompt]` starts an interactive session with the
+  // prompt as its first turn (verified against `claude --help`, Claude Code
+  // 2.1.296, 2026-10-13). `-p/--print` would make it headless; see
+  // `resolveInteractiveTaskLauncher`.
+  buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
   buildRoleInjection: (content, _filePath) => ({
     args: ['--append-system-prompt', content],
     env: {},
@@ -189,6 +206,11 @@ export const CLAUDE_HARNESS: HarnessProvider = {
 };
 
 export const CODEX_HARNESS: HarnessProvider = {
+  // Spec 1797: `codex [OPTIONS] [PROMPT]` forwards to the interactive CLI with the
+  // prompt as the session's first turn (verified against `codex --help`,
+  // codex-cli 0.162.1, 2026-10-13). A subcommand would change the mode; see
+  // `CODEX_SUBCOMMANDS`.
+  buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
   buildRoleInjection: (_content, filePath) => ({
     args: ['-c', `model_instructions_file=${filePath}`],
     env: {},
@@ -508,4 +530,120 @@ export function resolveHarness(
 
   // Default to claude
   return CLAUDE_HARNESS;
+}
+
+// =============================================================================
+// Interactive task launch (Spec 1797)
+// =============================================================================
+
+/**
+ * Every subcommand listed by `codex --help` (codex-cli 0.162.1, 2026-10-13),
+ * including aliases. Each one either runs non-interactively (`exec`/`e`,
+ * `review`, …) or reads its own positional args (`resume`, `fork`), so a
+ * configured command carrying any of them must not receive a positional prompt.
+ */
+export const CODEX_SUBCOMMANDS: readonly string[] = [
+  'agents', 'exec', 'e', 'review', 'login', 'logout', 'mcp', 'plugin',
+  'app-server', 'remote-control', 'app', 'completion', 'update', 'doctor',
+  'sandbox', 'debug', 'apply', 'a', 'resume', 'queue', 'archive', 'delete',
+  'migrate-rollouts', 'unarchive', 'fork', 'cloud', 'exec-server', 'features',
+  'help',
+];
+
+/** Claude flags that make the session print-and-exit instead of interactive. */
+const CLAUDE_HEADLESS_FLAGS: readonly string[] = ['-p', '--print'];
+
+/**
+ * How to launch the configured agent interactively with an initial task prompt,
+ * or why that is not possible. Unsupported is never an error: the caller falls
+ * back to writing the prompt to a file and printing manual instructions.
+ */
+export type InteractiveTaskLauncher =
+  | {
+      supported: true;
+      harnessName: string;
+      /** Executable, configured flags, then the harness's prompt args. */
+      buildLaunch(prompt: string): { executable: string; args: string[] };
+    }
+  | { supported: false; reason: string };
+
+/** Split a configured command the way `afx architect` does (or take the array form). */
+function tokenizeCommand(command: string | string[]): string[] {
+  if (Array.isArray(command)) return command.filter(token => token.length > 0);
+  return command.trim().split(/\s+/).filter(token => token.length > 0);
+}
+
+/** Why `flags` would run harness `name` headless, or undefined when they would not. */
+function headlessReason(name: string, flags: string[]): string | undefined {
+  if (name === 'claude') {
+    const flag = flags.find(token => CLAUDE_HEADLESS_FLAGS.includes(token));
+    if (flag) return `the configured command passes ${flag}, which runs Claude non-interactively`;
+  }
+  if (name === 'codex') {
+    const subcommand = flags.find(token => CODEX_SUBCOMMANDS.includes(token));
+    if (subcommand) {
+      return `the configured command runs the codex "${subcommand}" subcommand, ` +
+        'which does not start an interactive session with a prompt';
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve how to launch `command` interactively with an initial task prompt.
+ *
+ * Supported only when the harness is identified POSITIVELY as a built-in that
+ * declares `buildInteractiveTaskLaunch`: an explicit `harnessName`, or
+ * `detectHarnessFromCommand(command)`. `resolveHarness`'s fall-through to Claude
+ * for an unrecognised command is treated as unsupported, so `aider …` never
+ * receives Claude's positional prompt. Custom harnesses, OpenCode, retired names
+ * and unknown names resolve to unsupported with a reason; nothing here throws.
+ */
+export function resolveInteractiveTaskLauncher(
+  command: string | string[],
+  harnessName: string | undefined,
+  customHarnesses?: Record<string, CustomHarnessConfig>,
+): InteractiveTaskLauncher {
+  const tokens = tokenizeCommand(command);
+  if (tokens.length === 0) {
+    return { supported: false, reason: 'no agent command is configured' };
+  }
+  const [executable, ...flags] = tokens;
+
+  const name = harnessName || detectHarnessFromCommand(executable);
+  if (!name) {
+    return {
+      supported: false,
+      reason: `the harness for "${executable}" is not recognised, so its interactive prompt form is unknown`,
+    };
+  }
+
+  let provider: HarnessProvider;
+  try {
+    provider = resolveHarness(harnessName, customHarnesses, executable);
+  } catch (err) {
+    return { supported: false, reason: (err as Error).message };
+  }
+
+  // A custom harness that shadows a built-in name is still the user's own
+  // definition, which declares no interactive launch.
+  if (provider !== getBuiltinHarness(name) || !provider.buildInteractiveTaskLaunch) {
+    return {
+      supported: false,
+      reason: `the "${name}" harness does not support launching an interactive session with a prompt`,
+    };
+  }
+
+  const headless = headlessReason(name, flags);
+  if (headless) return { supported: false, reason: headless };
+
+  const buildPromptArgs = provider.buildInteractiveTaskLaunch;
+  return {
+    supported: true,
+    harnessName: name,
+    buildLaunch: (prompt) => ({
+      executable,
+      args: [...flags, ...buildPromptArgs(prompt).args],
+    }),
+  };
 }
