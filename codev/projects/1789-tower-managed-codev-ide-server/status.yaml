@@ -11,17 +11,17 @@ plan_phases:
     status: complete
   - id: phase_3
     title: Tower-owned extensions directory and idempotent sidebar install
-    status: in_progress
+    status: complete
   - id: phase_4
     title: Transactional, serialized spawn preflight on all spawn paths
-    status: pending
+    status: in_progress
   - id: phase_5
     title: CLI discovery, afx ide install, and richer status
     status: pending
   - id: phase_6
     title: Documentation and end-to-end verification
     status: pending
-current_plan_phase: phase_3
+current_plan_phase: phase_4
 gates:
   spec-approval:
     status: approved
@@ -36,7 +36,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -71,7 +71,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1789/codev/projects/1789-tower-managed-codev-ide-server/1789-phase_2-iter1-claude.txt
 started_at: '2026-10-06T01:04:39.827Z'
-updated_at: '2026-10-12T22:24:19.021Z'
+updated_at: '2026-10-12T22:28:01.683Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:22:35.464Z'
@@ -85,3 +85,5 @@ context_refreshes:
   - boundary: plan-phase:phase_3
     at: '2026-10-12T22:17:08.518Z'
     acknowledged_at: '2026-10-12T22:17:14.217Z'
+  - boundary: plan-phase:phase_4
+    at: '2026-10-12T22:28:01.683Z'
