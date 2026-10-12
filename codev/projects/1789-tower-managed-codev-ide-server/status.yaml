@@ -1,7 +1,7 @@
 id: '1789'
 title: tower-managed-codev-ide-server
 protocol: spir
-phase: specify
+phase: plan
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -16,7 +16,10 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-10-06T01:04:39.827Z'
-updated_at: '2026-10-12T20:22:33.266Z'
+updated_at: '2026-10-12T20:22:35.464Z'
+context_refreshes:
+  - boundary: enter:plan
+    at: '2026-10-12T20:22:35.464Z'
