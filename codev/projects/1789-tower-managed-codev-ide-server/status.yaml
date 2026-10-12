@@ -1,9 +1,27 @@
 id: '1789'
 title: tower-managed-codev-ide-server
 protocol: spir
-phase: plan
-plan_phases: []
-current_plan_phase: null
+phase: implement
+plan_phases:
+  - id: phase_1
+    title: Embedded sidebar vsix in the codev package
+    status: in_progress
+  - id: phase_2
+    title: Server version handshake and spawn environment
+    status: pending
+  - id: phase_3
+    title: Tower-owned extensions directory and idempotent sidebar install
+    status: pending
+  - id: phase_4
+    title: Transactional, serialized spawn preflight on all spawn paths
+    status: pending
+  - id: phase_5
+    title: CLI discovery, afx ide install, and richer status
+    status: pending
+  - id: phase_6
+    title: Documentation and end-to-end verification
+    status: pending
+current_plan_phase: phase_1
 gates:
   spec-approval:
     status: approved
@@ -21,8 +39,10 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-06T01:04:39.827Z'
-updated_at: '2026-10-12T21:12:16.126Z'
+updated_at: '2026-10-12T21:12:18.291Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:22:35.464Z'
     acknowledged_at: '2026-10-12T20:23:16.908Z'
+  - boundary: enter:implement
+    at: '2026-10-12T21:12:18.290Z'
