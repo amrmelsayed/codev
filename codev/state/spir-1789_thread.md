@@ -17,3 +17,7 @@
 
 ## 2026-10-06 spec questions answered by IDE side (via main)
 - Floor 1.128.0 accepted; published server excludes built-in codev-vscode (pr43 is the counter-example); first published server reports 1.138.0; parse --version line 1 only, ignore npm package suffix (e.g. 1.138.0-codev.1). Folded into spec.
+
+## 2026-10-13 plan drafted
+- Plan written (6 phases: vsix packaging, version handshake, extensions dir/install, transactional preflight in spawnIdeServer, CLI discovery/install/status, docs + E2E).
+- Decisions in plan: embedded `ide-extension/{codev-vscode.vsix,manifest.json}`; vsce as apps/vscode devDep run via `pnpm --filter codev-vscode exec`; one promise-chain lock in ide-server.ts; E2E Tower restart needs human OK (isolated Tower offered as fallback).
