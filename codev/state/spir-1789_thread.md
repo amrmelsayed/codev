@@ -53,3 +53,11 @@
 - Embedded-layout constants redeclared in src with a parity test against `scripts/ide-extension-manifest.mjs` (the .mjs is not shipped).
 - Main filed the session-manager flake as #1800 and the porch stdout defect as #1801.
 - Phase 3 full-suite run: build green; 6283 passed, 1 failed: `session-manager.test.ts` "logs session exit without stderr tail" (15s timeout under full-suite load, real shellper, already skipIf(CI)); passes 3/3 in isolation. Same family as #1800; unrelated to phase 3.
+
+## Phase 4 (2026-10-13): transactional, serialized spawn preflight
+
+- `ide-server.ts`: `withIdeLock` (non-reentrant promise chain) at the entry points only: exported `spawnIdeServer` / `stopIdeServer` (the `/api/ide` POST and DELETE) and the respawn body of `ensureIdeServerLive` (boot reconcile reaches it). Unlocked bodies `spawnIdeServerUnlocked` / `stopIdeServerUnlocked` call each other freely. The respawn body re-reads the record inside the lock, so a respawn queued behind a stop does not resurrect the server, and a start queued behind a respawn adopts its result.
+- Order in spawn: validate path, preflight (version floor, then sidebar install, which validates the extensions dir), port-change stop, live-port adopt, spawn with `--extensions-dir` and `buildIdeServerEnv()`. Record gains `serverVersion` / `extensionsDir` / `sidebarVersion` (optional; legacy records parse).
+- Adopt never kills; `restartRequired` true when the sidebar was just installed, the prior record lacks `extensionsDir`, or there is no prior record on that port. Adopt keeps the prior record's three fields (absent stays absent), including `sidebarVersion` (what the live process loaded), not just the two the plan named.
+- `spawnIdeServer` now returns `{ record, restartRequired }`; POST response is `{ ok, ...record, restartRequired }` (additive). `LogFn` exported once from `ide-version.ts`.
+- Mutation check: replacing the lock with a pass-through fails the three serialization tests.

@@ -16,6 +16,9 @@ import { spawn } from 'node:child_process';
 import { delimiter, dirname } from 'node:path';
 import { sanitizeAgentEnv } from '../../lib/agent-env.js';
 
+/** Log sink shared by the IDE lifecycle modules; Tower passes its own logger. */
+export type LogFn = (level: 'INFO' | 'ERROR' | 'WARN', message: string) => void;
+
 /**
  * Oldest server base version Tower supports. A unit test ties it to the
  * embedded sidebar's `engines.vscode` minimum, so the sidebar is never paired

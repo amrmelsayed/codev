@@ -15,6 +15,7 @@ import { AGENT_FARM_DIR } from './tower-client.js';
 import {
   IDE_INSTALL_TIMEOUT_MS,
   IdeServerCommandError,
+  type LogFn,
   buildIdeServerEnv,
   runIdeServerCommand,
 } from './ide-version.js';
@@ -33,8 +34,6 @@ export const IDE_EXTENSIONS_DIRNAME = 'ide-extensions';
 
 /** VS Code's index of the extensions installed in an extensions directory. */
 const EXTENSIONS_INDEX = 'extensions.json';
-
-type LogFn = (level: 'INFO' | 'ERROR' | 'WARN', message: string) => void;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
