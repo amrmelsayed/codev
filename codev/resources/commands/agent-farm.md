@@ -1064,7 +1064,7 @@ not exist fails the same way.
 3. **Spawn** with `--extensions-dir ~/.agent-farm/ide-extensions`.
 
 A failed check or install refuses the start and leaves any running server untouched. The first
-start can take up to a minute.
+start can take a minute or more.
 
 If a server is already live on the port, `start` adopts it rather than killing it. When that
 server predates the current start (a different binary, an older sidebar, or a server started

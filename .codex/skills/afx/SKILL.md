@@ -225,7 +225,7 @@ found exits 1 before Tower is contacted, naming `afx ide install` and `--server-
 is refused with the installed version, the floor, and the upgrade command), installs the
 sidebar vsix that ships inside `@cluesmith/codev` into `~/.agent-farm/ide-extensions` (skipped
 when that version is already installed; other extensions in the directory are left alone), and
-spawns the server with `--extensions-dir` pointing there. The first start can take up to a minute.
+spawns the server with `--extensions-dir` pointing there. The first start can take a minute or more.
 
 A server that is already running is never killed by `start`. If it predates the current server
 or sidebar, `start` warns: restart it with `afx ide stop && afx ide start`.
