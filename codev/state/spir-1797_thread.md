@@ -17,3 +17,4 @@
 - OPEN for plan gate: Codex wants gitignored paths in the change detector; plan keeps the spec's "four files + git state" reading (ignored paths excluded, stated in the summary).
 - plan-approval gate pending (2026-10-13).
 - 2026-10-12 main ruling: change detector stays git-scoped (gitignored paths not watched; scope statement in every summary). Holding at plan-approval for the owner word.
+- plan-approval APPROVED 2026-10-12T22:27Z (owner word "Approve the plan review gate for 1797", relayed by main). Owner did not override the git-scoped detector. Entering implement.
