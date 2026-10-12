@@ -27,8 +27,10 @@ Decisions this plan makes that the spec deferred:
 - **Git-log window (spec OQ5).** The CLI computes the survey itself, so the bound is
   deterministic rather than left to the agent: the last **300** commit subjects
   (`git log --no-merges --format='%h %ad %s' --date=short -n 300`) plus up to **150**
-  targeted subjects matching `fix|revert|hotfix|incident|regression|rollback|outage|security`
-  (case-insensitive, `--all-match` off, `-n 150`) from full history, de-duplicated. The digest
+  targeted subjects from full history matching any of fix, revert, hotfix, incident,
+  regression, rollback, outage, security (`git log --no-merges -i -E
+  --grep='fix|revert|hotfix|incident|regression|rollback|outage|security' -n 150`; `-E` is
+  required for the alternation), de-duplicated. The digest
   is inlined into the prompt. The agent may run further targeted `git show`/`git log -S` on
   specific commits but the prompt tells it not to walk the full log. No commits → the digest
   says so and the agent works from code alone.
@@ -69,8 +71,14 @@ Decisions this plan makes that the spec deferred:
   content hashes, tolerates a repo with no commits, and diffs HEAD/branch identity, with the
   same documented limits (gitignored paths invisible). Its generic core moves to
   `packages/codev/src/lib/tree-snapshot.ts`; the consult module keeps its consult-specific
-  ignore rules and re-exports. Staging moves porcelain XY codes, so no separate index
-  fingerprint is needed. (CMAP iter1, Claude.)
+  ignore rules and re-exports. The bootstrap adds an index fingerprint on top (see Phase 4).
+  (CMAP iter1, Claude; index per iter2, Codex.)
+- **Scope of change detection (spec reading).** The spec's detector compares "the four files
+  and the git state". Gitignored paths are not git state, so they are outside the detector
+  in a git repo; hashing them (`node_modules/`, build output) would make every run slow and
+  noisy for no review value, since ignored paths never reach a commit. The summary says this
+  every time. CMAP iter3 (Codex) read the spec as requiring ignored paths too; this plan keeps
+  the narrower reading and flags it for the plan gate.
 
 ## Phases (Machine Readable)
 
@@ -290,9 +298,13 @@ Claude flags, with the fallback decided by capability absence.
       unsupported, so `aider …` never receives Claude's positional prompt (CMAP iter1,
       Claude). Retired names surface the retirement message as "unsupported".
 - [ ] A configured command that would run headless is unsupported too: for Claude, any of
-      `-p` / `--print` among its flags; for Codex, a subcommand (first non-flag token after
-      the executable, e.g. `exec`, `review`). The fallback message names the reason
-      (CMAP iter2, Claude).
+      `-p` / `--print` among its flags; for Codex, any token equal to a known non-interactive
+      subcommand from `codex --help` (`exec`, `e`, `review`, `login`, `logout`, `mcp`, …, held
+      as a named list), not "first non-flag token", which would misread a flag value such as
+      `--model gpt-5-codex` (CMAP iter3, Claude). The fallback message names the reason.
+- [ ] `resolveInteractiveTaskLauncher` catches `RetiredHarnessError` (a detected `gemini`
+      command makes `resolveHarness` throw) and returns "unsupported" with the retirement
+      message, never letting the throw escape.
 - [ ] Command tokenisation reuses the existing pattern for `shell.architect` (string split on
       whitespace as in `agent-farm/commands/architect.ts`, or the array form when config
       gives `string[]`): executable = first token, then configured flags, then the
@@ -393,6 +405,8 @@ reported and nothing destructive. The draft review is added in Phase 5.
     exit-bearing, with whatever drafts exist still kept and validated (CMAP iter2, Gemini).
   - The summary states the detector's scope: gitignored paths are not watched (git), or the
     walk's exclusions (non-git).
+  - The non-git walk is bounded at 50,000 files; beyond that it stops and the summary says
+    detection covered only the four governance files (CMAP iter3, Claude).
 - [ ] Tests for this phase.
 
 #### Acceptance Criteria
@@ -494,7 +508,10 @@ document it.
 #### Files to Create / Modify
 
 - Modify `packages/codev/src/commands/adopt.ts`
-- Modify `packages/codev/src/commands/update.ts`
+- Modify `packages/codev/src/commands/update.ts` (new `UpdateResult.bootstrapDocsHint`
+  field carrying the signal)
+- Modify `packages/codev/src/cli.ts` (the `--agent` JSON `instructions` object is built
+  there; add `bootstrapDocs` from the new field)
 - Modify `packages/codev/src/__tests__/adopt.test.ts` (and the update tests file). Two
   existing mocks must change or the suite breaks (CMAP iter1, Claude): the
   `node:child_process` mock's `spawn` returns an object whose `on` is a no-op, so an awaited
@@ -565,9 +582,9 @@ the real system shape, cap respected, and a re-run that changes nothing.
 | Awaiting adopt's merge session changes adopt's behaviour for existing users | Medium | Medium | Only the timing changes (adopt now returns after the session); error path kept; covered by ordering test |
 | Long inlined prompt (skill + digest) exceeds argv limits | Low | Medium | Digest is bounded (≤ 450 subject lines); total well under macOS/Linux `ARG_MAX`; if the rendered prompt exceeds a conservative 100 KB, fall back to the prompt file + instructions |
 | Classifier false "placeholder" on a lightly curated file | Low | High | Subset-AND-marker predicate, doubt ⇒ curated; tests for half-edited starters; output is uncommitted |
-| Change detector false positives from tools the agent runs (e.g. lockfile churn, harness settings) | Medium | Low | Known harness scratch paths are informational; anything else is reported, not reverted; the human decides |
+| Change detector false positives from tools the agent runs (e.g. lockfile churn, harness settings) | Medium | Low | Known harness scratch paths are annotated "usually benign" (still exit-bearing per spec); nothing is reverted; the human decides |
 | Map-entry matching too strict for natural phrasing | Medium | Low | Name-part vs heading/short-name rule; our own curated hot files are the regression fixtures |
-| Moving tripwire code breaks consult's read-only review guard | Low | Medium | Pure move with re-export; existing tripwire + e2e tests must stay green unchanged |
+| Moving tripwire code breaks consult's read-only review guard | Low | Medium | Move plus one signature change (`diffTreeSnapshots`'s `ignore: string[]` becomes a caller-supplied predicate; consult passes its existing rules); existing tripwire + e2e tests must stay green unchanged |
 | Consult cost/latency on every run | Low | Low | Runs only when something was written; parallel; failures non-blocking |
 | Codex positional-prompt behaviour changes upstream | Low | Low | Capability is per harness; doc comment records the verification date; fallback exists |
 
