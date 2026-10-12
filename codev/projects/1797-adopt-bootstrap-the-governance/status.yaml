@@ -36,7 +36,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 2
-build_complete: false
+build_complete: true
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -55,7 +55,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_1-iter1-claude.txt
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-12T22:41:49.248Z'
+updated_at: '2026-10-12T22:44:09.086Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:29:16.809Z'
