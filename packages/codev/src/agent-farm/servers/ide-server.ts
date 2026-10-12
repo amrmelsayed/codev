@@ -107,9 +107,9 @@ export interface SpawnIdeResult {
   record: IdeServerRecord;
   /**
    * True when an already-live server was adopted that has not loaded the
-   * current sidebar: the sidebar just changed, the server predates
-   * `--extensions-dir` (legacy record), or its launch arguments are unknown
-   * (no prior record). The live server is never killed; the user restarts it.
+   * current sidebar: the sidebar just changed, the recorded sidebar version or
+   * extensions directory differs from the current one (including a legacy
+   * record with neither), or its launch arguments are unknown (no prior record). The live server is never killed; the user restarts it.
    */
   restartRequired: boolean;
 }
@@ -231,7 +231,7 @@ async function spawnIdeServerUnlocked(opts: SpawnIdeOptions, log: LogFn): Promis
  * keeps what the live process was actually spawned with (the prior record's
  * version, extensions directory and sidebar; absent stays absent): the version
  * just checked describes `opts.serverPath`, which need not be the binary the
- * live process came from.
+ * live process came from. Its default folder is kept too, unless the start names one.
  */
 function adoptLiveIdeServer(
   opts: SpawnIdeOptions,
@@ -244,14 +244,14 @@ function adoptLiveIdeServer(
   if (existing && existing.port === port) {
     prior = existing;
   }
-  const restartRequired = preflight.sidebarChanged || prior === null || prior.extensionsDir === undefined;
+  const restartRequired = prior === null || !liveServerIsCurrent(prior, preflight);
 
   const record: IdeServerRecord = {
     prefix: IDE_DEFAULT_PREFIX,
     port,
     serverPath: opts.serverPath,
     pid: getProcessesOnPort(port)[0] ?? 0,
-    defaultFolder: opts.defaultFolder,
+    defaultFolder: opts.defaultFolder ?? prior?.defaultFolder,
     startedAt: new Date().toISOString(),
     serverVersion: prior?.serverVersion,
     extensionsDir: prior?.extensionsDir,
@@ -264,6 +264,20 @@ function adoptLiveIdeServer(
   }
   log('INFO', `IDE server already listening on port ${port}; adopted${note}`);
   return { record, restartRequired };
+}
+
+/**
+ * True when the live server recorded in `prior` already loaded what this
+ * preflight prepared: the same extensions directory and, when a sidebar is
+ * embedded, the same sidebar version. Compared against the record rather than
+ * this preflight's install outcome, so a server left running after an earlier
+ * start upgraded the sidebar is still reported stale on every later start.
+ */
+function liveServerIsCurrent(prior: IdeServerRecord, preflight: IdePreflight): boolean {
+  if (preflight.sidebarChanged) return false;
+  if (prior.extensionsDir !== preflight.extensionsDir) return false;
+  if (preflight.sidebarVersion === null) return true;
+  return prior.sidebarVersion === preflight.sidebarVersion;
 }
 
 /**

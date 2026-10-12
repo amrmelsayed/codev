@@ -132,7 +132,7 @@ function recordOn(port: number, pid: number, extra: Partial<IdeServerRecord> = {
     startedAt: '2026-10-01T00:00:00.000Z',
     serverVersion: '1.130.0',
     extensionsDir: EXTENSIONS_DIR,
-    sidebarVersion: '3.3.0',
+    sidebarVersion: '3.3.4',
     ...extra,
   };
 }
@@ -286,7 +286,53 @@ describe('live-port adopt', () => {
     expect(restartRequired).toBe(false);
     expect(fakes.spawnCalls).toHaveLength(0);
     expect(fakes.ports.get(8200)).toEqual([4100]);
-    expect(record).toMatchObject({ pid: 4100, serverVersion: '1.130.0', extensionsDir: EXTENSIONS_DIR, sidebarVersion: '3.3.0' });
+    expect(record).toMatchObject({ pid: 4100, serverVersion: '1.130.0', extensionsDir: EXTENSIONS_DIR, sidebarVersion: '3.3.4' });
+  });
+
+  it('keeps flagging a restart on later starts until the server loads the upgraded sidebar', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { sidebarVersion: '3.3.0' }));
+    fakes.ports.set(8200, [4100]);
+    passPreflight({ outcome: 'installed' });
+
+    const first = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+    // The install is already done: this start skips it, yet the live server still runs 3.3.0.
+    passPreflight({ outcome: 'skipped' });
+    const second = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+
+    expect(first.restartRequired).toBe(true);
+    expect(second.restartRequired).toBe(true);
+    expect(second.record.sidebarVersion).toBe('3.3.0');
+    expect(fakes.ports.get(8200)).toEqual([4100]);
+  });
+
+  it('flags a restart when the live server uses a different extensions directory', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { extensionsDir: '/elsewhere/ide-extensions' }));
+    fakes.ports.set(8200, [4100]);
+
+    const { restartRequired } = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+
+    expect(restartRequired).toBe(true);
+  });
+
+  it('does not flag a restart for a missing embedded sidebar when the server is otherwise current', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { sidebarVersion: undefined }));
+    fakes.ports.set(8200, [4100]);
+    passPreflight({ outcome: 'missing-vsix', version: null });
+
+    const { restartRequired } = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+
+    expect(restartRequired).toBe(false);
+  });
+
+  it('keeps the live server default folder when the start names none', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { defaultFolder: '/home/dev/project' }));
+    fakes.ports.set(8200, [4100]);
+
+    const kept = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+    const replaced = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200, defaultFolder: '/home/dev/other' }, log);
+
+    expect(kept.record.defaultFolder).toBe('/home/dev/project');
+    expect(replaced.record.defaultFolder).toBe('/home/dev/other');
   });
 
   it('flags a restart when the sidebar changed, without killing the server', async () => {
