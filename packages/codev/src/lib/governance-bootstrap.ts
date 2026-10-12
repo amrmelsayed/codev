@@ -1,0 +1,396 @@
+/**
+ * Governance-doc bootstrap: the deterministic half (Spec 1797).
+ *
+ * `codev bootstrap-docs` hands the drafting of the four governance files to an agent, but
+ * every judgement that must be repeatable lives here, as pure functions:
+ *
+ * - which files are still untouched starters (and so may be rewritten),
+ * - whether the project holds anything to document at all,
+ * - whether a draft respects the hot-tier cap and points its map at real cold sections.
+ *
+ * The hot-cap and map rules are the same ones `hot-tier.test.ts` enforces on our own files;
+ * that test imports them from here so there is one definition.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { HOT_TIER_FILES, COLD_TIER_FILES } from './scaffold.js';
+
+// =============================================================================
+// The four files
+// =============================================================================
+
+export type GovernanceKind = 'hot' | 'cold';
+
+export interface GovernanceFile {
+  /** File name under `codev/resources/`. */
+  name: string;
+  kind: GovernanceKind;
+  /** Starter file name under the skeleton's `templates/`. */
+  starter: string;
+  /** For a hot file, the cold doc its map points into. */
+  coldDoc?: string;
+}
+
+export const GOVERNANCE_FILES: readonly GovernanceFile[] = [
+  { name: HOT_TIER_FILES[0], kind: 'hot', starter: HOT_TIER_FILES[0], coldDoc: COLD_TIER_FILES[0].dest },
+  { name: HOT_TIER_FILES[1], kind: 'hot', starter: HOT_TIER_FILES[1], coldDoc: COLD_TIER_FILES[1].dest },
+  { name: COLD_TIER_FILES[0].dest, kind: 'cold', starter: COLD_TIER_FILES[0].src },
+  { name: COLD_TIER_FILES[1].dest, kind: 'cold', starter: COLD_TIER_FILES[1].src },
+];
+
+/**
+ * Earlier shipped starter texts, keyed by destination file name.
+ *
+ * The cold starters gained their `<!-- STARTER: … -->` comment in 9fa9c2316; before that
+ * (8ef441cc2, and the inline constants it replaced) they were the same lines without the
+ * comment. The hot starters have had a single version since 1a8c63b27.
+ */
+const EARLIER_STARTERS: Record<string, string[]> = {
+  'arch.md': [
+    '# Architecture\n\n' +
+      'This document evolves as the project grows. Update it during the review phase of any work that introduces or changes architectural patterns.\n\n' +
+      '_No architecture documented yet._\n',
+  ],
+  'lessons-learned.md': [
+    '# Lessons Learned\n\n' +
+      "Durable engineering wisdom captured across the project's work. Update it during the review phase of any work that surfaces a generally-applicable pattern, gotcha, or constraint.\n\n" +
+      '_No lessons captured yet._\n',
+  ],
+};
+
+/** Every starter text ever shipped for `file`: the current skeleton starter first. */
+export function knownStarterTexts(file: GovernanceFile, templatesDir: string): string[] {
+  const texts: string[] = [];
+  const current = path.join(templatesDir, file.starter);
+  if (fs.existsSync(current)) texts.push(fs.readFileSync(current, 'utf-8'));
+  texts.push(...(EARLIER_STARTERS[file.name] ?? []));
+  return texts;
+}
+
+// =============================================================================
+// Placeholder classification
+// =============================================================================
+
+export type GovernanceClass = 'missing' | 'placeholder' | 'curated';
+
+const SLOT_LINE = /^- <.+>/;
+const NOTHING_YET_LINE = /^_No .+ yet\._$/;
+
+/** A line that only a starter carries: a `- <…>` slot, `_No … yet._`, or `STARTER:` text. */
+export function isStarterMarker(line: string): boolean {
+  return SLOT_LINE.test(line) || NOTHING_YET_LINE.test(line) || line.includes('STARTER:');
+}
+
+function toLines(content: string): string[] {
+  return content.replace(/\r\n/g, '\n').split('\n');
+}
+
+/**
+ * Classify a governance file as an untouched starter (`placeholder`, eligible for the
+ * bootstrap to rewrite) or anything else (`curated`).
+ *
+ * Placeholder iff some ONE starter version contains every non-blank line verbatim, and at
+ * least one starter marker survives. Lines are compared exactly (only CRLF is normalised,
+ * so an autocrlf checkout is not misread); a line mixed in from another version, an edited
+ * slot, an added line, or a starter with every marker deleted all mean someone touched it,
+ * and every doubt resolves to `curated`.
+ */
+export function classifyGovernanceFile(content: string | null, starters: string[]): GovernanceClass {
+  if (content === null) return 'missing';
+
+  const lines = toLines(content).filter(line => line.trim() !== '');
+  if (!lines.some(isStarterMarker)) return 'curated';
+
+  const fromOneStarter = starters.some(starter => {
+    const starterLines = new Set(toLines(starter));
+    return lines.every(line => starterLines.has(line));
+  });
+  if (fromOneStarter) return 'placeholder';
+  return 'curated';
+}
+
+/** Read and classify one governance file of the project at `root`. */
+export function classifyProjectFile(root: string, file: GovernanceFile, templatesDir: string): GovernanceClass {
+  const filePath = path.join(root, 'codev', 'resources', file.name);
+  let content: string | null = null;
+  if (fs.existsSync(filePath)) content = fs.readFileSync(filePath, 'utf-8');
+  return classifyGovernanceFile(content, knownStarterTexts(file, templatesDir));
+}
+
+// =============================================================================
+// Non-empty repository
+// =============================================================================
+
+/** Top-level directories and root files Codev itself generates; they are not the project. */
+const CODEV_GENERATED_DIRS = ['codev', '.codev', '.claude', '.codex'];
+const CODEV_GENERATED_FILES = ['CLAUDE.md', 'AGENTS.md', '.gitignore'];
+
+function isCodevGenerated(relPath: string): boolean {
+  const normalized = relPath.split(path.sep).join('/');
+  const first = normalized.split('/')[0];
+  if (CODEV_GENERATED_DIRS.includes(first)) return true;
+  if (CODEV_GENERATED_FILES.includes(normalized)) return true;
+  return normalized.endsWith('.codev-new');
+}
+
+function isGitWorkTree(root: string): boolean {
+  try {
+    const out = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd: root,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return out.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the project at `root` holds anything beyond what Codev generated.
+ *
+ * In a git work tree: any tracked or untracked-but-not-ignored path (submodule gitlinks
+ * included) outside the Codev-generated set. Outside git: a filesystem walk honouring the
+ * root `.gitignore` and the same exclusions.
+ */
+export function isNonEmptyRepo(root: string): boolean {
+  if (isGitWorkTree(root)) {
+    try {
+      const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
+        cwd: root,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 256 * 1024 * 1024,
+      });
+      return out.split('\0').some(rel => rel !== '' && !isCodevGenerated(rel));
+    } catch {
+      // git present but unable to list (corrupt index, huge tree): judge from the filesystem.
+    }
+  }
+  return walkFindsProjectFile(root, readRootIgnore(root));
+}
+
+/** One root `.gitignore` rule, compiled. Negations are not supported (see readRootIgnore). */
+interface IgnoreRule {
+  regex: RegExp;
+  directoryOnly: boolean;
+}
+
+function globToRegex(glob: string): string {
+  let out = '';
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*' && glob[i + 1] === '*') {
+      out += '.*';
+      i++;
+      if (glob[i + 1] === '/') i++;
+    } else if (ch === '*') {
+      out += '[^/]*';
+    } else if (ch === '?') {
+      out += '[^/]';
+    } else {
+      out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return out;
+}
+
+/**
+ * Compile the root `.gitignore` for the non-git walk. Only the common subset is honoured
+ * (names, `*`/`?`/`**` globs, anchored and directory-only patterns); `!` negations are
+ * skipped, which can only make the walk ignore more, never less.
+ */
+function readRootIgnore(root: string): IgnoreRule[] {
+  const gitignorePath = path.join(root, '.gitignore');
+  if (!fs.existsSync(gitignorePath)) return [];
+  const rules: IgnoreRule[] = [];
+  for (const raw of fs.readFileSync(gitignorePath, 'utf-8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#') || line.startsWith('!')) continue;
+    const directoryOnly = line.endsWith('/');
+    let pattern = line.replace(/\/+$/, '');
+    const anchored = pattern.includes('/');
+    pattern = pattern.replace(/^\//, '');
+    let prefix = '(?:.*/)?';
+    if (anchored) prefix = '';
+    rules.push({ regex: new RegExp(`^${prefix}${globToRegex(pattern)}$`), directoryOnly });
+  }
+  return rules;
+}
+
+function isIgnored(rel: string, isDirectory: boolean, rules: IgnoreRule[]): boolean {
+  return rules.some(rule => (!rule.directoryOnly || isDirectory) && rule.regex.test(rel));
+}
+
+function walkFindsProjectFile(root: string, rules: IgnoreRule[], dir = ''): boolean {
+  const entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true });
+  for (const entry of entries) {
+    const rel = dir === '' ? entry.name : `${dir}/${entry.name}`;
+    if (entry.name === '.git' || isCodevGenerated(rel)) continue;
+    if (isIgnored(rel, entry.isDirectory(), rules)) continue;
+    if (entry.isDirectory()) {
+      if (walkFindsProjectFile(root, rules, rel)) return true;
+    } else {
+      return true;
+    }
+  }
+  return false;
+}
+
+// =============================================================================
+// Hot cap and map rules (shared with hot-tier.test.ts)
+// =============================================================================
+
+export const HOT_CAP_LINES = 35;
+export const HOT_CAP_ENTRIES = 10;
+export const HOT_CAP_MAP_TOPICS = 12;
+
+/** `- ` entries under the `## <headingPrefix>…` section, up to the next `## `. */
+export function bulletsUnder(content: string, headingPrefix: string): string[] {
+  let inSection = false;
+  const bullets: string[] = [];
+  for (const line of toLines(content)) {
+    if (line.startsWith('## ')) {
+      inSection = line.startsWith(`## ${headingPrefix}`);
+    } else if (inSection && line.startsWith('- ')) {
+      bullets.push(line);
+    }
+  }
+  return bullets;
+}
+
+/** Top-level `## ` heading texts of a markdown doc. */
+export function topLevelHeadings(content: string): string[] {
+  return toLines(content)
+    .filter(line => line.startsWith('## '))
+    .map(line => line.slice(3).trim());
+}
+
+/** The topic each map entry points at: its text before the ` — consult when…` guidance. */
+export function mapTopics(content: string): string[] {
+  return bulletsUnder(content, 'Map').map(line => line.slice(2).split(' — ')[0].trim());
+}
+
+/**
+ * The cold-doc headings a map topic names: an exact heading, or one it is a word-boundary
+ * prefix of (so `Critical` names `Critical (Prevent Major Failures)`). A valid topic names
+ * exactly one.
+ */
+export function sectionsNamedBy(topic: string, headings: string[]): string[] {
+  return headings.filter(heading => heading === topic || heading.startsWith(`${topic} `));
+}
+
+/** Lines that count toward the hot cap: everything outside HTML comments. */
+export function nonCommentLineCount(content: string): number {
+  // A comment occupying whole lines removes those lines entirely (not one blank in their
+  // place); an inline comment only removes itself.
+  const body = content
+    .replace(/\r\n/g, '\n')
+    .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*(?:\n|$)/gm, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const lines = body.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines.length;
+}
+
+// =============================================================================
+// Validation
+// =============================================================================
+
+export type ViolationKind =
+  | 'leftover-marker'
+  | 'missing-section'
+  | 'too-many-entries'
+  | 'too-many-map-topics'
+  | 'too-many-lines'
+  | 'unknown-map-section'
+  | 'ambiguous-map-section'
+  | 'unmapped-section'
+  | 'too-many-cold-sections';
+
+export interface Violation {
+  kind: ViolationKind;
+  message: string;
+}
+
+export interface HotValidation {
+  violations: Violation[];
+  /** Cold sections the map does not name; a violation only when the cold doc has ≤12. */
+  unmappedSections: string[];
+}
+
+function leftoverMarkers(content: string): Violation[] {
+  return toLines(content)
+    .filter(isStarterMarker)
+    .map(line => ({ kind: 'leftover-marker' as const, message: `starter text left in place: ${line.trim()}` }));
+}
+
+/** The `## Critical …` section name for a hot file kind. */
+function entriesHeading(file: GovernanceFile): string {
+  if (file.name === 'lessons-critical.md') return 'Critical lessons';
+  return 'Critical facts';
+}
+
+/**
+ * Check a drafted hot file: no starter text, both sections present, the cap (per section,
+ * comment lines excluded), and every map topic naming exactly one real cold section.
+ */
+export function validateHotFile(content: string, coldContent: string, file: GovernanceFile): HotValidation {
+  const violations = leftoverMarkers(content);
+
+  const heading = entriesHeading(file);
+  const hasEntries = topLevelHeadings(content).some(h => h.startsWith(heading));
+  const hasMap = topLevelHeadings(content).some(h => h.startsWith(`Map of ${file.coldDoc}`));
+  if (!hasEntries) violations.push({ kind: 'missing-section', message: `missing "## ${heading}" section` });
+  if (!hasMap) violations.push({ kind: 'missing-section', message: `missing "## Map of ${file.coldDoc}" section` });
+
+  const entries = bulletsUnder(content, 'Critical').length;
+  if (entries > HOT_CAP_ENTRIES) {
+    violations.push({ kind: 'too-many-entries', message: `${entries} entries under "${heading}" (cap ${HOT_CAP_ENTRIES})` });
+  }
+  const topics = mapTopics(content);
+  if (topics.length > HOT_CAP_MAP_TOPICS) {
+    violations.push({ kind: 'too-many-map-topics', message: `${topics.length} map entries (cap ${HOT_CAP_MAP_TOPICS})` });
+  }
+  const lines = nonCommentLineCount(content);
+  if (lines > HOT_CAP_LINES) {
+    violations.push({ kind: 'too-many-lines', message: `${lines} lines outside comments (cap ${HOT_CAP_LINES})` });
+  }
+
+  const headings = topLevelHeadings(coldContent);
+  const mapped = new Set<string>();
+  for (const topic of topics) {
+    const named = sectionsNamedBy(topic, headings);
+    if (named.length === 0) {
+      violations.push({ kind: 'unknown-map-section', message: `map entry "${topic}" names no "## " section of ${file.coldDoc}` });
+    } else if (named.length > 1) {
+      violations.push({ kind: 'ambiguous-map-section', message: `map entry "${topic}" matches several sections of ${file.coldDoc}: ${named.join(', ')}` });
+    } else {
+      mapped.add(named[0]);
+    }
+  }
+
+  const unmappedSections = headings.filter(h => !mapped.has(h));
+  if (headings.length <= HOT_CAP_MAP_TOPICS) {
+    for (const section of unmappedSections) {
+      violations.push({ kind: 'unmapped-section', message: `${file.coldDoc} section "${section}" is missing from the map` });
+    }
+  }
+
+  return { violations, unmappedSections };
+}
+
+/**
+ * Check a drafted cold file: no starter text, and — for a file the bootstrap itself wrote —
+ * at most 12 top-level sections so its hot map can cover all of them.
+ */
+export function validateColdFile(content: string, writtenByBootstrap: boolean): Violation[] {
+  const violations = leftoverMarkers(content);
+  const sections = topLevelHeadings(content).length;
+  if (writtenByBootstrap && sections > HOT_CAP_MAP_TOPICS) {
+    violations.push({ kind: 'too-many-cold-sections', message: `${sections} top-level sections (keep to ${HOT_CAP_MAP_TOPICS} so the map can cover them)` });
+  }
+  return violations;
+}

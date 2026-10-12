@@ -18,3 +18,8 @@
 - plan-approval gate pending (2026-10-13).
 - 2026-10-12 main ruling: change detector stays git-scoped (gitignored paths not watched; scope statement in every summary). Holding at plan-approval for the owner word.
 - plan-approval APPROVED 2026-10-12T22:27Z (owner word "Approve the plan review gate for 1797", relayed by main). Owner did not override the git-scoped detector. Entering implement.
+
+## Implement
+- Plan-phase refresh task was emitted once and not captured; skipped (no state lost).
+- phase_1: lib/governance-bootstrap.ts (classifier, isNonEmptyRepo, validators) + tests; hot-tier.test.ts now imports the shared cap/map helpers.
+- Side fix: agent-farm cloud-config.test.ts "enforces 0600" failed deterministically under umask 077 (writeFileSync mode is umask-filtered) and blocked porch's test check. Added chmodSync(0o644) to set the precondition explicitly. Unrelated to 1797; flagged to architect.
