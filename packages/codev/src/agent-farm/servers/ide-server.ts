@@ -25,12 +25,11 @@ import {
   ensureIdeConnectionToken,
   getIdeConnectionTokenPath,
 } from '../lib/ide-record.js';
+import { IDE_READY_TIMEOUT_MS, IDE_STOP_EXIT_TIMEOUT_MS } from '../lib/ide-version.js';
 
 type LogFn = (level: 'INFO' | 'ERROR' | 'WARN', message: string) => void;
 
-const READY_TIMEOUT_MS = 15_000;
 const READY_POLL_MS = 200;
-const STOP_EXIT_TIMEOUT_MS = 5_000;
 const STOP_POLL_MS = 200;
 
 /**
@@ -146,9 +145,9 @@ export async function spawnIdeServer(opts: SpawnIdeOptions, log: LogFn): Promise
   }
   child.unref();
 
-  const ready = await waitForPort(port, READY_TIMEOUT_MS);
+  const ready = await waitForPort(port, IDE_READY_TIMEOUT_MS);
   if (!ready) {
-    throw new Error(`IDE server did not start listening on port ${port} within ${READY_TIMEOUT_MS / 1000}s`);
+    throw new Error(`IDE server did not start listening on port ${port} within ${IDE_READY_TIMEOUT_MS / 1000}s`);
   }
 
   const record: IdeServerRecord = {
@@ -185,7 +184,7 @@ export async function stopIdeServer(log: LogFn): Promise<{ stopped: boolean; por
 
   // Wait for the SIGTERMed processes to actually exit before deleting the record;
   // escalate any survivors to SIGKILL, so a lingering process can't be re-adopted.
-  const deadline = Date.now() + STOP_EXIT_TIMEOUT_MS;
+  const deadline = Date.now() + IDE_STOP_EXIT_TIMEOUT_MS;
   let survivors = pids.filter(isPidAlive);
   while (survivors.length > 0 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, STOP_POLL_MS));

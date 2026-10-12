@@ -37,3 +37,8 @@
 - SURPRISE: the spec's "codev and codev-vscode are versioned in lockstep" holds only for stable versions. scripts/bump-all.sh skips apps/vscode for pre-releases (Marketplace rejects semver suffixes), so codev 3.4.0-rc.1 embeds the last stable sidebar. verify-install and the unit test therefore enforce version equality only for stable versions; pre-releases only need a present, well-formed manifest. Functionally fine: Tower's idempotency keys on the manifest version, not the codev version.
 - Owner ruling (2026-10-13), superseding the pre-release note above: no version-equality check between the embedded vsix and the codev package at all. Both come from the same build/commit, so they are compatible by construction; RCs are no longer used. verify-install checks only presence + well-formed manifest. Spec and plan amended (equality and skip flag removed).
 - Phase 1 iter2: codex flagged vsce 3.9.2's Azure deps (Node >=22) vs CI Node 20. Verified `vsce package` never loads @azure/identity (publish-only) and the vsix build succeeds under Node 20.20.2.
+
+## 2026-10-13: phase_2 (version handshake)
+- New `src/agent-farm/lib/ide-version.ts`: floor `1.128.0`, line-1-only strict parser (prerelease on line 1 = unparseable), comparator, `buildIdeServerEnv` (sanitized env + Node dir on PATH), `checkIdeServerVersion` via execFile, and all IDE subprocess bounds (version 10s, install 60s, ready 15s, stop-exit 5s) plus derived `IDE_START_BUDGET_MS`. ide-server.ts now imports ready/stop bounds from it.
+- Floor-tie test reads embedded manifest when built, else apps/vscode/package.json, and asserts which source it read.
+- Spawn env wiring into ide-server.ts left for phase 3 (plan lists only ide-version.ts for this phase).
