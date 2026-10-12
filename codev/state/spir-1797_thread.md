@@ -16,3 +16,4 @@
 - Plan CMAP: iter1 G APPROVE / X,C REQUEST_CHANGES; iter2 G APPROVE / X,C RC; iter3 G,C APPROVE / X RC. All points folded except one (below). Final plan: 6 phases (consult split out as phase 5). Key iter fixes: missing files ineligible; verbatim single-version classifier; map rule promoted from hot-tier.test.ts helpers (+unique match); tree-tripwire core promoted to lib/tree-snapshot.ts + index hash; harness launch only on positive Claude/Codex identification, headless flags/subcommands unsupported; .claude/settings.local.json exit-bearing (annotated).
 - OPEN for plan gate: Codex wants gitignored paths in the change detector; plan keeps the spec's "four files + git state" reading (ignored paths excluded, stated in the summary).
 - plan-approval gate pending (2026-10-13).
+- 2026-10-12 main ruling: change detector stays git-scoped (gitignored paths not watched; scope statement in every summary). Holding at plan-approval for the owner word.
