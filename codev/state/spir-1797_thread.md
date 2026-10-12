@@ -24,3 +24,4 @@
 - phase_1: lib/governance-bootstrap.ts (classifier, isNonEmptyRepo, validators) + tests; hot-tier.test.ts now imports the shared cap/map helpers.
 - Side fix: agent-farm cloud-config.test.ts "enforces 0600" failed deterministically under umask 077 (writeFileSync mode is umask-filtered) and blocked porch's test check. Added chmodSync(0o644) to set the precondition explicitly. Unrelated to 1797; flagged to architect.
 - phase_1 iter1: Codex RC (files untracked at review time) -> committed c4b0ac538; Claude minors fixed (comment-line cap count, guarded ls-files). One porch test-check failure after the rebuttal did not reproduce (full suite green twice); failing test not captured; watch for recurrence.
+- phase_1 APPROVED iter3 (G/X/C). Carry to phase_4: add an empty-section violation (hot file with zero entries, cold file with zero sections must not pass as success); a1/**/b glob over-match + skipped negations in non-git walk; SLOT_LINE flags '- <url>' bullets.
