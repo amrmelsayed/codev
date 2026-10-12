@@ -12,6 +12,7 @@ import {
   getBuiltinHarness,
   resolveInteractiveTaskLauncher,
   CODEX_SUBCOMMANDS,
+  CLAUDE_SUBCOMMANDS,
   type CustomHarnessConfig,
 } from '../utils/harness.js';
 
@@ -532,6 +533,7 @@ describe('harness', () => {
 
     it('opencode and custom harnesses do not declare it', () => {
       expect(OPENCODE_HARNESS.buildInteractiveTaskLaunch).toBeUndefined();
+      expect(OPENCODE_HARNESS.interactiveLaunchBlocker).toBeUndefined();
       const custom = buildCustomHarnessProvider({ roleArgs: [], roleScriptFragment: '' });
       expect(custom.buildInteractiveTaskLaunch).toBeUndefined();
     });
@@ -602,8 +604,27 @@ describe('harness', () => {
     });
 
     it('claude -p and --print are unsupported with a reason', () => {
-      expect(unsupportedReason('claude -p')).toMatch(/-p.*non-interactively/);
+      expect(unsupportedReason('claude -p')).toMatch(/passes -p,/);
       expect(unsupportedReason('claude --dangerously-skip-permissions --print')).toMatch(/--print/);
+    });
+
+    it('claude --bg and --resume (which would swallow the prompt) are unsupported', () => {
+      expect(unsupportedReason('claude --bg')).toMatch(/--bg/);
+      expect(unsupportedReason('claude --background')).toMatch(/--background/);
+      expect(unsupportedReason('claude -r')).toMatch(/passes -r,/);
+      expect(unsupportedReason('claude --resume')).toMatch(/--resume/);
+    });
+
+    it('claude subcommands are unsupported with a reason', () => {
+      expect(unsupportedReason('claude doctor')).toMatch(/"doctor" subcommand/);
+      expect(unsupportedReason('claude --dangerously-skip-permissions mcp')).toMatch(/"mcp" subcommand/);
+      for (const sub of ['agents', 'attach', 'auth', 'install', 'update', 'ultrareview']) {
+        expect(CLAUDE_SUBCOMMANDS).toContain(sub);
+      }
+    });
+
+    it('codex mcp-server (earlier releases) is unsupported', () => {
+      expect(unsupportedReason('codex mcp-server')).toMatch(/"mcp-server" subcommand/);
     });
 
     it('codex exec and other subcommands are unsupported with a reason', () => {

@@ -68,6 +68,14 @@ export interface HarnessProvider {
   buildInteractiveTaskLaunch?(prompt: string): { args: string[] };
 
   /**
+   * Optional companion to `buildInteractiveTaskLaunch`: given the configured
+   * command's flags (every token after the executable), the reason they would
+   * stop the prompt from opening an interactive session (a headless flag, a
+   * subcommand, a flag that consumes the positional prompt), else undefined.
+   */
+  interactiveLaunchBlocker?(flags: string[]): string | undefined;
+
+  /**
    * Optional: files to write in the worktree before launching the agent.
    * Used by harnesses that rely on file-based configuration (e.g., OpenCode
    * uses opencode.json's instructions field for role injection; Claude uses it
@@ -156,6 +164,49 @@ export interface CustomHarnessConfig {
 }
 
 // =============================================================================
+// Interactive launch blockers (Spec 1797)
+// =============================================================================
+
+/**
+ * Claude subcommands from `claude --help` (Claude Code 2.1.296, 2026-10-13),
+ * including aliases. None of them opens an interactive session with a prompt.
+ */
+export const CLAUDE_SUBCOMMANDS: readonly string[] = [
+  'agents', 'attach', 'auth', 'auto-mode', 'doctor', 'gateway', 'import',
+  'install', 'logs', 'mcp', 'plugin', 'plugins', 'purge', 'respawn', 'rm',
+  'setup-token', 'stop', 'kill', 'ultrareview', 'update', 'upgrade',
+];
+
+/**
+ * Claude flags that defeat an interactive prompt launch: `-p/--print` runs
+ * headless, `--bg/--background` detaches the session, and `-r/--resume` takes an
+ * optional value that would swallow the positional prompt.
+ */
+export const CLAUDE_INTERACTIVE_BLOCKING_FLAGS: readonly string[] = [
+  '-p', '--print', '--bg', '--background', '-r', '--resume',
+];
+
+/**
+ * Every subcommand listed by `codex --help` (codex-cli 0.162.1, 2026-10-13),
+ * including aliases, plus `mcp-server` from earlier releases. Each one either
+ * runs non-interactively (`exec`/`e`, `review`, …) or reads its own positional
+ * args (`resume`, `fork`), so a configured command carrying any of them must not
+ * receive a positional prompt.
+ */
+export const CODEX_SUBCOMMANDS: readonly string[] = [
+  'agents', 'exec', 'e', 'review', 'login', 'logout', 'mcp', 'mcp-server',
+  'plugin', 'app-server', 'remote-control', 'app', 'completion', 'update',
+  'doctor', 'sandbox', 'debug', 'apply', 'a', 'resume', 'queue', 'archive',
+  'delete', 'migrate-rollouts', 'unarchive', 'fork', 'cloud', 'exec-server',
+  'features', 'help',
+];
+
+/** The first token in `flags` that names a subcommand, or undefined. */
+function findSubcommand(flags: string[], subcommands: readonly string[]): string | undefined {
+  return flags.find(token => subcommands.includes(token));
+}
+
+// =============================================================================
 // Built-in providers
 // =============================================================================
 
@@ -166,9 +217,15 @@ export const CLAUDE_HARNESS: HarnessProvider = {
   supportsContextReset: true,
   // Spec 1797: `claude [options] [prompt]` starts an interactive session with the
   // prompt as its first turn (verified against `claude --help`, Claude Code
-  // 2.1.296, 2026-10-13). `-p/--print` would make it headless; see
-  // `resolveInteractiveTaskLauncher`.
+  // 2.1.296, 2026-10-13).
   buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
+  interactiveLaunchBlocker: (flags) => {
+    const flag = flags.find(token => CLAUDE_INTERACTIVE_BLOCKING_FLAGS.includes(token));
+    if (flag) return `the configured command passes ${flag}, which stops Claude opening an interactive session with the prompt`;
+    const subcommand = findSubcommand(flags, CLAUDE_SUBCOMMANDS);
+    if (subcommand) return `the configured command runs the claude "${subcommand}" subcommand, which does not start an interactive session with a prompt`;
+    return undefined;
+  },
   buildRoleInjection: (content, _filePath) => ({
     args: ['--append-system-prompt', content],
     env: {},
@@ -208,9 +265,13 @@ export const CLAUDE_HARNESS: HarnessProvider = {
 export const CODEX_HARNESS: HarnessProvider = {
   // Spec 1797: `codex [OPTIONS] [PROMPT]` forwards to the interactive CLI with the
   // prompt as the session's first turn (verified against `codex --help`,
-  // codex-cli 0.162.1, 2026-10-13). A subcommand would change the mode; see
-  // `CODEX_SUBCOMMANDS`.
+  // codex-cli 0.162.1, 2026-10-13).
   buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
+  interactiveLaunchBlocker: (flags) => {
+    const subcommand = findSubcommand(flags, CODEX_SUBCOMMANDS);
+    if (subcommand) return `the configured command runs the codex "${subcommand}" subcommand, which does not start an interactive session with a prompt`;
+    return undefined;
+  },
   buildRoleInjection: (_content, filePath) => ({
     args: ['-c', `model_instructions_file=${filePath}`],
     env: {},
@@ -537,23 +598,6 @@ export function resolveHarness(
 // =============================================================================
 
 /**
- * Every subcommand listed by `codex --help` (codex-cli 0.162.1, 2026-10-13),
- * including aliases. Each one either runs non-interactively (`exec`/`e`,
- * `review`, …) or reads its own positional args (`resume`, `fork`), so a
- * configured command carrying any of them must not receive a positional prompt.
- */
-export const CODEX_SUBCOMMANDS: readonly string[] = [
-  'agents', 'exec', 'e', 'review', 'login', 'logout', 'mcp', 'plugin',
-  'app-server', 'remote-control', 'app', 'completion', 'update', 'doctor',
-  'sandbox', 'debug', 'apply', 'a', 'resume', 'queue', 'archive', 'delete',
-  'migrate-rollouts', 'unarchive', 'fork', 'cloud', 'exec-server', 'features',
-  'help',
-];
-
-/** Claude flags that make the session print-and-exit instead of interactive. */
-const CLAUDE_HEADLESS_FLAGS: readonly string[] = ['-p', '--print'];
-
-/**
  * How to launch the configured agent interactively with an initial task prompt,
  * or why that is not possible. Unsupported is never an error: the caller falls
  * back to writing the prompt to a file and printing manual instructions.
@@ -571,22 +615,6 @@ export type InteractiveTaskLauncher =
 function tokenizeCommand(command: string | string[]): string[] {
   if (Array.isArray(command)) return command.filter(token => token.length > 0);
   return command.trim().split(/\s+/).filter(token => token.length > 0);
-}
-
-/** Why `flags` would run harness `name` headless, or undefined when they would not. */
-function headlessReason(name: string, flags: string[]): string | undefined {
-  if (name === 'claude') {
-    const flag = flags.find(token => CLAUDE_HEADLESS_FLAGS.includes(token));
-    if (flag) return `the configured command passes ${flag}, which runs Claude non-interactively`;
-  }
-  if (name === 'codex') {
-    const subcommand = flags.find(token => CODEX_SUBCOMMANDS.includes(token));
-    if (subcommand) {
-      return `the configured command runs the codex "${subcommand}" subcommand, ` +
-        'which does not start an interactive session with a prompt';
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -634,8 +662,8 @@ export function resolveInteractiveTaskLauncher(
     };
   }
 
-  const headless = headlessReason(name, flags);
-  if (headless) return { supported: false, reason: headless };
+  const blocker = provider.interactiveLaunchBlocker?.(flags);
+  if (blocker) return { supported: false, reason: blocker };
 
   const buildPromptArgs = provider.buildInteractiveTaskLaunch;
   return {
