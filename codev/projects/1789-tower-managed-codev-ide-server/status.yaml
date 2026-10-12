@@ -36,10 +36,10 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: false
+build_complete: true
 history: []
 started_at: '2026-10-06T01:04:39.827Z'
-updated_at: '2026-10-12T21:13:02.347Z'
+updated_at: '2026-10-12T21:19:17.958Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:22:35.464Z'
