@@ -56,12 +56,13 @@ Phases 2 and 3 add modules with no callers; phase 4 is the only phase that chang
 
 - `apps/vscode/package.json`: add `@vscode/vsce` to `devDependencies` (the `vsix` script then resolves it locally).
 - `pnpm-lock.yaml`: lockfile update from `pnpm install`.
-- `packages/codev/scripts/build-ide-extension.mjs` (new): cleans `ide-extension/`, runs `pnpm --filter codev-vscode exec vsce package --no-dependencies --out <abs>/ide-extension/codev-vscode.vsix`, then writes `manifest.json` from `apps/vscode/package.json` (`publisher.name`, `version`, `engines.vscode`). Fails the build loudly if vsce fails or the vsix is missing.
+- `packages/codev/scripts/ide-extension-manifest.mjs` (new): the pure manifest helper, import-safe (no side effects), used by the build script and the unit test.
+- `packages/codev/scripts/build-ide-extension.mjs` (new): cleans and recreates `ide-extension/` (`mkdir -p` before `vsce --out`), runs `pnpm --filter codev-vscode exec vsce package --no-dependencies --out <abs>/ide-extension/codev-vscode.vsix`, then writes `manifest.json` from `apps/vscode/package.json` (`publisher.name`, `version`, `engines.vscode`). Fails the build loudly if vsce fails or the vsix is missing.
 - `packages/codev/package.json`: `bundle-assets` gains `node ./scripts/build-ide-extension.mjs` (which honours `CODEV_SKIP_IDE_EXTENSION=1`); `files` gains `ide-extension`.
 - `.github/workflows/test.yml`, `e2e.yml`, `dashboard-e2e.yml`: set `CODEV_SKIP_IDE_EXTENSION=1` on the codev build steps of jobs that do not test packaging (Tower Integration, CLI Integration, e2e, dashboard e2e). Package Install Verification does **not** set it, so the release shape stays covered.
 - `.gitignore`: `packages/codev/ide-extension/`.
 - `packages/codev/scripts/verify-install.mjs`: after the global install, assert `<prefix>/lib/node_modules/@cluesmith/codev/ide-extension/codev-vscode.vsix` exists and `manifest.json` parses with `version` equal to the installed package's version. This runs in the existing `Package Install Verification` CI job, so CI covers Test Scenarios 1 and 2 (the runner has no global `vsce`).
-- `packages/codev/src/__tests__/ide-extension-packaging.test.ts` (new): unit test of the manifest-writing helper exported from the script (id, version, engine range copied correctly; missing fields throw).
+- `packages/codev/src/__tests__/ide-extension-packaging.test.ts` (new): unit test of the manifest helper in `ide-extension-manifest.mjs` (id, version, engine range copied correctly; missing fields throw).
 
 #### Deliverables
 
@@ -96,7 +97,7 @@ A self-contained Tower-side module that answers "is this server binary new enoug
 - `packages/codev/src/agent-farm/lib/ide-version.ts` (new):
   - `IDE_SERVER_MIN_VERSION = '1.128.0'`.
   - `parseIdeServerVersion(stdout)`: line 1 only, trimmed, strict `major.minor.patch`; anything else on line 1 (including a prerelease suffix) is unparseable and returns null.
-  - `IDE_VERSION_TIMEOUT_MS`, `IDE_INSTALL_TIMEOUT_MS`, and `IDE_START_BUDGET_MS` (the derived CLI request budget) exported from here as the single source for those bounds.
+  - `IDE_VERSION_TIMEOUT_MS`, `IDE_INSTALL_TIMEOUT_MS`, `IDE_READY_TIMEOUT_MS` and `IDE_STOP_EXIT_TIMEOUT_MS` exported from here as the single source for those bounds. `ide-server.ts`'s `READY_TIMEOUT_MS` and `STOP_EXIT_TIMEOUT_MS` move here (no import cycle: `ide-server.ts` imports this module, never the reverse). `IDE_START_BUDGET_MS` = version + install + stop-exit (port-change path) + ready, times two (one queued operation's worth of lock wait), plus a fixed margin. The formula references the constants by name, so a change to any bound moves the budget with it.
   - `compareVersions(a, b)`.
   - `buildIdeServerEnv(baseEnv)`: `sanitizeAgentEnv(baseEnv)` with `dirname(process.execPath)` prepended to `PATH` (not duplicated when already present).
   - `checkIdeServerVersion(serverPath, opts)`: `execFile(serverPath, ['--version'], { timeout, env })`; resolves `{ version }` or throws an `IdeServerVersionError` whose message names the installed version (or the failure: non-zero exit, timeout, unparseable output), the floor, and the upgrade command (`npm i -g @cluesmith/codev-ide`).
@@ -113,7 +114,8 @@ A self-contained Tower-side module that answers "is this server binary new enoug
 - [ ] Equal-to-floor and above-floor accepted; below-floor refused with both versions named (Scenarios 7, 8).
 - [ ] Non-zero exit, timeout and garbage output each refused with a clear message (Scenario 9).
 - [ ] Only line 1 is read: three-line output `1.138.0\n<commit>\narm64` parses as `1.138.0`; a package-style suffix (the npm package version) never enters the comparison; a line 1 of `1.128.0-rc.1` is refused as unparseable.
-- [ ] `IDE_START_BUDGET_MS` is asserted to be at least version timeout + install timeout + readiness timeout.
+- [ ] `IDE_START_BUDGET_MS` is asserted to be at least twice (version + install + stop-exit + ready).
+- [ ] The floor-tie test asserts which source it read (the embedded manifest when present, else `apps/vscode/package.json`), so a stale manifest cannot mask a drifted engine.
 - [ ] `buildIdeServerEnv` puts Node's directory on `PATH`.
 - [ ] `pnpm build`, `check-types` and the full vitest suite green.
 
@@ -176,6 +178,7 @@ Every spawn path (`afx ide start` via `/api/ide`, boot reconcile, on-demand resp
   - `spawnIdeServer` reordered: validate the path, **preflight**, then the port-change stop, then the live-port adopt, then spawn. The spawn args add `--extensions-dir <dir>`; the env uses `buildIdeServerEnv`; the record carries the three new fields.
   - Live-port adopt: never killed. The returned result gains `restartRequired: boolean`, true when the sidebar changed, when the prior record has no `extensionsDir` (a pre-#1789 server), or when there is **no prior record at all** (a stray live server on the port whose launch arguments are unknown). The adopted record keeps the prior record's `extensionsDir` and `serverVersion` (absent stays absent), so status stays truthful about what the live process actually loaded and runs; the freshly checked version describes `opts.serverPath`, which need not be the binary the live process came from, so it is not recorded on adopt.
   - Missing embedded vsix (`missing-vsix`): log the warning and still spawn with `--extensions-dir`.
+  - Healthy live server plus a below-floor `serverPath` (decided): the preflight runs first, so the start **fails** with the floor error and the live server and its record are left untouched. This is the transactional rule applied consistently; adopting a binary Tower would refuse to respawn would only defer the failure to the next crash.
   - Respawn failure logs the preflight reason (for example "below floor") and does not spawn (Scenario 10).
 - `packages/codev/src/agent-farm/servers/ide-server.ts` `handleIdeApi`: the POST response passes `restartRequired`; GET status passes the record's new fields through unchanged (already the whole record). Request body contract unchanged.
 - `packages/codev/src/agent-farm/__tests__/ide-server-preflight.test.ts` (new); `ide-record.test.ts` extended with legacy and new-field cases.
@@ -199,6 +202,7 @@ Every spawn path (`afx ide start` via `/api/ide`, boot reconcile, on-demand resp
 - [ ] A port-change start (spawn calls stop internally) and a boot reconcile of a dead recorded server (respawn calls spawn internally) each **complete** within the test timeout: the no-deadlock guard.
 - [ ] A start queued behind an in-flight respawn re-reads the record and acts on the respawn's result.
 - [ ] Missing embedded vsix: the spawn proceeds and its argv still includes `--extensions-dir <dir>` (Scenario 16, second half).
+- [ ] A start naming a below-floor `serverPath` while a healthy server is live on the port fails with the floor error; the live server keeps running and the record is byte-identical.
 - [ ] Adopt with no prior record gives `restartRequired: true`; adopt never records a `serverVersion` the live process was not spawned with.
 - [ ] A legacy record parses, and its live server is adopted on boot (Scenario 23).
 - [ ] Live server plus a changed sidebar, or a legacy record, gives `restartRequired: true`; the live server is not killed.
@@ -299,7 +303,7 @@ Manual plus Playwright, per the testing guide. Restarting Tower on this machine 
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| `vsce package` inside the codev build is slow, and couples the codev build to the extension's type-check and lint (it triggers `vscode:prepublish`). `pnpm build` in `packages/codev` runs in five CI places (Tower Integration, CLI Integration, Package Install Verification, `e2e.yml`, `dashboard-e2e.yml`) plus every local build | Medium | Medium | `CODEV_SKIP_IDE_EXTENSION=1` on the four jobs that do not test packaging and for dev loops; Package Install Verification builds the full shape and `verify-install.mjs` fails a tarball without the vsix. Phase 1 measures and records the added build time against that job's 10-minute bound; if it is exceeded, raise the bound with a measured justification rather than skipping the vsix. |
+| `vsce package` inside the codev build is slow, and couples the codev build to the extension's type-check and lint (it triggers `vscode:prepublish`). `pnpm build` in `packages/codev` runs in five CI places (Tower Integration, CLI Integration, Package Install Verification, `e2e.yml`, `dashboard-e2e.yml`) plus every local build | Medium | Medium | `CODEV_SKIP_IDE_EXTENSION=1` on the four jobs that do not test packaging and for dev loops; Package Install Verification builds the full shape and `verify-install.mjs` fails a tarball without the vsix. `vscode:prepublish` also pulls `@cluesmith/codev-artifact-canvas` into that job's build graph; phase 1 confirms it builds there. Phase 1 measures and records the added build time against that job's 10-minute bound; if it is exceeded, raise the bound with a measured justification rather than skipping the vsix. |
 | A non-reentrant lock deadlocks on the existing nesting (spawn calls stop; respawn calls spawn; boot reconcile is fire-and-forget, so a deadlock would be silent for the Tower process lifetime) | Medium (if done naively) | High | Lock only at the three entry points; unlocked inner functions; explicit completion tests for the port-change and reconcile paths. |
 | The CLI times out while Tower is legitimately mid-preflight | High (if unchanged) | Medium | The CLI's request budget is derived from the exported preflight constants and asserted in tests. |
 | `@cluesmith/codev-ide` is not published before phase 6 | Medium | Low | The spec's sanctioned fallback is a scratch server tree with the built-in removed, via `--server-path`; discovery itself is covered by unit tests. |
