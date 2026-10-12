@@ -231,9 +231,11 @@ async function spawnIdeServerUnlocked(opts: SpawnIdeOptions, log: LogFn): Promis
 /**
  * Record a server already listening on `port` without touching it. The record
  * keeps what the live process was actually spawned with (the prior record's
- * version, extensions directory and sidebar; absent stays absent): the version
- * just checked describes `opts.serverPath`, which need not be the binary the
- * live process came from. Its default folder is kept too, unless the start names one.
+ * server path, version, extensions directory and sidebar; absent stays absent):
+ * the version just checked describes `opts.serverPath`, which need not be the
+ * binary the live process came from. With no prior record on that port the live
+ * binary is unknown, so the requested path is recorded and a restart is flagged.
+ * Its default folder is kept too, unless the start names one.
  */
 function adoptLiveIdeServer(
   opts: SpawnIdeOptions,
@@ -251,7 +253,7 @@ function adoptLiveIdeServer(
   const record: IdeServerRecord = {
     prefix: IDE_DEFAULT_PREFIX,
     port,
-    serverPath: opts.serverPath,
+    serverPath: prior?.serverPath ?? opts.serverPath,
     pid: getProcessesOnPort(port)[0] ?? 0,
     defaultFolder: opts.defaultFolder ?? prior?.defaultFolder,
     startedAt: new Date().toISOString(),
@@ -270,13 +272,16 @@ function adoptLiveIdeServer(
 
 /**
  * True when the live server recorded in `prior` already runs what this start
- * prepared: the same server binary, the same extensions directory and, when a
- * sidebar is embedded, the same sidebar version. Compared against the record rather than
- * this preflight's install outcome, so a server left running after an earlier
- * start upgraded the sidebar is still reported stale on every later start.
+ * prepared: the same server binary at the same version, the same extensions
+ * directory and, when a sidebar is embedded, the same sidebar version. Compared
+ * against the record rather than this preflight's outcome, so a server left
+ * running after an earlier start upgraded the server (in place, as `npm i -g`
+ * does, or at a new path) or the sidebar is still reported stale on every later
+ * start. An unknown recorded version is not treated as stale on its own.
  */
 function liveServerIsCurrent(prior: IdeServerRecord, serverPath: string, preflight: IdePreflight): boolean {
   if (prior.serverPath !== serverPath) return false;
+  if (prior.serverVersion !== undefined && prior.serverVersion !== preflight.serverVersion) return false;
   if (preflight.sidebarChanged) return false;
   if (prior.extensionsDir !== preflight.extensionsDir) return false;
   if (preflight.sidebarVersion === null) return true;

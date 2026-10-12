@@ -139,6 +139,12 @@ export interface RunIdeServerCommandOptions {
 /** Longest stderr kept from a failed command; a wedged server can print without end. */
 const MAX_CAPTURED_STDERR = 4_000;
 
+/**
+ * Longest stdout kept. Callers read only its head (`--version` line 1), and a
+ * faulty server CLI flooding stdout for the whole timeout must not grow Tower's memory.
+ */
+const MAX_CAPTURED_STDOUT = 64_000;
+
 /** SIGKILL the child's whole process group, falling back to the child alone. */
 function killProcessGroup(pid: number | undefined, kill: () => void): void {
   if (pid !== undefined) {
@@ -180,7 +186,9 @@ export function runIdeServerCommand(
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
+      if (stdout.length < MAX_CAPTURED_STDOUT) {
+        stdout = (stdout + chunk).slice(0, MAX_CAPTURED_STDOUT);
+      }
     });
     child.stderr.on('data', (chunk: string) => {
       if (stderr.length < MAX_CAPTURED_STDERR) {

@@ -829,6 +829,10 @@ not exist fails the same way.
 A failed check or install refuses the start and leaves any running server untouched. The first
 start can take a minute or more.
 
+The server loads extensions only from `~/.agent-farm/ide-extensions`, so anything installed into
+its default extensions directory is no longer loaded. Install additional extensions there:
+`codev-ide-server --install-extension <id-or-vsix> --extensions-dir ~/.agent-farm/ide-extensions`.
+
 If a server is already live on the port, `start` adopts it rather than killing it. When that
 server predates the current start (a different binary, an older sidebar, or a server started
 before this feature), the command prints a restart hint: `afx ide stop && afx ide start`.

@@ -33,7 +33,7 @@
 - [x] Starts, stops and respawns are serialized by one non-reentrant lock at the entry points (Phase 4).
 
 **Live server**
-- [x] Tower installs but never kills a live server. `restartRequired` compares the live record's sidebar version, extensions dir and server path with the preflight's result, and the CLI prints `afx ide stop && afx ide start` (Phases 4 and 5).
+- [x] Tower installs but never kills a live server. `restartRequired` compares the live record's server path, server version, extensions dir and sidebar version with the preflight's result, and the CLI prints `afx ide stop && afx ide start`. The adopted record keeps the live process's own values (Phases 4 and 5; completed in the review round).
 
 **Spawn environment**
 - [x] `dirname(process.execPath)` is moved to the front of the spawned server's PATH, with no duplicates (Phase 2, wired in Phase 4).
@@ -62,6 +62,7 @@
 - **Phase 3, the bounded runner was extracted** into `runIdeServerCommand` (process group, SIGKILL on timeout, capped stderr), shared by `--version` and `--install-extension`.
 - **Phase 4, adopt keeps the prior `sidebarVersion` and `defaultFolder`** (the plan named only the server version and extensions dir), so the record describes what the live process actually loaded.
 - **Phase 5, `restartRequired` also compares the server path** (Phase 4 CMAP carry-over), because discovery can pick a different bin than an earlier `--server-path`.
+- **Review round, the adopt rule now covers the whole record.** The adopted record keeps the live `serverPath`, and `restartRequired` also compares the server version, so an in-place `npm i -g` upgrade is flagged and the hint persists until a restart. Stdout from server CLI calls is capped at 64 KB. Docs say where extra extensions go, and the RELEASE protocol has a pre-flight check for the floor coupling.
 - **Phase 6, `docs/releases/UNRELEASED.md` was not edited.** Its header reserves entries for the architect on `docs/vscode-changelog`. The suggested wording is in the thread and the PR body.
 - **Phase 6, the skeleton command reference was mirrored** (`codev-skeleton/resources/commands/agent-farm.md`). The spec named only the root copy; Claude's CMAP flagged the parity gap.
 - **Phase 6, Scenario 21 ran on an isolated Tower** (port 4199, scratch `CODEV_AGENT_FARM_DIR`) per the architect's ruling, not on a restarted real Tower. The real Tower and IDE PIDs were unchanged before and after.
@@ -180,6 +181,27 @@
 - **Concern**: "up to a minute" understates the worst-case budget → **Addressed**: now "a minute or more".
 - **Concern**: the screenshots are ephemeral → **N/A**: the thread's textual record is the durable evidence.
 
+### Review Phase (Round 1, PR #1806)
+
+#### Gemini (APPROVE)
+- No concerns raised.
+
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `liveServerIsCurrent` never compares the server version, so a same-path `npm i -g` upgrade gets no restart hint → **Addressed**: version comparison added; the fixture that asserted the defect was flipped; new same-path-upgrade test.
+- **Concern**: adopt writes the requested `serverPath` with the live process's version, so the changed-path hint is consumed on first use → **Addressed**: adopt keeps the live `serverPath`; new changed-path-twice test.
+- **Concern**: `runIdeServerCommand` buffers stdout without limit → **Addressed**: 64 KB cap and a flooding-server test.
+
+#### Claude (APPROVE)
+- **Concern**: the one-shot hint and a status that mixes two binaries → **Addressed** (as Codex above).
+- **Concern**: an existing extensions dir is not tightened to 0700 → **N/A**: matches the spec; a hardening follow-up at most.
+- **Concern**: the preflight installs into a live server's extensions dir → **N/A**: by design, flagged by `restartRequired`.
+- **Concern**: the build couples CI jobs to apps/vscode health → **N/A**: owner ruling (phase 1).
+
+#### Architect integration review (main, round 1)
+- **Concern**: the Codex headline item → **Addressed** (above).
+- **Concern**: tell #1668 users where extensions now go → **Addressed**: one paragraph in both command references and the four afx skill copies.
+- **Concern**: a release-time guard for the floor coupling → **Addressed**: a pre-flight check in `codev/protocols/release/protocol.md` (the skeleton carries no RELEASE protocol).
+
 ## Lessons Learned
 
 ### What Went Well
@@ -195,7 +217,7 @@
 - **Flaky session-manager tests** failed porch's `tests` check intermittently, and porch printed only stderr, so the failing test was unnamed (#1800, #1801). A bounded repro loop named it.
 
 ### What Would Be Done Differently
-- Model the "live process versus desired state" comparison explicitly in the plan, rather than deriving `restartRequired` from the install outcome.
+- Model the "live process versus desired state" comparison explicitly in the plan, for every field of the record, rather than deriving `restartRequired` from the install outcome. Fixing one field at a time took three review rounds (sidebar in phase 4, server path in phase 5, server version and the recorded path in the PR review).
 - Check every adopter-facing doc twin (skills and command references, root and skeleton) in the plan's doc phase, not only the files the spec lists.
 
 ### Methodology Improvements
@@ -221,7 +243,6 @@
 ## Follow-up Items
 
 For the architect to decide whether to file (none were self-filed):
-- The server-path restart hint is one-shot. Adopt writes the new `serverPath` but keeps the prior `serverVersion`, so a second start drops the hint, and status can pair a path and version from two binaries.
 - `afx ide stop` can wait up to `IDE_START_BUDGET_MS` with no progress line when queued behind a start.
 - Pre-existing: `afx ide start --port abc` parses to NaN, and Tower silently defaults to 8200.
 - Pre-existing (#1668): `afx ide start` prints the launcher script's PID, while `afx ide status` prints the PID listening on the port (its node child).

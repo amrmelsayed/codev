@@ -21,6 +21,7 @@ import {
   checkIdeServerVersion,
   compareVersions,
   parseIdeServerVersion,
+  runIdeServerCommand,
 } from '../lib/ide-version.js';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -219,6 +220,14 @@ describe('checkIdeServerVersion', () => {
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(error).toBeInstanceOf(IdeServerVersionError);
     expect((error as Error).message).toContain('did not answer --version');
+  });
+
+  it('keeps only a bounded head of a flooding stdout', async () => {
+    const server = fakeServer('floods', `echo 1.138.0\nhead -c 1000000 /dev/zero | tr '\\0' x`);
+    const run = await runIdeServerCommand(server, ['--version'], { timeoutMs: 5_000, env: buildIdeServerEnv() });
+    expect(run.stdout.length).toBeLessThanOrEqual(64_000);
+    expect(run.stdout.startsWith('1.138.0\n')).toBe(true);
+    await expect(checkIdeServerVersion(server)).resolves.toEqual({ version: '1.138.0' });
   });
 
   it('refuses unparseable output, quoting line 1 (Scenario 9)', async () => {

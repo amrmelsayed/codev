@@ -130,7 +130,7 @@ function recordOn(port: number, pid: number, extra: Partial<IdeServerRecord> = {
     serverPath: SERVER_PATH,
     pid,
     startedAt: '2026-10-01T00:00:00.000Z',
-    serverVersion: '1.130.0',
+    serverVersion: '1.135.0',
     extensionsDir: EXTENSIONS_DIR,
     sidebarVersion: '3.3.4',
     ...extra,
@@ -286,7 +286,7 @@ describe('live-port adopt', () => {
     expect(restartRequired).toBe(false);
     expect(fakes.spawnCalls).toHaveLength(0);
     expect(fakes.ports.get(8200)).toEqual([4100]);
-    expect(record).toMatchObject({ pid: 4100, serverVersion: '1.130.0', extensionsDir: EXTENSIONS_DIR, sidebarVersion: '3.3.4' });
+    expect(record).toMatchObject({ pid: 4100, serverVersion: '1.135.0', extensionsDir: EXTENSIONS_DIR, sidebarVersion: '3.3.4' });
   });
 
   it('keeps flagging a restart on later starts until the server loads the upgraded sidebar', async () => {
@@ -314,14 +314,33 @@ describe('live-port adopt', () => {
     expect(restartRequired).toBe(true);
   });
 
-  it('flags a restart when the live server was started from a different server path', async () => {
-    fakes.seedRecord(recordOn(8200, 4100, { serverPath: '/old/bin/codev-ide-server' }));
+  it('keeps flagging a restart on later starts from a different server path, recording the live binary', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { serverPath: OLD_SERVER_PATH, serverVersion: '1.130.0' }));
     fakes.ports.set(8200, [4100]);
 
-    const { record, restartRequired } = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+    const first = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+    const second = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
 
-    expect(restartRequired).toBe(true);
-    expect(record.serverPath).toBe(SERVER_PATH);
+    expect(first.restartRequired).toBe(true);
+    expect(second.restartRequired).toBe(true);
+    // The record (and so `afx ide status`) describes the live process, not the requested binary.
+    expect(readIdeRecord()).toMatchObject({ pid: 4100, serverPath: OLD_SERVER_PATH, serverVersion: '1.130.0' });
+    expect(fakes.spawnCalls).toHaveLength(0);
+    expect(fakes.ports.get(8200)).toEqual([4100]);
+  });
+
+  it('keeps flagging a restart after the server was upgraded in place at the same path', async () => {
+    // `npm i -g @cluesmith/codev-ide` keeps the bin path; the live process still runs 1.130.0.
+    fakes.seedRecord(recordOn(8200, 4100, { serverVersion: '1.130.0' }));
+    fakes.ports.set(8200, [4100]);
+
+    const first = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+    const second = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+
+    expect(first.restartRequired).toBe(true);
+    expect(second.restartRequired).toBe(true);
+    expect(readIdeRecord()).toMatchObject({ pid: 4100, serverPath: SERVER_PATH, serverVersion: '1.130.0' });
+    expect(fakes.spawnCalls).toHaveLength(0);
     expect(fakes.ports.get(8200)).toEqual([4100]);
   });
 
