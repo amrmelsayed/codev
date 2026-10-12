@@ -341,6 +341,7 @@ describe('ensureSidebarInstalled', () => {
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(error).toBeInstanceOf(IdeSidebarInstallError);
     expect((error as Error).message).toContain('timed out after 0.3s');
+    expect((error as Error).message).toContain('bundles codev-vscode as a built-in');
   });
 
   it('throws when the install succeeds but the index does not list the embedded version', async () => {
@@ -353,6 +354,7 @@ describe('ensureSidebarInstalled', () => {
     }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(IdeSidebarInstallError);
     expect((error as Error).message).toContain('lists no version');
+    expect((error as Error).message).not.toContain('built-in');
   });
 
   it('warns and returns missing-vsix without running the server (Scenario 16)', async () => {

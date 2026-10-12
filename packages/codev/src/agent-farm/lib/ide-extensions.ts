@@ -143,14 +143,16 @@ export function readInstalledExtensionVersion(dir: string, id: string): string |
 
 /** Thrown when the server CLI fails to install the embedded sidebar. */
 export class IdeSidebarInstallError extends Error {
-  constructor(detail: string) {
-    super(
-      `${detail}. The usual cause is a Codev IDE server that bundles codev-vscode as a built-in extension, ` +
-        'which refuses the install; use a server package that does not ship the sidebar',
-    );
+  constructor(message: string) {
+    super(message);
     this.name = 'IdeSidebarInstallError';
   }
 }
+
+/** Likely cause of a refused install, appended only when the CLI itself failed. */
+const BUILT_IN_SIDEBAR_HINT =
+  'The usual cause is a Codev IDE server that bundles codev-vscode as a built-in extension, ' +
+  'which refuses the install; use a server package that does not ship the sidebar';
 
 export interface EnsureSidebarInstalledOptions {
   /** Defaults to `getIdeExtensionsDir()`. */
@@ -228,5 +230,5 @@ function describeInstallFailure(serverPath: string, sidebar: EmbeddedSidebar, fa
   if (failure.stderr !== '') {
     detail = `${detail}: ${failure.stderr}`;
   }
-  return detail;
+  return `${detail}. ${BUILT_IN_SIDEBAR_HINT}`;
 }
