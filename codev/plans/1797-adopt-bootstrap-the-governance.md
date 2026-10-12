@@ -10,14 +10,17 @@ launch, change detection, validation, consult, summary), and a new **bootstrap m
 `update-arch-docs` skill that owns the content contract. `codev adopt` offers the command at
 the end (after any conflict-merge session has exited); `codev update` prints a hint.
 
-The work splits into five phases, ordered so each builds only on finished, tested pieces:
+The work splits into six phases, ordered so each builds only on finished, tested pieces:
 
 1. Pure library: placeholder classifier, non-empty-repo rule, hot/cold validator.
-2. Content: skill bootstrap mode + sensitive-material rejection (four copies) and the
-   bootstrap prompt template (both trees).
-3. Harness capability: "launch interactively with an initial task prompt", Claude + Codex.
-4. The `codev bootstrap-docs` command: orchestration, change detection, consult, summary.
-5. `adopt` / `update` integration and user docs.
+2. Content: skill bootstrap mode + sensitive-material rejection (four copies, with four-copy
+   parity enforced by test) and the bootstrap prompt template.
+3. Harness capability: "launch interactively with an initial task prompt", Claude + Codex,
+   gated so an unrecognised command never inherits Claude's convention.
+4. The `codev bootstrap-docs` core: eligibility, launch, change detection (reusing the
+   existing consult tree tripwire, promoted to `lib/`), validation, summary.
+5. Draft review: the 3-way consult on the drafts and its report.
+6. `adopt` / `update` integration and user docs.
 
 Decisions this plan makes that the spec deferred:
 
@@ -51,6 +54,23 @@ Decisions this plan makes that the spec deferred:
   fetch any `codev/...` framework path.
 - **Fallback prompt file** goes to `.consult/bootstrap-docs/prompt.md` (gitignored, already
   exempt from the change detector), alongside the consult outputs.
+- **Missing governance files are not eligible.** The spec gates rewriting on "classified as
+  an untouched starter"; a missing file is not a starter. The command reports it and tells
+  the user to run `codev update` (which restores the starter skip-existing) and re-run. This
+  keeps eligibility strictly the spec's predicate (CMAP iter1, Codex).
+- **Prompt template is skeleton-only.** It lives at
+  `codev-skeleton/templates/bootstrap-docs-prompt.md` and is read from the installed package.
+  `codev/templates/` is not a full mirror (it already omits both `*.starter.md` files, for the
+  same reason: nothing reads them from the instance tree), so an instance copy would be an
+  unconsumed drift surface. Our own instance gets the change through the skill copies and the
+  CLI. (CMAP iter1, Claude.)
+- **Change detection reuses `tree-tripwire.ts`.** `packages/codev/src/commands/consult/tree-tripwire.ts`
+  (#1649) already snapshots `git status --porcelain -z --untracked-files=all` paths with
+  content hashes, tolerates a repo with no commits, and diffs HEAD/branch identity, with the
+  same documented limits (gitignored paths invisible). Its generic core moves to
+  `packages/codev/src/lib/tree-snapshot.ts`; the consult module keeps its consult-specific
+  ignore rules and re-exports. Staging moves porcelain XY codes, so no separate index
+  fingerprint is needed. (CMAP iter1, Claude.)
 
 ## Phases (Machine Readable)
 
@@ -60,8 +80,9 @@ Decisions this plan makes that the spec deferred:
     {"id": "phase_1", "title": "Governance-doc classifier and validator library"},
     {"id": "phase_2", "title": "Skill bootstrap mode and bootstrap prompt template"},
     {"id": "phase_3", "title": "Harness capability for interactive task launch"},
-    {"id": "phase_4", "title": "codev bootstrap-docs command"},
-    {"id": "phase_5", "title": "adopt and update integration plus docs"}
+    {"id": "phase_4", "title": "codev bootstrap-docs command core"},
+    {"id": "phase_5", "title": "Three-way review of the drafts"},
+    {"id": "phase_6", "title": "adopt and update integration plus docs"}
   ]
 }
 ```
@@ -93,11 +114,13 @@ decide about eligibility and validity comes from here.
 - [ ] `knownStarterTexts(file, templatesDir)`: current skeleton starter + the pre-#1012 cold
       variant (embedded as a constant with a comment citing the commits).
 - [ ] `classifyGovernanceFile(content, starters)` → `'missing' | 'placeholder' | 'curated'`
-      implementing the spec predicate exactly: every non-blank line (trimmed-right) appears
-      verbatim in some known starter, **and** at least one starter marker is present
-      (`_No … yet._` line, `- <…>` slot line, or a line containing `STARTER:`). Any doubt ⇒
-      `curated`. `missing` is reported separately (the command treats a missing file as
-      eligible only because adopt/update would have created the starter; see Phase 4).
+      implementing the spec predicate exactly: there exists **one** known starter version
+      such that every non-blank line of the file appears **verbatim** among that version's
+      lines (no trimming; the only normalisation is CRLF → LF, so a checkout with
+      `core.autocrlf` is not misread as curated), **and** at least one starter marker is
+      present (`_No … yet._` line, `- <…>` slot line, or a line containing `STARTER:`).
+      Lines may not be mixed across starter versions. Any doubt ⇒ `curated`. `missing` is
+      its own class and is **not** eligible (see Executive Summary).
 - [ ] `isNonEmptyRepo(root)`: `git ls-files --cached --others --exclude-standard -z` inside
       a git work tree; otherwise a filesystem walk honouring `.gitignore` at the root plus the
       fixed Codev-generated exclusions (`codev/`, `.codev/`, `.claude/`, `.codex/`,
@@ -111,21 +134,34 @@ decide about eligibility and validity comes from here.
       when the cold doc has ≤ 12 top-level sections).
 - [ ] `validateColdFile(content)` → leftover markers; > 12 top-level sections flagged only
       when the file was written by the pass (caller passes a flag).
-- [ ] Map-entry matching rule documented in code: an entry matches a section when the entry
-      text, after `- `, starts with the section heading text followed by a non-word
-      boundary (e.g. ` — `, ` -`, `:`), compared case-sensitively after trimming.
+- [ ] Map-entry matching rule, documented in code and fixed by tests:
+  - the entry's **name part** is the text after `- ` up to the first ` — `, ` - ` or `: `
+    (or the whole entry when none occurs, so `- Security` alone is valid);
+  - a cold section's **short name** is its `## ` heading text truncated at the first ` (`,
+    `: ` or ` — ` (so `## Critical (Prevent Major Failures)` has short name `Critical`);
+  - an entry is valid when its name part equals a section's full heading or short name
+    (case-sensitive, trimmed) and that resolves to **exactly one** section; zero or several
+    matches are violations.
+  - This was corrected after CMAP iter1: a plain "starts with the heading" rule fails our own
+    `lessons-critical.md` (`- Critical — …` vs `## Critical (Prevent Major Failures)`).
 
 #### Acceptance Criteria
 
 - [ ] Shipped starters (all four, plus the pre-#1012 cold variant) classify as `placeholder`.
 - [ ] `lessons-critical.md` exactly as shipped (three seeded lessons) is `placeholder`.
 - [ ] A starter with one added real line, or with one slot line edited, is `curated`.
+- [ ] A line with changed trailing whitespace is `curated`; a CRLF copy of a starter is
+      `placeholder`; a file mixing lines from the current and the pre-#1012 cold starter is
+      `curated`.
+- [ ] A missing file classifies as `missing`.
 - [ ] A starter with all markers removed but no other edits is `curated` (no marker ⇒ doubt).
 - [ ] This repo's `codev/resources/arch-critical.md` + `arch.md` and
       `lessons-critical.md` + `lessons-learned.md` produce **no** violations (spec scenario 12;
       `arch.md` has 19 sections, so unmapped sections appear as information only).
 - [ ] Each of: leftover slot, 11th fact, 13th map entry, 36 non-comment lines, map entry
-      naming a non-existent section produces exactly the expected violation (scenario 11).
+      naming a non-existent section produces exactly the expected violation (scenario 11);
+      an ambiguous name part (matching two sections' short names) is a violation; a bare
+      `- Section` entry is valid.
 - [ ] `isNonEmptyRepo`: only Codev-generated files ⇒ false; one untracked source file in a
       repo with no commits ⇒ true; an ignored file only ⇒ false; non-git directory with one
       source file ⇒ true.
@@ -158,11 +194,12 @@ A prompt template packages the per-run instructions the CLI fills in.
   - `.codex/skills/update-arch-docs/SKILL.md`
   - `codev-skeleton/.claude/skills/update-arch-docs/SKILL.md`
   - `codev-skeleton/.codex/skills/update-arch-docs/SKILL.md`
-- Create `codev-skeleton/templates/bootstrap-docs-prompt.md` and its instance mirror
-  `codev/templates/bootstrap-docs-prompt.md` (two-tree rule; `codev/templates/` already
-  mirrors the skeleton templates).
-- Modify `packages/codev/src/__tests__/skill-parity.test.ts` only if it enumerates skill
-  content rather than diffing copies (verify first; expected: no change needed).
+- Create `codev-skeleton/templates/bootstrap-docs-prompt.md` (skeleton-only; rationale in the
+  Executive Summary).
+- Modify `packages/codev/src/__tests__/spec-1280-skills-parity.test.ts`: add
+  `'update-arch-docs'` to `TOUCHED_SKILLS`. Today `skill-parity.test.ts` only compares
+  `.claude` ↔ `.codex` within each tree and the four-tree byte check covers only
+  `runnable-worktrees` and `codev`, so a forgotten skeleton pair would pass green.
 
 #### Deliverables
 
@@ -197,18 +234,19 @@ A prompt template packages the per-run instructions the CLI fills in.
 
 #### Acceptance Criteria
 
-- [ ] All four skill copies are byte-identical; `skill-parity.test.ts` (#1196/#1489) green.
-- [ ] Skeleton and instance prompt templates are byte-identical.
+- [ ] All four skill copies are byte-identical, now enforced across trees by
+      `spec-1280-skills-parity.test.ts`; `skill-parity.test.ts` green.
 - [ ] No sentence in the skill or prompt instructs the agent to fetch a `codev/...`
-      framework path (`codev/resources/*.md` governance files are user files and may be named).
+      framework path (`codev/resources/*.md` governance files are user files and may be
+      named). This is a **manual** read-through: `framework-ref-audit.ts` scans only
+      `protocols/` and `roles/`.
 - [ ] Build and full package test suite pass.
 
 #### Test Plan
 
 - Existing parity tests cover the four copies.
 - New assertions in `governance-bootstrap.test.ts` (or a small `bootstrap-docs-prompt.test.ts`):
-  the packaged template exists, contains every placeholder exactly once, and the skeleton
-  and `codev/templates/` copies match.
+  the packaged template exists and contains every placeholder exactly once.
 - Manual read-through of the rendered prompt against the spec's content contract.
 
 ---
@@ -237,12 +275,26 @@ Claude flags, with the fallback decided by capability absence.
       (`[prompt]`), verified against each CLI's `--help` (recorded in the doc comment with
       the verification date).
 - [ ] OpenCode and custom harnesses do not implement it.
+- [ ] `resolveInteractiveTaskLauncher(command, harnessName, customHarnesses)`: returns the
+      capability only when the harness is identified **positively**, i.e. an explicit
+      `shell.architectHarness` naming a built-in that declares it, or
+      `detectHarnessFromCommand(command)` returning such a built-in. `resolveHarness`'s
+      silent fall-through to `CLAUDE_HARNESS` for an unrecognised command is treated as
+      unsupported, so `aider …` never receives Claude's positional prompt (CMAP iter1,
+      Claude). Retired names surface the retirement message as "unsupported".
+- [ ] Command tokenisation reuses the existing pattern for `shell.architect` (string split on
+      whitespace as in `agent-farm/commands/architect.ts`, or the array form when config
+      gives `string[]`): executable = first token, then configured flags, then the
+      capability's args.
 - [ ] Tests for this phase.
 
 #### Acceptance Criteria
 
 - [ ] Claude and Codex return `[prompt]`; OpenCode and a custom provider return `undefined`
       for the capability.
+- [ ] `resolveInteractiveTaskLauncher`: `claude --dangerously-skip-permissions` and
+      `/opt/homebrew/bin/codex` resolve; `aider --model x` and a custom harness resolve to
+      unsupported; an explicit `architectHarness: "codex"` with an odd command path resolves.
 - [ ] Existing harness tests stay green; type check passes.
 
 #### Test Plan
@@ -252,79 +304,84 @@ and a custom config.
 
 ---
 
-### Phase 4: `codev bootstrap-docs` command
+### Phase 4: `codev bootstrap-docs` command core
 
 **Dependencies**: Phases 1, 2, 3
 
 #### Objective
 
-The user-facing, re-runnable pass, end to end, with all failure paths reported and nothing
-destructive.
+The user-facing, re-runnable pass from eligibility to summary, with all failure paths
+reported and nothing destructive. The draft review is added in Phase 5.
 
 #### Files to Create / Modify
 
 - Create `packages/codev/src/commands/bootstrap-docs.ts`
-- Create `packages/codev/src/lib/change-snapshot.ts` (pre/post snapshot + diff report; kept
-  separate because it is reusable and independently testable)
+- Create `packages/codev/src/lib/tree-snapshot.ts` by moving the generic core of
+  `packages/codev/src/commands/consult/tree-tripwire.ts` (`snapshotTree`, the diff with a
+  caller-supplied ignore predicate, `diffRepositoryIdentity`, `readIdentity`, `hashPath`)
+- Modify `packages/codev/src/commands/consult/tree-tripwire.ts` to import/re-export from
+  `lib/tree-snapshot.ts`, keeping its consult-owned ignore rules and warning formatters;
+  existing tripwire tests stay green unchanged
+- Add a non-git fallback in `lib/tree-snapshot.ts`: a filesystem snapshot (path → content
+  hash) using the same walk as Phase 1's `isNonEmptyRepo` (root `.gitignore` honoured,
+  `.git/` and `node_modules/` skipped), so source edits outside git are detected too
 - Modify `packages/codev/src/cli.ts` (register `bootstrap-docs` with `--dry-run`; there is
   deliberately no `-y`, because the pass always confirms before launching an agent)
 - Create `packages/codev/src/__tests__/bootstrap-docs.test.ts`
-- Create `packages/codev/src/__tests__/change-snapshot.test.ts`
+- Create `packages/codev/src/__tests__/tree-snapshot.test.ts` (non-git fallback + bootstrap-specific cases)
 
 #### Deliverables
 
 - [ ] Flow, in order:
   1. Locate the project root (cwd must contain `codev/`; otherwise error suggesting
      `codev adopt`).
-  2. Classify the four files (Phase 1). A **missing** file counts as eligible and is listed
-     as "will be created" (adopt/update create them, but a user may have deleted one).
+  2. Classify the four files (Phase 1). A **missing** file is not eligible; it is listed with
+     "run `codev update` to restore the starter, then re-run".
   3. If no file is eligible: print "nothing needs bootstrapping" with per-file status, exit 0,
      launch nothing (no-op re-run, scenario 2).
   4. If the repo is empty (Phase 1 rule): print the explanatory no-op, exit 0 (scenario 5).
   5. `--dry-run`: print eligibility and the resolved launch, exit 0.
   6. Build the prompt: render the Phase 2 template with the packaged skill text, eligible
      and curated lists, project name and git digest (window defined in the Executive Summary).
-  7. Resolve the agent command and harness from config (`shell.architect` /
-     `shell.architectHarness`, via `loadConfig` + `resolveHarness`). If the harness lacks
-     `buildInteractiveTaskLaunch`, or the command's executable is not on `PATH`: write the
-     prompt to `.consult/bootstrap-docs/prompt.md`, print manual instructions, exit 0
-     without launching (scenario 15). A retired-harness error is reported the same way.
+     The digest checks `git rev-parse --verify HEAD` first; a repo with no commits (or no
+     git) gets "no commit history; work from the code alone" instead of a failing `git log`.
+  7. Resolve the launcher with Phase 3's `resolveInteractiveTaskLauncher` from config
+     (`shell.architect` / `shell.architectHarness` via `loadConfig`). If unsupported, or the
+     executable is not on `PATH`: write the prompt to `.consult/bootstrap-docs/prompt.md`,
+     print manual instructions, exit 0 without launching (scenario 15).
   8. Pre-launch statement + confirm (default **No**): the exact command that will run,
      that it reads the codebase and git log, the writable files, that it consumes model quota,
      and the permission mode inherited from config. Non-TTY stdin ⇒ treat as declined, print
      the command to run interactively.
-  9. Snapshot (change-snapshot), then spawn the agent with `stdio: 'inherit'` and **await**
+  9. Snapshot (`lib/tree-snapshot.ts` + governance-file hashes), then spawn the agent with `stdio: 'inherit'` and **await**
      its exit (a Promise around `spawn`'s `exit`/`error`).
   10. Post-run: change report (below), validation of each eligible file (Phase 1),
-      unwritten-eligible detection (file still classifies as placeholder/missing).
-  11. Consult (when at least one eligible file was written): run
-      `consult -m <gemini|codex|claude> --prompt-file <review prompt> --output
-      .consult/bootstrap-docs/<model>.md` for the three models in parallel, wait for all;
-      name each failed/skipped reviewer; if `consult` cannot be spawned at all, warn and
-      continue. The review prompt asks for system-shape accuracy, invented lessons,
-      enumerations/aspirational content, and **sensitive material**. Feedback is never
-      applied automatically.
-  12. Summary: files written, per-file validation result, out-of-scope changes, consult
-      pointer, and an explicit "review before commit — nothing has been staged or committed"
-      message.
+      unwritten-eligible detection (file still classifies as placeholder, or was deleted).
+  11. (Phase 5 inserts the draft review here.)
+  12. Summary: files written, per-file validation result, out-of-scope changes, and an
+      explicit "review before commit — nothing has been staged or committed" message.
 - [ ] Exit code: non-zero when the change report names any out-of-scope change, a curated
       governance file changed, HEAD/index changed, or validation failed / an eligible file
       was left unwritten. Drafts are always kept; nothing is reverted.
-- [ ] `change-snapshot`:
-  - git work tree: record HEAD (`git rev-parse HEAD`, tolerating no commits), an index
-    fingerprint (hash of `git ls-files --stage`), and for every path reported by
-    `git status --porcelain=v1 -z --untracked-files=all` its status plus content hash; also
-    content hashes of the four governance files. After: the same; any path whose
-    (status, hash) changed or appeared/disappeared is out-of-scope unless it is an eligible
-    file or under `.consult/bootstrap-docs/`.
-  - non-git directory: snapshot only the four governance files and print that change
-    detection is limited to them.
-  - Documented limitation: changes to gitignored paths are not detected (stated in the
-    summary when in a git repo).
+- [ ] Change report, built on `lib/tree-snapshot.ts` plus direct content hashes of the four
+      governance files (clean tracked files do not appear in porcelain, so curated files are
+      hashed explicitly):
+  - **exit-bearing**: a curated governance file changed; HEAD or branch moved; any path
+    other than an eligible file changed status or content (porcelain XY codes also move
+    on staging, which covers the index);
+  - **exempt**: eligible files, `.consult/` (the tripwire's existing consult-owned prefix);
+  - **informational** (named, does not change the exit code): harness-owned local scratch
+    paths, initially `.claude/settings.local.json`, which a non-bypass Claude session writes
+    on a "don't ask again" answer and which is not gitignored (CMAP iter1, Claude). The list
+    is a named constant with this rationale.
+  - The summary states the detector's scope: gitignored paths are not watched (git), or the
+    walk's exclusions (non-git).
 - [ ] Tests for this phase.
 
 #### Acceptance Criteria
 
+- [ ] A missing governance file is reported, not created, and does not launch the agent on
+      its own.
 - [ ] Re-run on a populated result: no agent spawned, files byte-identical, exit 0
       (scenario 2).
 - [ ] Empty repo and no-eligible-file paths launch nothing.
@@ -338,26 +395,75 @@ destructive.
 - [ ] Mixed state (curated `arch.md` with > 12 sections, three placeholders): `arch.md`
       byte-identical; map entries checked against real sections; unmapped listed as info
       (scenario 3).
-- [ ] Consult: one reviewer failing and `consult` missing both complete with the right
-      message (scenario 16).
+- [ ] A stub agent writing `.claude/settings.local.json` alongside valid drafts ⇒ path
+      named as informational, exit 0.
+- [ ] Non-git directory: a stub agent editing a source file ⇒ named, exit non-zero.
+- [ ] Existing `tree-tripwire` tests and `consult-readonly-review.e2e.test.ts` green after the
+      move.
 - [ ] Build, type check and full package suite pass.
 
 #### Test Plan
 
-Integration-style tests in temp git repos. The agent is a stub: tests point
-`shell.architect` at a small executable script (written into the temp dir) that performs the
-scenario's writes, with `shell.architectHarness` set to a test-registered capability via a
-dependency-injection seam on the command (`runBootstrapDocs(opts, deps)` with injectable
-`confirm`, `spawnAgent`, `runConsult`, `stdinIsTTY`), so no real model is invoked and no
-prompt waits on input. `consult` is stubbed through the same seam. `change-snapshot` gets
-its own unit tests (pre-existing dirt left alone ⇒ clean; new untracked file ⇒ reported;
-modified tracked file ⇒ reported; commit ⇒ HEAD change; `git add` ⇒ index change).
+Integration-style tests in temp git repos (and one non-git temp dir). The agent is a stub
+injected through a dependency seam on the command (`runBootstrapDocs(opts, deps)` with
+injectable `confirm`, `spawnAgent`, `resolveLauncher`, `stdinIsTTY`): `spawnAgent` performs
+the scenario's writes in-process and resolves, so no real model runs and no prompt waits on
+input (`confirm()` has no TTY guard and would never settle on EOF). `lib/tree-snapshot.ts`
+gets unit tests for the non-git fallback; the git path is covered by the moved tripwire tests
+plus: pre-existing dirt left alone ⇒ clean; new untracked file ⇒ reported; modified tracked
+file ⇒ reported; commit ⇒ HEAD change; `git add` ⇒ reported.
 
 ---
 
-### Phase 5: adopt and update integration plus docs
+### Phase 5: Three-way review of the drafts
 
 **Dependencies**: Phase 4
+
+#### Objective
+
+Run the 3-way general consult on the drafts when consultation is available, save the
+feedback where the human can find it, and never apply it.
+
+#### Files to Create / Modify
+
+- Modify `packages/codev/src/commands/bootstrap-docs.ts` (step 11 and the summary)
+- Add the review prompt to `codev-skeleton/templates/bootstrap-docs-review-prompt.md`
+- Extend `packages/codev/src/__tests__/bootstrap-docs.test.ts`
+
+#### Deliverables
+
+- [ ] When at least one eligible file was written: write the rendered review prompt (asks for
+      system-shape accuracy against the repo, invented or unevidenced lessons,
+      enumerations/changelog/aspirational content, cap/map problems, and **sensitive
+      material**) and run
+      `consult -m <gemini|codex|claude> --prompt-file <review prompt> --output
+      .consult/bootstrap-docs/<model>.md` for the three models in parallel; wait for all.
+      General mode with an explicit `--output` needs no project detection, so it works in a
+      freshly adopted repo.
+- [ ] Each failed or skipped reviewer is named; if `consult` cannot be spawned at all, warn
+      and continue. Consult outcome never changes the exit code.
+- [ ] Summary gains a one-line pointer to `.consult/bootstrap-docs/`.
+- [ ] `runConsult` joins the injectable deps.
+- [ ] Tests for this phase.
+
+#### Acceptance Criteria
+
+- [ ] Nothing written ⇒ no consult.
+- [ ] All three succeed ⇒ pointer printed; one fails ⇒ named, pass completes; `consult`
+      missing ⇒ warning, pass completes (scenario 16).
+- [ ] Consult outputs under `.consult/` never appear in the change report.
+- [ ] Build, type check and full package suite pass.
+
+#### Test Plan
+
+Stubbed `runConsult` for each outcome; one assertion that the real argv built for each model
+matches the consult CLI's registered options (`cli-options.ts`).
+
+---
+
+### Phase 6: adopt and update integration plus docs
+
+**Dependencies**: Phases 4, 5
 
 #### Objective
 
@@ -368,7 +474,13 @@ document it.
 
 - Modify `packages/codev/src/commands/adopt.ts`
 - Modify `packages/codev/src/commands/update.ts`
-- Modify `packages/codev/src/__tests__/adopt.test.ts` (and the update tests file)
+- Modify `packages/codev/src/__tests__/adopt.test.ts` (and the update tests file). Two
+  existing mocks must change or the suite breaks (CMAP iter1, Claude): the
+  `node:child_process` mock's `spawn` returns an object whose `on` is a no-op, so an awaited
+  merge child never settles (the conflict test would time out) — it must invoke the `exit`
+  handler; and the `node:readline` mock answers `y` to every question, which would
+  auto-accept the new bootstrap offer in every non-`-y` test — the offer must go through
+  the injected seam and default to declining in existing tests.
 - Modify `codev/resources/commands/codev.md` (command reference; `codev/resources/commands/`
   has no skeleton twin, verified during the phase) and the skeleton's adopt-facing docs if
   they describe post-adopt steps (grep both trees for "codev adopt")
@@ -378,7 +490,9 @@ document it.
 #### Deliverables
 
 - [ ] `adopt`: the conflict-merge `claude` spawn becomes awaited (Promise on `exit`/`error`;
-      error path unchanged: print manual merge instructions). Only after it resolves:
+      error path unchanged: print manual merge instructions). The "Next steps" block moves to
+      the very end of `adopt`, after the merge session and the optional bootstrap. Only
+      after the merge session resolves:
       - `-y`: never launch; if the repo is non-empty and files are eligible, print
         "run `codev bootstrap-docs` to draft the governance docs from this codebase".
       - interactive, non-empty repo, eligible files: ask "Draft the governance docs from this
@@ -427,14 +541,16 @@ the real system shape, cap respected, and a re-run that changes nothing.
 | Awaiting adopt's merge session changes adopt's behaviour for existing users | Medium | Medium | Only the timing changes (adopt now returns after the session); error path kept; covered by ordering test |
 | Long inlined prompt (skill + digest) exceeds argv limits | Low | Medium | Digest is bounded (≤ 450 subject lines); total well under macOS/Linux `ARG_MAX`; if the rendered prompt exceeds a conservative 100 KB, fall back to the prompt file + instructions |
 | Classifier false "placeholder" on a lightly curated file | Low | High | Subset-AND-marker predicate, doubt ⇒ curated; tests for half-edited starters; output is uncommitted |
-| Change detector false positives from tools the agent runs (e.g. lockfile churn) | Medium | Low | Reported, not reverted; the human decides; message explains the detector's scope |
-| Map-entry matching too strict for natural phrasing | Medium | Low | Rule is "starts with the section name"; our own curated file is the regression fixture |
+| Change detector false positives from tools the agent runs (e.g. lockfile churn, harness settings) | Medium | Low | Known harness scratch paths are informational; anything else is reported, not reverted; the human decides |
+| Map-entry matching too strict for natural phrasing | Medium | Low | Name-part vs heading/short-name rule; our own curated hot files are the regression fixtures |
+| Moving tripwire code breaks consult's read-only review guard | Low | Medium | Pure move with re-export; existing tripwire + e2e tests must stay green unchanged |
 | Consult cost/latency on every run | Low | Low | Runs only when something was written; parallel; failures non-blocking |
 | Codex positional-prompt behaviour changes upstream | Low | Low | Capability is per harness; doc comment records the verification date; fallback exists |
 
 ## Documentation Updates
 
 - `update-arch-docs` skill (four copies): bootstrap mode + sensitive-material rejection.
+- New skeleton templates: `bootstrap-docs-prompt.md`, `bootstrap-docs-review-prompt.md`.
 - `codev/resources/commands/codev.md`: new `bootstrap-docs` command; adopt's next steps.
 - `codev/resources/arch.md` / `lessons-learned.md` (and hot tier only if a fact earns a slot):
   routed in the review phase per the two-tier rules.
