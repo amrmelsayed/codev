@@ -528,7 +528,12 @@ function printSummary(
   log(`  ${report.scope}`);
 
   log('');
-  log(chalk.yellow('Review before commit — nothing has been staged or committed.'));
+  if (report.identityChanges.length > 0 || report.indexChanged) {
+    log(chalk.yellow('Review before commit — Codev staged and committed nothing, but git state moved during the session (see above).'));
+    log('  Check `git log` and `git diff --cached` before trusting what is staged or committed.');
+  } else {
+    log(chalk.yellow('Review before commit — nothing has been staged or committed.'));
+  }
   log(`  Inspect the drafts with \`git diff\` (or open them), edit as needed, then commit them yourself.`);
 }
 
@@ -574,6 +579,9 @@ export async function runBootstrapDocs(
   if (eligible.length === 0) {
     log('');
     log('Nothing needs bootstrapping: no governance file is still an untouched starter.');
+    if (files.some(status => status.class === 'missing')) {
+      log('Missing files are not created here: run `codev update` to restore their starters, then re-run.');
+    }
     return { exitCode: 0, outcome: 'nothing-eligible', files, launched: false };
   }
 

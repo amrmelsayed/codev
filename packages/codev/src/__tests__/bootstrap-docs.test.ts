@@ -186,7 +186,7 @@ describe('codev bootstrap-docs: no-op paths', () => {
     expect(result.outcome).toBe('nothing-eligible');
     expect(spawned).toEqual([]);
     expect(fs.existsSync(path.join(dir, resource('lessons-learned.md')))).toBe(false);
-    expect(output()).toContain('codev update');
+    expect(output()).toContain('Missing files are not created here');
   });
 
   it('holds back a hot placeholder whose cold doc is missing', async () => {
@@ -362,6 +362,54 @@ describe('codev bootstrap-docs: launched sessions', () => {
     expect(result.report?.identityChanges.map(change => change.field)).toEqual(['HEAD']);
     expect(result.report?.indexChanged).toBe(true);
     expect(output()).toContain('HEAD moved');
+    expect(output()).toContain('Codev staged and committed nothing, but git state moved');
+    expect(output()).not.toContain('nothing has been staged or committed');
+  });
+
+  it('a first commit in a repository with no commits is reported as HEAD movement', async () => {
+    git('init', '-q', '-b', 'main');
+    git('config', 'core.excludesFile', '/dev/null');
+    writeStarters();
+    write('src/main.ts', 'export const main = 1;\n');
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => {
+      writeDrafts();
+      git('commit', '-q', '--allow-empty', '-m', 'agent commit');
+    }));
+    expect(result.exitCode).toBe(1);
+    expect(result.report?.identityChanges).toEqual([
+      expect.objectContaining({ field: 'HEAD', before: '(no commits)' }),
+    ]);
+  });
+
+  it('a project in a subdirectory of its repository: valid drafts pass, a source edit is named', async () => {
+    git('init', '-q', '-b', 'main');
+    git('config', 'core.excludesFile', '/dev/null');
+    write('other/readme.md', 'x\n');
+    const project = path.join(dir, 'apps', 'svc');
+    const inProject = (rel: string): string => path.join('apps/svc', rel);
+    for (const [name, starter] of Object.entries(STARTERS)) {
+      write(inProject(resource(name)), fs.readFileSync(path.join(templatesDir, starter), 'utf-8'));
+    }
+    write(inProject('src/main.ts'), 'export const main = 1;\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+
+    const writeProjectDrafts = (): void => {
+      for (const [name, content] of Object.entries(DRAFTS)) write(inProject(resource(name)), content);
+    };
+    const clean = await runBootstrapDocs({ cwd: project }, deps(writeProjectDrafts));
+    expect(clean.report?.outOfScope).toEqual([]);
+    expect(clean.exitCode).toBe(0);
+
+    git('checkout', '-q', '--', '.');
+    lines = [];
+    const dirty = await runBootstrapDocs({ cwd: project }, deps(() => {
+      writeProjectDrafts();
+      write(inProject('src/main.ts'), 'edited\n');
+      write('other/readme.md', 'edited\n');
+    }));
+    expect(dirty.report?.outOfScope.map(change => change.path)).toEqual(['../../other/readme.md', 'src/main.ts']);
+    expect(dirty.exitCode).toBe(1);
   });
 
   it('nothing written ⇒ every eligible file reported unwritten (scenario 14)', async () => {

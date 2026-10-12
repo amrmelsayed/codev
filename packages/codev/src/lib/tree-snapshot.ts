@@ -44,6 +44,11 @@ export interface RepositoryIdentity {
   head: string | null;
   /** Branch name, or `HEAD` when detached. */
   branch: string | null;
+  /**
+   * True when HEAD names a branch with no commits yet (an unborn branch), so a `null` head
+   * means "no commits" rather than "could not tell" and a first commit is a real move.
+   */
+  unborn?: boolean;
 }
 
 /**
@@ -92,7 +97,40 @@ export function readIdentity(workspaceRoot: string): RepositoryIdentity {
     const [head, branch] = raw.trim().split('\n');
     return { head: head || null, branch: branch || null };
   } catch {
+    return readUnbornIdentity(workspaceRoot);
+  }
+}
+
+/** HEAD did not resolve: an unborn branch if HEAD still names one, else unknown. */
+function readUnbornIdentity(workspaceRoot: string): RepositoryIdentity {
+  try {
+    const branch = execFileSync('git', ['symbolic-ref', '--short', '--quiet', 'HEAD'], {
+      cwd: workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (typeof branch !== 'string' || branch.trim() === '') return NO_IDENTITY;
+    return { head: null, branch: branch.trim(), unborn: true };
+  } catch {
     return NO_IDENTITY;
+  }
+}
+
+/**
+ * Where `workspaceRoot` sits inside its repository (`git rev-parse --show-prefix`, e.g.
+ * `apps/web/`), or `''` at the top level or when git cannot say.
+ */
+function readRepoPrefix(workspaceRoot: string): string {
+  try {
+    const raw = execFileSync('git', ['rev-parse', '--show-prefix'], {
+      cwd: workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (typeof raw !== 'string') return '';
+    return raw.trim();
+  } catch {
+    return '';
   }
 }
 
@@ -152,6 +190,17 @@ export function snapshotTree(workspaceRoot: string): TreeSnapshot {
     return UNAVAILABLE(`git status returned ${typeof raw}, not text`);
   }
 
+  // Porcelain paths are relative to the repository's top level, not to `workspaceRoot`. When
+  // the workspace is a subdirectory, re-key every path relative to the workspace (a path
+  // outside it becomes `../…`) and hash it where it actually lives.
+  const prefix = readRepoPrefix(workspaceRoot);
+  const topLevel = path.resolve(workspaceRoot, ...prefix.split('/').filter(part => part !== '').map(() => '..'));
+  const locate = (repoRel: string): { key: string; absolute: string } => {
+    const absolute = path.join(topLevel, repoRel);
+    if (prefix === '') return { key: repoRel, absolute };
+    return { key: path.relative(workspaceRoot, absolute).split(path.sep).join('/'), absolute };
+  };
+
   const entries = new Map<string, string>();
   // Each record is `XY <path>`; rename/copy records are followed by a second NUL-terminated
   // field holding the ORIGINAL path, which must be consumed so it is not mistaken for the
@@ -162,11 +211,13 @@ export function snapshotTree(workspaceRoot: string): TreeSnapshot {
     const status = field.slice(0, 2);
     const rel = field.slice(3);
     if (!rel) continue;
-    entries.set(rel, `${status}:${hashPath(path.join(workspaceRoot, rel))}`);
+    const target = locate(rel);
+    entries.set(target.key, `${status}:${hashPath(target.absolute)}`);
     if (status[0] === 'R' || status[0] === 'C') {
       const origin = fields[++i];
       if (origin !== undefined) {
-        entries.set(origin, `${status}-from:${hashPath(path.join(workspaceRoot, origin))}`);
+        const source = locate(origin);
+        entries.set(source.key, `${status}-from:${hashPath(source.absolute)}`);
       }
     }
   }
@@ -328,6 +379,9 @@ export function diffSnapshotEntries(
   return [...changed].sort();
 }
 
+/** How an unborn branch's HEAD is shown in an identity change. */
+const NO_COMMITS = '(no commits)';
+
 /** One field of the repository's identity that moved between two snapshots. */
 export interface IdentityChange {
   field: 'HEAD' | 'branch';
@@ -340,19 +394,24 @@ export interface IdentityChange {
  *
  * A field that was unreadable at either end is skipped rather than reported as a change:
  * "we could not tell" and "it moved" are different claims, and only one of them is evidence.
+ * An unborn branch's missing HEAD is not unreadable; it is compared as `(no commits)`.
  */
 export function diffRepositoryIdentity(before: TreeSnapshot, after: TreeSnapshot): IdentityChange[] {
   if (!before.available || !after.available) return [];
 
   const changes: IdentityChange[] = [];
-  const fields: Array<[IdentityChange['field'], keyof RepositoryIdentity]> = [
+  const fields: Array<[IdentityChange['field'], 'head' | 'branch']> = [
     ['HEAD', 'head'],
     ['branch', 'branch'],
   ];
 
   for (const [label, key] of fields) {
-    const a = before.identity[key];
-    const b = after.identity[key];
+    let a = before.identity[key];
+    let b = after.identity[key];
+    // An unborn branch has no HEAD to read, and that is knowledge, not doubt: its first
+    // commit (or a move back to an unborn branch) is a change.
+    if (key === 'head' && a === null && before.identity.unborn) a = NO_COMMITS;
+    if (key === 'head' && b === null && after.identity.unborn) b = NO_COMMITS;
     if (a === null || b === null) continue;
     if (a !== b) changes.push({ field: label, before: a, after: b });
   }
