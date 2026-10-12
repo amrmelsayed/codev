@@ -21,3 +21,8 @@
 ## 2026-10-13 plan drafted
 - Plan written (6 phases: vsix packaging, version handshake, extensions dir/install, transactional preflight in spawnIdeServer, CLI discovery/install/status, docs + E2E).
 - Decisions in plan: embedded `ide-extension/{codev-vscode.vsix,manifest.json}`; vsce as apps/vscode devDep run via `pnpm --filter codev-vscode exec`; one promise-chain lock in ide-server.ts; E2E Tower restart needs human OK (isolated Tower offered as fallback).
+
+## 2026-10-13 plan-approval gate reached
+- Plan CMAP iter1: gemini APPROVE, codex/claude REQUEST_CHANGES (lock re-entrancy deadlock, CLI 30 s timeout vs preflight budget, build blast radius, skill parity wording). All folded in.
+- Iter2: gemini APPROVE, codex COMMENT, claude APPROVE; small refinements folded in (budget formula, import-safe manifest helper, below-floor + live server fails transactionally).
+- Waiting on human plan-approval.
