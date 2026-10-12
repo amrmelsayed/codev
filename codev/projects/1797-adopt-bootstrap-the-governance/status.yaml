@@ -1,7 +1,7 @@
 id: '1797'
 title: adopt-bootstrap-the-governance
 protocol: spir
-phase: specify
+phase: plan
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -16,7 +16,10 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-12T20:29:14.641Z'
+updated_at: '2026-10-12T20:29:16.810Z'
+context_refreshes:
+  - boundary: enter:plan
+    at: '2026-10-12T20:29:16.809Z'
