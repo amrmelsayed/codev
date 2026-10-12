@@ -45,29 +45,20 @@ try {
   }
 
   const globalRoot = execSync(`npm root -g --prefix "${prefix}"`, { encoding: 'utf8' }).trim();
-  const installedPkgDir = join(globalRoot, '@cluesmith', 'codev');
-  const installedVersion = JSON.parse(readFileSync(join(installedPkgDir, 'package.json'), 'utf8')).version;
-  const vsixPath = join(installedPkgDir, 'ide-extension', 'codev-vscode.vsix');
-  const manifestPath = join(installedPkgDir, 'ide-extension', 'manifest.json');
+  const ideExtensionDir = join(globalRoot, '@cluesmith', 'codev', 'ide-extension');
+  const vsixPath = join(ideExtensionDir, 'codev-vscode.vsix');
   if (existsSync(vsixPath)) {
     console.log('  OK: ide-extension/codev-vscode.vsix present');
   } else {
     console.error(`  FAIL: embedded sidebar vsix missing at ${vsixPath}`);
     failed = true;
   }
-  // Stable releases ship the sidebar at the package's own version. Pre-releases
-  // (e.g. 3.4.0-rc.1) do not bump apps/vscode (the Marketplace rejects semver
-  // pre-release suffixes), so they embed the last stable sidebar instead.
-  const isPrerelease = installedVersion.includes('-');
   try {
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    if (manifest.id !== 'cluesmith.codev-vscode' || typeof manifest.version !== 'string') {
-      console.error(`  FAIL: ide-extension/manifest.json is malformed (${JSON.stringify(manifest)})`);
-      failed = true;
-    } else if (isPrerelease || manifest.version === installedVersion) {
-      console.log(`  OK: ide-extension/manifest.json version ${manifest.version}`);
+    const manifest = JSON.parse(readFileSync(join(ideExtensionDir, 'manifest.json'), 'utf8'));
+    if (manifest.id === 'cluesmith.codev-vscode' && typeof manifest.version === 'string') {
+      console.log(`  OK: ide-extension/manifest.json ${manifest.id}@${manifest.version}`);
     } else {
-      console.error(`  FAIL: embedded sidebar version ${manifest.version} != package version ${installedVersion}`);
+      console.error(`  FAIL: ide-extension/manifest.json is malformed (${JSON.stringify(manifest)})`);
       failed = true;
     }
   } catch (err) {

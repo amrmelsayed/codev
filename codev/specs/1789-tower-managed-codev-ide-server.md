@@ -56,7 +56,7 @@ After `npm i -g @cluesmith/codev @cluesmith/codev-ide`:
 ## Success Criteria
 
 **Packaging**
-- [ ] The packed `@cluesmith/codev` tarball contains the sidebar vsix for the package's own version at a fixed package-relative location. The package build produces it from `apps/vscode` using a declared `@vscode/vsce` dependency, not a global `vsce`.
+- [ ] The packed `@cluesmith/codev` tarball contains the sidebar vsix built from the same commit at a fixed package-relative location, with a manifest naming its id, version and engine range. The package build produces it from `apps/vscode` using a declared `@vscode/vsce` dependency, not a global `vsce`.
 - [ ] The tarball grows by about the vsix size (hundreds of KB), not by megabytes.
 
 **Discovery (in the CLI, using the user's shell environment)**
@@ -145,7 +145,7 @@ These come from Issue #1789, "Target shape (decided with the owner)", and are no
 
 - The IDE repository publishes `@cluesmith/codev-ide` in the shape above, with a `codev-ide-server` bin that forwards the standard VS Code server CLI. Building and publishing those packages is out of scope.
 - The npm-published server's `--version` reports the VS Code base version on line 1, then the commit, then the arch (confirmed by the IDE side; the first published server reports `1.138.0`). The npm package version may differ by a suffix (e.g. `1.138.0-codev.1`) and is not what Tower checks.
-- `@cluesmith/codev` and `apps/vscode` (`codev-vscode`) are versioned in lockstep (both 3.3.4 today), so "the vsix for this codev version" is well defined.
+- The embedded vsix is built in the same build, from the same commit, as the rest of `@cluesmith/codev`, so the two are compatible by construction. No version-equality check between them is needed (owner ruling, 2026-10-13).
 - An `npm i -g` places `@cluesmith/codev` and `@cluesmith/codev-ide` as siblings under the same global `node_modules/@cluesmith/`. The `codev-ide-server` bin link lands in the same global `bin` directory as `afx`.
 - The `codev-ide-server` bin link may resolve to a script that needs `node` or `bash` from `PATH`. Tower's spawn environment provides Node, as required above.
 
@@ -228,7 +228,7 @@ N/A: both resolved by the IDE side (recorded on #1789):
 ## Test Scenarios
 
 **Packaging**
-1. Build `@cluesmith/codev`, run `pnpm pack`, and list the tarball. The vsix is at the fixed location, its manifest version equals the package version, and the tarball grows by about the vsix size.
+1. Build `@cluesmith/codev`, run `pnpm pack`, and list the tarball. The vsix is at the fixed location, its manifest is well-formed, and the tarball grows by about the vsix size.
 2. The package build succeeds with no global `vsce` installed.
 
 **Discovery**

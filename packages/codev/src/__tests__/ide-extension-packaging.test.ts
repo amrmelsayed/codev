@@ -47,14 +47,9 @@ describe('buildIdeExtensionManifest', () => {
     const realExtension = JSON.parse(
       readFileSync(join(codevPkgRoot, '..', '..', 'apps', 'vscode', 'package.json'), 'utf8'),
     );
-    const codevPkg = JSON.parse(readFileSync(join(codevPkgRoot, 'package.json'), 'utf8'));
     const manifest = buildIdeExtensionManifest(realExtension);
     expect(manifest.id).toBe('cluesmith.codev-vscode');
-    // Lockstep holds for stable versions; pre-releases leave apps/vscode at the
-    // last stable version (scripts/bump-all.sh).
-    if (!codevPkg.version.includes('-')) {
-      expect(manifest.version).toBe(codevPkg.version);
-    }
+    expect(manifest.version).toBe(realExtension.version);
   });
 });
 
