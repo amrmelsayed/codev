@@ -27,3 +27,11 @@
 - Iter2: gemini APPROVE, codex COMMENT, claude APPROVE; small refinements folded in (budget formula, import-safe manifest helper, below-floor + live server fails transactionally).
 - Waiting on human plan-approval.
 - Architect main ruling (2026-10-12): phase 6 E2E uses an isolated Tower (non-default port, separate AGENT_FARM_DIR). Do NOT restart the real Tower; if isolation is insufficient, report why and main asks the owner.
+
+## 2026-10-13 implement phase_1 (embedded sidebar vsix)
+- `@vscode/vsce` pinned `^3.9.2` in apps/vscode devDeps (4.x requires Node >= 22; CI runs Node 20). Release-time global vsce is also 3.9.2.
+- New `packages/codev/scripts/build-ide-extension.mjs` (runs from `bundle-assets`) + pure `ide-extension-manifest.mjs`; `files` gains `ide-extension`; gitignored.
+- Owner ruling (2026-10-13): DROP the planned `CODEV_SKIP_IDE_EXTENSION` CI skip flag. Measured cost of the vsix step is ~5.4 s warm, not worth a second build shape. Every `pnpm build` now produces the vsix; no workflow changes.
+- Measured with global vsce off PATH: tarball 3,127,626 -> 3,478,353 bytes (+~343 KB; vsix 342 KB, 25 files). `verify-install.mjs` now asserts the vsix exists and manifest version == package version; passes on packed tarballs.
+- Note: post-release-e2e.yml also runs verify-install, so a manual dispatch against a pre-1789 published version would now fail the new check (expected; release shape changed).
+- SURPRISE: the spec's "codev and codev-vscode are versioned in lockstep" holds only for stable versions. scripts/bump-all.sh skips apps/vscode for pre-releases (Marketplace rejects semver suffixes), so codev 3.4.0-rc.1 embeds the last stable sidebar. verify-install and the unit test therefore enforce version equality only for stable versions; pre-releases only need a present, well-formed manifest. Functionally fine: Tower's idempotency keys on the manifest version, not the codev version.
