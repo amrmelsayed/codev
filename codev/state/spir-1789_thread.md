@@ -84,3 +84,6 @@
 - Phase 6 CMAP iter1: gemini APPROVE, codex APPROVE, claude COMMENT. Taken: mirrored `### afx ide` into codev-skeleton/resources/commands/agent-farm.md (adopters' command reference had every other afx section); "up to a minute" -> "a minute or more" (client budget is ~3 min worst case); committed the untracked phase_4 rebuttals file.
 - Suggested UNRELEASED.md entry (for main to apply on docs/vscode-changelog, under its own ## section):
   "Codev IDE server from npm (#1789). Install the IDE server with `npm i -g @cluesmith/codev-ide` (or `afx ide install`) and run `afx ide start` with no flags: afx finds the server on PATH or in the global node_modules. Tower checks the server's version, installs the Codev sidebar that now ships inside @cluesmith/codev into ~/.agent-farm/ide-extensions, and starts the server with it. `afx ide status` shows the server and sidebar versions. `--server-path` still works as an override."
+
+## 2026-10-13: review
+- Context refreshed at the review boundary. Review doc written (codev/reviews/1789-tower-managed-codev-ide-server.md); two cold lessons routed to lessons-learned.md Architecture ([From #1789] entry-point lock; restart check compares live vs desired state). No hot-tier changes. Follow-ups listed in the review for main to decide on (none self-filed).
