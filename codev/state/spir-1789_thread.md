@@ -87,3 +87,9 @@
 
 ## 2026-10-13: review
 - Context refreshed at the review boundary. Review doc written (codev/reviews/1789-tower-managed-codev-ide-server.md); two cold lessons routed to lessons-learned.md Architecture ([From #1789] entry-point lock; restart check compares live vs desired state). No hot-tier changes. Follow-ups listed in the review for main to decide on (none self-filed).
+
+## 2026-10-13: PR #1806 integration review round 1 (main)
+- Must-fix items from main (Codex REQUEST_CHANGES, Claude agreeing): adopt kept the requested serverPath and never compared serverVersion, so a same-path `npm i -g` upgrade got no restart hint and a changed-path hint was consumed on first use. Fixed in `aeafc99c0`: adopt keeps the live serverPath (and, in round 2, startedAt); `liveServerIsCurrent` compares a known serverVersion. The test asserting the defect was flipped, and tests were added for a same-path upgrade and a changed path twice. Also capped CLI stdout at 64 KB (Codex), added an extensions-dir sentence to six docs, and a RELEASE pre-flight check for the floor/engines coupling (codev/ only; the skeleton has no RELEASE protocol).
+- Post-fix: tsc clean; IDE suites plus doc/parity tests 23 files / 695 tests green.
+- Full packages/codev suite after the main merge: 316 files / 6349 tests passed (48 skipped).
+- Porch went straight to the pr gate after the rebuttal (no second consultation), so CMAP on the fix was run by hand: claude APPROVE, codex REQUEST_CHANGES (sync with main), gemini skipped. Merged origin/main (#1783 changed sanitizeAgentEnv, which the IDE env uses; no overlap). Rebuttal: 1789-review-iter2-rebuttals.md.

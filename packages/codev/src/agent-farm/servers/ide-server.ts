@@ -256,7 +256,7 @@ function adoptLiveIdeServer(
     serverPath: prior?.serverPath ?? opts.serverPath,
     pid: getProcessesOnPort(port)[0] ?? 0,
     defaultFolder: opts.defaultFolder ?? prior?.defaultFolder,
-    startedAt: new Date().toISOString(),
+    startedAt: prior?.startedAt ?? new Date().toISOString(),
     serverVersion: prior?.serverVersion,
     extensionsDir: prior?.extensionsDir,
     sidebarVersion: prior?.sidebarVersion,

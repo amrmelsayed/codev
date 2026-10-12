@@ -324,7 +324,12 @@ describe('live-port adopt', () => {
     expect(first.restartRequired).toBe(true);
     expect(second.restartRequired).toBe(true);
     // The record (and so `afx ide status`) describes the live process, not the requested binary.
-    expect(readIdeRecord()).toMatchObject({ pid: 4100, serverPath: OLD_SERVER_PATH, serverVersion: '1.130.0' });
+    expect(readIdeRecord()).toMatchObject({
+      pid: 4100,
+      serverPath: OLD_SERVER_PATH,
+      serverVersion: '1.130.0',
+      startedAt: '2026-10-01T00:00:00.000Z',
+    });
     expect(fakes.spawnCalls).toHaveLength(0);
     expect(fakes.ports.get(8200)).toEqual([4100]);
   });
