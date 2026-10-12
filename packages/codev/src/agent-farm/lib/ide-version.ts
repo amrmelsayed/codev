@@ -46,12 +46,12 @@ export const IDE_START_BUDGET_MS =
   (IDE_VERSION_TIMEOUT_MS + IDE_INSTALL_TIMEOUT_MS + IDE_STOP_EXIT_TIMEOUT_MS + IDE_READY_TIMEOUT_MS) * 2 +
   IDE_START_BUDGET_MARGIN_MS;
 
-const STRICT_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
+const STRICT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 /**
  * Parse the base version from `--version` output: line 1 only, trimmed, strict
- * `major.minor.patch`. Anything else on line 1, including a prerelease suffix,
- * is unparseable and yields null.
+ * `major.minor.patch` (no leading zeroes). Anything else on line 1, including a
+ * prerelease suffix, is unparseable and yields null.
  */
 export function parseIdeServerVersion(stdout: string): string | null {
   const firstLine = stdout.split(/\r?\n/, 1)[0].trim();
@@ -59,12 +59,21 @@ export function parseIdeServerVersion(stdout: string): string | null {
   return firstLine;
 }
 
-/** Numeric compare of two strict `major.minor.patch` versions: negative, zero or positive. */
+/**
+ * Numeric compare of two strict `major.minor.patch` versions: negative, zero or
+ * positive. Throws on any other input rather than returning NaN, which would
+ * read as "not below the floor".
+ */
 export function compareVersions(a: string, b: string): number {
+  for (const version of [a, b]) {
+    if (!STRICT_VERSION.test(version)) {
+      throw new Error(`compareVersions: ${JSON.stringify(version)} is not a strict major.minor.patch version`);
+    }
+  }
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    const diff = pa[i] - pb[i];
     if (diff !== 0) return diff;
   }
   return 0;
@@ -72,18 +81,16 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * Environment for every IDE server subprocess: the sanitized agent env with
- * the directory of the Node running Tower prepended to `PATH`. The npm
+ * the directory of the Node running Tower first on `PATH` (moved there if it
+ * already appears later). The npm
  * `codev-ide-server` launcher is a `#!/usr/bin/env node` script, and Tower
  * may run under a daemon whose `PATH` lacks a Node.
  */
 export function buildIdeServerEnv(baseEnv: NodeJS.ProcessEnv | Record<string, string> = process.env): Record<string, string> {
   const env = sanitizeAgentEnv(baseEnv);
   const nodeDir = dirname(process.execPath);
-  const entries = (env.PATH ?? '').split(delimiter).filter((entry) => entry !== '');
-  if (!entries.includes(nodeDir)) {
-    entries.unshift(nodeDir);
-  }
-  env.PATH = entries.join(delimiter);
+  const rest = (env.PATH ?? '').split(delimiter).filter((entry) => entry !== '' && entry !== nodeDir);
+  env.PATH = [nodeDir, ...rest].join(delimiter);
   return env;
 }
 
@@ -108,27 +115,54 @@ interface VersionRun {
   stderr: string;
 }
 
+/** Why `--version` produced no usable output. */
+type VersionRunFailure =
+  | { kind: 'timeout' }
+  | { kind: 'error'; message: string; stderr: string };
+
+/**
+ * Run `--version` under a hard bound. `execFile`'s own `timeout` is not used:
+ * it sends SIGTERM, which a wedged server may ignore, and its callback waits
+ * for stdio to close, which a surviving grandchild can hold open. Instead a
+ * timer SIGKILLs the child, releases its pipes and rejects immediately.
+ */
 function runVersion(serverPath: string, timeoutMs: number, env: Record<string, string>): Promise<VersionRun> {
   return new Promise((resolve, reject) => {
-    execFile(serverPath, ['--version'], { timeout: timeoutMs, env }, (error, stdout, stderr) => {
+    let settled = false;
+    const child = execFile(serverPath, ['--version'], { env }, (error, stdout, stderr) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (error) {
-        reject(Object.assign(error, { stdout: String(stdout), stderr: String(stderr) }));
+        const failure: VersionRunFailure = {
+          kind: 'error',
+          message: error.message.split('\n', 1)[0],
+          stderr: String(stderr).trim(),
+        };
+        reject(failure);
         return;
       }
       resolve({ stdout: String(stdout), stderr: String(stderr) });
     });
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      const failure: VersionRunFailure = { kind: 'timeout' };
+      reject(failure);
+    }, timeoutMs);
   });
 }
 
-function describeRunFailure(serverPath: string, error: unknown, timeoutMs: number): string {
-  const err = error as NodeJS.ErrnoException & { killed?: boolean; signal?: string | null; stderr?: string };
-  if (err.killed) {
+function describeRunFailure(serverPath: string, failure: VersionRunFailure, timeoutMs: number): string {
+  if (failure.kind === 'timeout') {
     return `IDE server at ${serverPath} did not answer --version within ${timeoutMs / 1000}s`;
   }
-  const stderr = (err.stderr ?? '').trim();
-  let detail = `IDE server at ${serverPath} failed to run --version (${err.message.split('\n', 1)[0]})`;
-  if (stderr !== '') {
-    detail = `${detail}: ${stderr}`;
+  let detail = `IDE server at ${serverPath} failed to run --version (${failure.message})`;
+  if (failure.stderr !== '') {
+    detail = `${detail}: ${failure.stderr}`;
   }
   return detail;
 }
@@ -148,8 +182,8 @@ export async function checkIdeServerVersion(
   let run: VersionRun;
   try {
     run = await runVersion(serverPath, timeoutMs, env);
-  } catch (error) {
-    throw new IdeServerVersionError(describeRunFailure(serverPath, error, timeoutMs));
+  } catch (failure) {
+    throw new IdeServerVersionError(describeRunFailure(serverPath, failure as VersionRunFailure, timeoutMs));
   }
 
   const version = parseIdeServerVersion(run.stdout);

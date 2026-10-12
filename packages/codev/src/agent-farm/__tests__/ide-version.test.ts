@@ -36,33 +36,33 @@ function rangeMinimum(range: string): string {
   return match[1];
 }
 
-/** The sidebar's engine range: the embedded manifest when built, else the source package.json. */
-function readSidebarEngine(): { source: string; range: string } {
+/**
+ * Every source of the sidebar's engine range present in this checkout: the
+ * source package.json always, plus the embedded manifest when built. Reading
+ * the package.json even when a manifest exists means a stale manifest cannot
+ * mask a drifted engine.
+ */
+function sidebarEngineSources(): Array<{ source: string; range: string }> {
+  const pkg = JSON.parse(readFileSync(EXTENSION_PACKAGE_JSON, 'utf-8'));
+  const sources = [{ source: EXTENSION_PACKAGE_JSON, range: pkg.engines.vscode }];
   if (existsSync(EMBEDDED_MANIFEST)) {
     const manifest = JSON.parse(readFileSync(EMBEDDED_MANIFEST, 'utf-8'));
-    return { source: EMBEDDED_MANIFEST, range: manifest.engines.vscode };
+    sources.push({ source: EMBEDDED_MANIFEST, range: manifest.engines.vscode });
   }
-  const pkg = JSON.parse(readFileSync(EXTENSION_PACKAGE_JSON, 'utf-8'));
-  return { source: EXTENSION_PACKAGE_JSON, range: pkg.engines.vscode };
+  return sources;
 }
 
 describe('IDE_SERVER_MIN_VERSION floor', () => {
-  it('is at least the sidebar engines.vscode minimum (Scenario 11)', () => {
-    const { source, range } = readSidebarEngine();
-    let expectedSource = EXTENSION_PACKAGE_JSON;
-    if (existsSync(EMBEDDED_MANIFEST)) {
-      expectedSource = EMBEDDED_MANIFEST;
+  it('is at least the sidebar engines.vscode minimum in every source (Scenario 11)', () => {
+    const sources = sidebarEngineSources();
+    expect(sources.map((entry) => entry.source)).toContain(EXTENSION_PACKAGE_JSON);
+    expect(sources.map((entry) => entry.source).includes(EMBEDDED_MANIFEST)).toBe(existsSync(EMBEDDED_MANIFEST));
+    for (const { source, range } of sources) {
+      expect(
+        compareVersions(IDE_SERVER_MIN_VERSION, rangeMinimum(range)),
+        `floor ${IDE_SERVER_MIN_VERSION} is below engines.vscode ${range} in ${source}`,
+      ).toBeGreaterThanOrEqual(0);
     }
-    expect(source).toBe(expectedSource);
-    expect(compareVersions(IDE_SERVER_MIN_VERSION, rangeMinimum(range))).toBeGreaterThanOrEqual(0);
-  });
-
-  it('agrees between the embedded manifest and the source package.json when both exist', () => {
-    if (!existsSync(EMBEDDED_MANIFEST)) return;
-    const manifest = JSON.parse(readFileSync(EMBEDDED_MANIFEST, 'utf-8'));
-    const pkg = JSON.parse(readFileSync(EXTENSION_PACKAGE_JSON, 'utf-8'));
-    expect(compareVersions(IDE_SERVER_MIN_VERSION, rangeMinimum(pkg.engines.vscode))).toBeGreaterThanOrEqual(0);
-    expect(compareVersions(IDE_SERVER_MIN_VERSION, rangeMinimum(manifest.engines.vscode))).toBeGreaterThanOrEqual(0);
   });
 
   it('rangeMinimum would catch an engine bumped above the floor', () => {
@@ -103,6 +103,13 @@ describe('parseIdeServerVersion', () => {
     expect(parseIdeServerVersion('\n1.138.0')).toBeNull();
     expect(parseIdeServerVersion('1.138')).toBeNull();
   });
+
+  it('refuses leading zeroes in any component', () => {
+    expect(parseIdeServerVersion('01.128.0')).toBeNull();
+    expect(parseIdeServerVersion('1.0128.0')).toBeNull();
+    expect(parseIdeServerVersion('1.128.00')).toBeNull();
+    expect(parseIdeServerVersion('1.0.0')).toBe('1.0.0');
+  });
 });
 
 describe('compareVersions', () => {
@@ -112,6 +119,11 @@ describe('compareVersions', () => {
     expect(compareVersions('1.99.0', '1.128.0')).toBeLessThan(0);
     expect(compareVersions('2.0.0', '1.999.999')).toBeGreaterThan(0);
     expect(compareVersions('1.128.1', '1.128.0')).toBeGreaterThan(0);
+  });
+
+  it('throws on non-strict input instead of returning NaN', () => {
+    expect(() => compareVersions('1.128', '1.128.0')).toThrow(/not a strict/);
+    expect(() => compareVersions('1.128.0', 'garbage')).toThrow(/not a strict/);
   });
 });
 
@@ -123,9 +135,9 @@ describe('buildIdeServerEnv', () => {
     expect(env.PATH.split(delimiter)).toEqual([nodeDir, '/usr/bin', '/bin']);
   });
 
-  it('does not duplicate the Node directory when already present', () => {
-    const env = buildIdeServerEnv({ PATH: ['/usr/bin', nodeDir].join(delimiter) });
-    expect(env.PATH.split(delimiter).filter((entry) => entry === nodeDir)).toHaveLength(1);
+  it('moves the Node directory to the front when it appears later, without duplicating it', () => {
+    const env = buildIdeServerEnv({ PATH: ['/usr/bin', nodeDir, '/bin', nodeDir].join(delimiter) });
+    expect(env.PATH.split(delimiter)).toEqual([nodeDir, '/usr/bin', '/bin']);
   });
 
   it('sets PATH when the base env has none', () => {
@@ -198,6 +210,15 @@ describe('checkIdeServerVersion', () => {
     const message = (error as Error).message;
     expect(message).toContain('did not answer --version');
     expect(message).toContain(IDE_SERVER_MIN_VERSION);
+  });
+
+  it('bounds a server that ignores SIGTERM and leaves a grandchild holding stdout', async () => {
+    const server = fakeServer('ignores-term', `trap '' TERM\nsleep 5\necho 1.138.0`);
+    const started = Date.now();
+    const error = await checkIdeServerVersion(server, { timeoutMs: 300 }).catch((e: unknown) => e);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(error).toBeInstanceOf(IdeServerVersionError);
+    expect((error as Error).message).toContain('did not answer --version');
   });
 
   it('refuses unparseable output, quoting line 1 (Scenario 9)', async () => {
