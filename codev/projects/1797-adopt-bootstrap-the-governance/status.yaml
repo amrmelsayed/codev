@@ -35,8 +35,8 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 2
-build_complete: true
+iteration: 3
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -118,8 +118,24 @@ history:
         verdict: COMMENT
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_4-iter1-claude.txt
+  - iteration: 2
+    plan_phase: phase_4
+    build_output: ''
+    reviews:
+      - model: gemini
+        verdict: APPROVE
+        file: >-
+          /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_4-iter2-gemini.txt
+      - model: codex
+        verdict: REQUEST_CHANGES
+        file: >-
+          /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_4-iter2-codex.txt
+      - model: claude
+        verdict: REQUEST_CHANGES
+        file: >-
+          /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_4-iter2-claude.txt
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-12T23:44:43.035Z'
+updated_at: '2026-10-12T23:52:53.050Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:29:16.809Z'
