@@ -18,8 +18,10 @@
  *
  * In a git work tree: files git ignores, edits inside a submodule (`git status` reports the
  * submodule as one entry), and an edit restored byte-for-byte before the second snapshot.
- * Outside git: whatever the walk skips (`.git/`, `node_modules/`) and anything past the
- * walk's file bound, which the snapshot reports as `truncated`.
+ * Outside git: paths the root `.gitignore` ignores (read with a simplified compiler that can
+ * ignore more than git would), `.git/` and `node_modules/` (so a `git init` and commit made
+ * during the session leave no trace), and anything past the walk's file bound, which the
+ * snapshot reports as `truncated`.
  */
 
 import * as fs from 'node:fs';
@@ -172,6 +174,64 @@ export function snapshotTree(workspaceRoot: string): TreeSnapshot {
   return { available: true, entries, identity: readIdentity(workspaceRoot) };
 }
 
+// =============================================================================
+// Root .gitignore, for walks outside git
+// =============================================================================
+
+/** One root `.gitignore` rule, compiled. Negations are not supported (see readRootIgnore). */
+export interface IgnoreRule {
+  regex: RegExp;
+  directoryOnly: boolean;
+}
+
+function globToRegex(glob: string): string {
+  let out = '';
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*' && glob[i + 1] === '*') {
+      out += '.*';
+      i++;
+      if (glob[i + 1] === '/') i++;
+    } else if (ch === '*') {
+      out += '[^/]*';
+    } else if (ch === '?') {
+      out += '[^/]';
+    } else {
+      out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return out;
+}
+
+/**
+ * Compile the root `.gitignore` for walks outside git (the non-empty-repo rule and the
+ * filesystem snapshot). Only the common subset is honoured (names, `*`/`?`/`**` globs,
+ * anchored and directory-only patterns); `!` negations are skipped, and a `**` between
+ * two path segments can match more than git would, so a walk may ignore more than git,
+ * never less.
+ */
+export function readRootIgnore(root: string): IgnoreRule[] {
+  const gitignorePath = path.join(root, '.gitignore');
+  if (!fs.existsSync(gitignorePath)) return [];
+  const rules: IgnoreRule[] = [];
+  for (const raw of fs.readFileSync(gitignorePath, 'utf-8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#') || line.startsWith('!')) continue;
+    const directoryOnly = line.endsWith('/');
+    let pattern = line.replace(/\/+$/, '');
+    const anchored = pattern.includes('/');
+    pattern = pattern.replace(/^\//, '');
+    let prefix = '(?:.*/)?';
+    if (anchored) prefix = '';
+    rules.push({ regex: new RegExp(`^${prefix}${globToRegex(pattern)}$`), directoryOnly });
+  }
+  return rules;
+}
+
+export function isIgnored(rel: string, isDirectory: boolean, rules: IgnoreRule[]): boolean {
+  return rules.some(rule => (!rule.directoryOnly || isDirectory) && rule.regex.test(rel));
+}
+
 /** Directories the filesystem walk never enters. */
 export const FILESYSTEM_WALK_SKIPPED = ['.git', 'node_modules'];
 
@@ -182,13 +242,14 @@ export const FILESYSTEM_WALK_LIMIT = 50_000;
  * Snapshot a directory that is not a git work tree: every file's content hash, keyed by its
  * root-relative path with forward slashes.
  *
- * `.gitignore` is deliberately not honoured: the walk exists to catch writes, and an ignore
- * rule can only hide one. Only `.git/` and `node_modules/` are skipped. Past `limit` files
- * the walk stops and marks the snapshot `truncated`, so a caller can say its detection was
- * partial instead of hashing an unbounded tree.
+ * The same scope as the git snapshot: paths the root `.gitignore` ignores are not watched
+ * (they never reach a commit), and `.git/` and `node_modules/` are always skipped. Past
+ * `limit` files the walk stops and marks the snapshot `truncated`, so a caller can say its
+ * detection was partial instead of hashing an unbounded tree.
  */
 export function snapshotFilesystem(root: string, limit: number = FILESYSTEM_WALK_LIMIT): TreeSnapshot {
   const entries = new Map<string, string>();
+  const rules = readRootIgnore(root);
   let truncated = false;
 
   const walk = (dir: string): void => {
@@ -202,6 +263,7 @@ export function snapshotFilesystem(root: string, limit: number = FILESYSTEM_WALK
     for (const entry of dirents) {
       if (truncated) return;
       const rel = dir === '' ? entry.name : `${dir}/${entry.name}`;
+      if (isIgnored(rel, entry.isDirectory(), rules)) continue;
       if (entry.isDirectory()) {
         if (!FILESYSTEM_WALK_SKIPPED.includes(entry.name)) walk(rel);
         continue;

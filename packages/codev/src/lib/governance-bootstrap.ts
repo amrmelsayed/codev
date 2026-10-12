@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { HOT_TIER_FILES, COLD_TIER_FILES } from './scaffold.js';
+import { isIgnored, readRootIgnore, type IgnoreRule } from './tree-snapshot.js';
 
 // =============================================================================
 // The four files
@@ -181,58 +182,6 @@ export function isNonEmptyRepo(root: string): boolean {
     }
   }
   return walkFindsProjectFile(root, readRootIgnore(root));
-}
-
-/** One root `.gitignore` rule, compiled. Negations are not supported (see readRootIgnore). */
-interface IgnoreRule {
-  regex: RegExp;
-  directoryOnly: boolean;
-}
-
-function globToRegex(glob: string): string {
-  let out = '';
-  for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
-    if (ch === '*' && glob[i + 1] === '*') {
-      out += '.*';
-      i++;
-      if (glob[i + 1] === '/') i++;
-    } else if (ch === '*') {
-      out += '[^/]*';
-    } else if (ch === '?') {
-      out += '[^/]';
-    } else {
-      out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return out;
-}
-
-/**
- * Compile the root `.gitignore` for the non-git walk. Only the common subset is honoured
- * (names, `*`/`?`/`**` globs, anchored and directory-only patterns); `!` negations are
- * skipped, which can only make the walk ignore more, never less.
- */
-function readRootIgnore(root: string): IgnoreRule[] {
-  const gitignorePath = path.join(root, '.gitignore');
-  if (!fs.existsSync(gitignorePath)) return [];
-  const rules: IgnoreRule[] = [];
-  for (const raw of fs.readFileSync(gitignorePath, 'utf-8').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('#') || line.startsWith('!')) continue;
-    const directoryOnly = line.endsWith('/');
-    let pattern = line.replace(/\/+$/, '');
-    const anchored = pattern.includes('/');
-    pattern = pattern.replace(/^\//, '');
-    let prefix = '(?:.*/)?';
-    if (anchored) prefix = '';
-    rules.push({ regex: new RegExp(`^${prefix}${globToRegex(pattern)}$`), directoryOnly });
-  }
-  return rules;
-}
-
-function isIgnored(rel: string, isDirectory: boolean, rules: IgnoreRule[]): boolean {
-  return rules.some(rule => (!rule.directoryOnly || isDirectory) && rule.regex.test(rel));
 }
 
 function walkFindsProjectFile(root: string, rules: IgnoreRule[], dir = ''): boolean {

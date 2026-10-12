@@ -135,13 +135,15 @@ describe('snapshotFilesystem (non-git fallback)', () => {
     expect(diffSnapshotEntries(before, snapshotFilesystem(dir))).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
   });
 
-  it('skips .git/ and node_modules/ but not gitignored paths', () => {
-    write('.gitignore', 'dist/\n');
+  it('skips .git/, node_modules/ and root-gitignored paths', () => {
+    write('.gitignore', 'dist/\n*.log\n');
     write('dist/out.js', 'x\n');
+    write('debug.log', 'x\n');
     write('node_modules/pkg/index.js', 'x\n');
     write('.git/HEAD', 'x\n');
+    write('src/a.ts', 'a\n');
     const keys = [...snapshotFilesystem(dir).entries.keys()].sort();
-    expect(keys).toEqual(['.gitignore', 'dist/out.js']);
+    expect(keys).toEqual(['.gitignore', 'src/a.ts']);
   });
 
   it('stops at its bound and says so', () => {

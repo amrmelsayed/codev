@@ -61,6 +61,13 @@ const TARGETED_PATTERN = 'fix|revert|hotfix|incident|regression|rollback|outage|
 const NO_HISTORY = 'No commit history; work from the code alone.';
 
 /**
+ * Largest prompt passed as a command-line argument. Linux caps one argument at 128 KB
+ * (MAX_ARG_STRLEN); above this the prompt goes to the manual fallback instead of failing
+ * the spawn with E2BIG.
+ */
+export const MAX_PROMPT_BYTES = 100_000;
+
+/**
  * Paths the agent harness itself writes during an ordinary session. Still reported (the spec
  * allows no exemption beyond the eligible files and `.consult/`), but annotated so the human
  * can judge them quickly.
@@ -280,9 +287,9 @@ function spawnAgentProcess(launch: AgentLaunch, cwd: string): Promise<AgentExit>
   });
 }
 
-function defaultDeps(): BootstrapDocsDeps {
+/** Defaults for every seam but `skeletonDir`, which is resolved only when not overridden. */
+function defaultDeps(): Omit<BootstrapDocsDeps, 'skeletonDir'> {
   return {
-    skeletonDir: getTemplatesDir(),
     resolveLauncher: resolveConfiguredLauncher,
     isExecutableAvailable: isExecutableOnPath,
     confirm: question => confirm(question, false),
@@ -319,7 +326,8 @@ function detectorScope(before: Detector, after: Detector): string {
   if (before.snapshot.truncated || after.snapshot.truncated) {
     return `Not a git repository, and the tree holds more than ${FILESYSTEM_WALK_LIMIT.toLocaleString('en-US')} files, so change detection covered only the four governance files.`;
   }
-  return `Not a git repository: change detection walked every file except ${FILESYSTEM_WALK_SKIPPED.map(dir => `${dir}/`).join(' and ')}.`;
+  const skipped = FILESYSTEM_WALK_SKIPPED.map(dir => `${dir}/`).join(', ');
+  return `Not a git repository: change detection walked every file except ${skipped} and paths the root .gitignore ignores (a repository created during the session is not seen).`;
 }
 
 function buildChangeReport(
@@ -434,12 +442,33 @@ function describeLaunch(launch: AgentLaunch, prompt: string): string {
   return [quoteArg(launch.executable), ...args].join(' ');
 }
 
+/** Flags (or `--flag=value` forms) that let the agent act without asking. */
+const BYPASS_FLAGS = [
+  '--dangerously-skip-permissions',
+  '--dangerously-bypass-approvals-and-sandbox',
+  '--yolo',
+  '--permission-mode=bypassPermissions',
+];
 const PERMISSION_FLAG = /dangerously|bypass|yolo|full-auto|permission|approval|sandbox/i;
 
 function describePermissions(launch: AgentLaunch, prompt: string): string {
-  const flags = launch.args.filter(arg => arg !== prompt && PERMISSION_FLAG.test(arg));
+  const flags: string[] = [];
+  const args = launch.args.filter(arg => arg !== prompt);
+  for (let i = 0; i < args.length; i++) {
+    if (!PERMISSION_FLAG.test(args[i])) continue;
+    // Keep a separate value with its flag (`--permission-mode plan`).
+    if (!args[i].includes('=') && args[i + 1] !== undefined && !args[i + 1].startsWith('-')) {
+      flags.push(`${args[i]}=${args[i + 1]}`);
+      i++;
+    } else {
+      flags.push(args[i]);
+    }
+  }
   if (flags.length === 0) return 'Permission mode: the agent CLI\'s default (it asks before running commands or editing files).';
-  return `Permission mode from your config: ${flags.join(' ')} (the agent will NOT ask before running commands or editing files).`;
+  if (flags.some(flag => BYPASS_FLAGS.includes(flag))) {
+    return `Permission mode from your config: ${flags.join(' ')} (the agent will NOT ask before running commands or editing files).`;
+  }
+  return `Permission flags from your config: ${flags.join(' ')} (see your agent's documentation for what they allow).`;
 }
 
 function printSummary(
@@ -453,6 +482,7 @@ function printSummary(
 
   if (agentExit.error) {
     log(chalk.red(`  Agent could not be started: ${agentExit.error}`));
+    log(`  The prompt is saved at ${PROMPT_FILE} if you would rather run it in your own agent.`);
   } else if (agentExit.signal) {
     log(chalk.red(`  Agent was terminated by ${agentExit.signal}.`));
   } else if (agentExit.code !== 0) {
@@ -510,7 +540,11 @@ export async function runBootstrapDocs(
   options: BootstrapDocsOptions = {},
   overrides: Partial<BootstrapDocsDeps> = {},
 ): Promise<BootstrapDocsResult> {
-  const deps: BootstrapDocsDeps = { ...defaultDeps(), ...overrides };
+  const deps: BootstrapDocsDeps = {
+    ...defaultDeps(),
+    ...overrides,
+    skeletonDir: overrides.skeletonDir ?? getTemplatesDir(),
+  };
   const { log } = deps;
   const root = path.resolve(options.cwd ?? process.cwd());
   const templatesDir = path.join(deps.skeletonDir, 'templates');
@@ -577,6 +611,11 @@ export async function runBootstrapDocs(
   fs.mkdirSync(path.dirname(promptPath), { recursive: true });
   fs.writeFileSync(promptPath, prompt);
 
+  const promptBytes = Buffer.byteLength(prompt);
+  if (!unavailable && promptBytes > MAX_PROMPT_BYTES) {
+    unavailable = `the prompt is ${Math.ceil(promptBytes / 1000)} KB, too long to pass as a command-line argument (limit ${MAX_PROMPT_BYTES / 1000} KB)`;
+  }
+
   if (!launcher.supported || unavailable) {
     log('');
     log(chalk.yellow(`Not launching an agent: ${unavailable}.`));
@@ -602,10 +641,12 @@ export async function runBootstrapDocs(
     log('');
     log('Standard input is not a terminal, so the launch is declined. Run it interactively:');
     log('  codev bootstrap-docs');
+    log(`The prompt is saved at ${PROMPT_FILE} if you would rather run it in your own agent.`);
     return { exitCode: 0, outcome: 'declined', files, launched: false };
   }
   if (!(await deps.confirm('Launch the agent now?'))) {
     log('Declined; nothing launched. The placeholders are unchanged.');
+    log(`The prompt is saved at ${PROMPT_FILE} if you would rather run it in your own agent.`);
     return { exitCode: 0, outcome: 'declined', files, launched: false };
   }
 

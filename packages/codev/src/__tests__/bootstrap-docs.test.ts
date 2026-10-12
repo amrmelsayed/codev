@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
+  MAX_PROMPT_BYTES,
   PROMPT_FILE,
   buildGitDigest,
   renderPrompt,
@@ -237,6 +238,44 @@ describe('codev bootstrap-docs: no-op paths', () => {
     expect(spawned).toEqual([]);
   });
 
+  it('a prompt too long for a command-line argument takes the manual fallback', async () => {
+    setUpGitProject();
+    // A skeleton whose prompt template alone is over the limit.
+    const bigSkeleton = path.join(dir, '..', `${path.basename(dir)}-skeleton`);
+    fs.cpSync(templatesDir, path.join(bigSkeleton, 'templates'), { recursive: true });
+    fs.cpSync(path.join(skeletonDir, '.claude'), path.join(bigSkeleton, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(bigSkeleton, 'templates', 'bootstrap-docs-prompt.md'), `${'x'.repeat(MAX_PROMPT_BYTES)}\n{{SKILL}}\n`);
+    try {
+      const result = await runBootstrapDocs({ cwd: dir }, deps(undefined, { skeletonDir: bigSkeleton }));
+      expect(result.outcome).toBe('manual');
+      expect(spawned).toEqual([]);
+      expect(output()).toContain('too long to pass as a command-line argument');
+      expect(fs.statSync(path.join(dir, PROMPT_FILE)).size).toBeGreaterThan(MAX_PROMPT_BYTES);
+    } finally {
+      fs.rmSync(bigSkeleton, { recursive: true, force: true });
+    }
+  });
+
+  it('states bypass flags as bypass, and other permission flags without claiming either way', async () => {
+    setUpGitProject();
+    const withArgs = (args: string[]): InteractiveTaskLauncher => ({
+      supported: true,
+      harnessName: 'claude',
+      buildLaunch: prompt => ({ executable: 'claude', args: [...args, '--', prompt] }),
+    });
+    await runBootstrapDocs({ cwd: dir }, deps(undefined, { confirm: async () => false }));
+    expect(output()).toContain('will NOT ask');
+
+    lines = [];
+    await runBootstrapDocs({ cwd: dir }, deps(undefined, {
+      confirm: async () => false,
+      resolveLauncher: () => withArgs(['--permission-mode', 'plan']),
+    }));
+    expect(output()).toContain('Permission flags from your config: --permission-mode=plan (see your agent');
+    expect(output()).not.toContain('will NOT ask');
+    expect(output()).toContain(`The prompt is saved at ${PROMPT_FILE}`);
+  });
+
   it('non-TTY stdin declines without asking; a "no" declines too', async () => {
     setUpGitProject();
     let asked = false;
@@ -448,6 +487,7 @@ describe('codev bootstrap-docs: launched sessions', () => {
     const result = await runBootstrapDocs({ cwd: dir }, deps(() => ({ code: null, signal: null, error: 'spawn claude ENOENT' })));
     expect(result.exitCode).toBe(1);
     expect(output()).toContain('Agent could not be started: spawn claude ENOENT');
+    expect(output()).toContain(`The prompt is saved at ${PROMPT_FILE}`);
   });
 
   it('non-git directory: a source edit is named, exit non-zero', async () => {
@@ -460,6 +500,7 @@ describe('codev bootstrap-docs: launched sessions', () => {
     expect(result.exitCode).toBe(1);
     expect(result.report?.outOfScope.map(change => change.path)).toEqual(['src/main.ts']);
     expect(output()).toContain('Not a git repository');
+    expect(output()).toContain('paths the root .gitignore ignores');
   });
 
   it('non-git directory with valid drafts only ⇒ exit 0', async () => {
