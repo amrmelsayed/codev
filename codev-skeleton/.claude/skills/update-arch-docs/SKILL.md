@@ -1,6 +1,6 @@
 ---
 name: update-arch-docs
-description: "Audit, prune, and update the project's governance docs — the COLD reference archives `codev/resources/arch.md` and `codev/resources/lessons-learned.md` AND their always-on HOT companions `codev/resources/arch-critical.md` and `codev/resources/lessons-critical.md` (Spec 987, hot/cold two-tier model). Use this skill when running MAINTAIN's arch-doc step, or when asked to update / audit / prune any of those four files. It polices the hot-tier cap (capped facts/lessons + a bounded cold-doc map), enforces displacement (demote to cold when full), keeps each hot file's map accurate, and is opinionated about what NOT to put in each tier (per-spec changelogs, exhaustive enumerations, aspirational state). Two modes: diff-mode (apply a specific change) and audit-mode (propose cuts with reasons). Edits files directly via normal file-edit tooling; no destructive shell commands."
+description: "Audit, prune, and update the project's governance docs — the COLD reference archives `codev/resources/arch.md` and `codev/resources/lessons-learned.md` AND their always-on HOT companions `codev/resources/arch-critical.md` and `codev/resources/lessons-critical.md` (Spec 987, hot/cold two-tier model). Use this skill when running MAINTAIN's arch-doc step, or when asked to update / audit / prune any of those four files. It polices the hot-tier cap (capped facts/lessons + a bounded cold-doc map), enforces displacement (demote to cold when full), keeps each hot file's map accurate, and is opinionated about what NOT to put in each tier (per-spec changelogs, exhaustive enumerations, aspirational state). Three modes: diff-mode (apply a specific change), audit-mode (propose cuts with reasons), and bootstrap-mode (first population of still-placeholder docs from an existing codebase, as run by `codev bootstrap-docs`). Edits files directly via normal file-edit tooling; no destructive shell commands."
 ---
 
 # update-arch-docs
@@ -14,7 +14,7 @@ It is invoked by the MAINTAIN protocol's documentation step, and ad-hoc whenever
 
 ## What this skill does NOT do
 
-These are the patterns that have, in practice, caused arch.md and lessons-learned.md to grow without bound. Treat them as bright-line rejections during both audit-mode and diff-mode work.
+These are the patterns that have, in practice, caused arch.md and lessons-learned.md to grow without bound. Treat them as bright-line rejections in every mode (diff, audit, and bootstrap).
 
 ### In arch.md
 
@@ -42,6 +42,10 @@ These are the on-demand **reference**. They may hold spec-narrow recipes and dee
 - **Multi-paragraph lesson entries**. Split or compress to 1–3 sentences.
 - **Duplicate adjacent entries**. Fold variations of the same lesson into one.
 - **Spec-numbered narrative framing** ("Lesson from #0468:…"). State the general principle; link the review if needed.
+
+### In any governance doc (content)
+
+- **Sensitive material.** No credentials, tokens, API keys, private keys, internal hostnames or endpoints, connection strings, or customer data — not even as examples. These files are committed and the hot tier is injected into every prompt. Describe the *shape* instead ("the API authenticates to the queue with a service credential held in the deploy environment"), never the value.
 
 ### In either file (process)
 
@@ -121,6 +125,19 @@ In audit-mode:
 
 Audit-mode is slower than diff-mode and produces larger diffs. Reserve it for explicit audit invocations, not for routine doc updates.
 
+## Mode: bootstrap-mode (first population from a codebase)
+
+Use bootstrap-mode when a project adopted Codev with a running codebase and some of the four files are still the untouched starters. It is normally invoked by `codev bootstrap-docs`, which tells you exactly which files are **eligible** (still placeholders; you write these) and which are **curated** (real content; you read these as input and never edit them). Everything in "What this skill does NOT do" applies.
+
+1. **Survey the system, in this order:** build wiring and package manifests; entry points (binaries, servers, CLIs, jobs); process and service boundaries and how they talk (transports, queues, RPC); persistence (what is stored where, who owns writes); then the git-history digest the caller supplies. Read code to confirm what the manifests suggest. Use targeted `git show` / `git log -S` on specific commits when a digest line looks like scar tissue; do not walk the full log.
+2. **Write the cold `arch.md`** (if eligible): the current system shape, in **at most 12** top-level `## ` sections so the hot map can cover every one. Shape and load-bearing files only — no per-file lists, no history, nothing aspirational, no dates.
+3. **Write the cold `lessons-learned.md`** (if eligible): lessons the repository has *evidence* for — fix, revert and incident commits, "never do X" / "do not" comments, recurring bug classes. Each lesson is one to three sentences and must be traceable to that evidence. **Thin is acceptable; invented is not.** If the history shows little, write little. At most 12 top-level sections.
+4. **Write the hot files** (if eligible), keeping the starter's title line and guidance comment but deleting the comment's `STARTER:` sentence; then a `## Critical facts (consult before deciding)` / `## Critical lessons (consult before deciding)` section of at most 10 one-line entries, and a `## Map of <cold doc> (consult when…)` section of at most 12 entries in the form `- <exact cold section heading> — <consult when…>`, built from the cold doc's **real** top-level sections. When the cold doc is curated, map its existing sections; never invent one. Keep the whole file at 35 lines or fewer outside comments. Route facts by the hot/cold axis above: only behaviour-changers go hot; the rest stays in the cold doc.
+5. **The seeded universal lessons survive.** The starter `lessons-critical.md` ships three universal lessons. Keep them in the bootstrapped file; replace one only when a project-specific lesson needs the slot under the 10-entry cap, and then demote the displaced lesson into `lessons-learned.md` rather than dropping it.
+6. **Leave no starter text** in any file you write: no `- <…>` slot lines, no `_No … yet._` lines, no `STARTER:` text.
+7. **Touch nothing else.** Write only the eligible files. Do not edit curated governance files, source code, configuration, or anything outside `codev/resources/`. Do not commit, stage, or run any git command that changes the repository. The caller snapshots the repository before and after and reports any other change.
+8. **Finish clearly.** When the drafts are written, say so, list the files you wrote, and ask the user to exit the session so the caller can validate the drafts. The human reviews and commits; you do not.
+
 ## Output contract
 
 The skill commits to the following:
@@ -129,4 +146,5 @@ The skill commits to the following:
 - It does not invoke destructive shell commands (no `rm -rf`, no `git rm`, no destructive `sed`). File deletions happen only through Edit removing the relevant content; whole-file removal would be a structural change that is out of scope for this skill.
 - In audit-mode, every removal is paired with a one-line reason in the MAINTAIN run file's `## Audit Findings` section. Rationale lives there so reviewers can evaluate intent without re-deriving it from the diff.
 - The skill does not modify other files (specs, plans, reviews, source code). If a fact belongs somewhere else, the skill flags it; it does not move it.
+- In bootstrap-mode, it writes only the files the caller named as eligible, never commits or stages, and leaves review and commit to the human.
 - The skill does not edit live arch.md or lessons-learned.md content as a side effect of being read or invoked — only when the user/MAINTAIN protocol explicitly asks for an update or audit.

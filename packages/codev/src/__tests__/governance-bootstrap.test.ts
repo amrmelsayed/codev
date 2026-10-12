@@ -299,3 +299,21 @@ describe('validateColdFile', () => {
     expect(validateColdFile(sections, false)).toEqual([]);
   });
 });
+
+describe('bootstrap prompt template and skill content', () => {
+  const PLACEHOLDERS = ['{{SKILL}}', '{{ELIGIBLE_FILES}}', '{{CURATED_FILES}}', '{{GIT_DIGEST}}', '{{PROJECT_NAME}}'];
+
+  it('ships the prompt template with every placeholder exactly once', () => {
+    const template = fs.readFileSync(path.join(templatesDir, 'bootstrap-docs-prompt.md'), 'utf-8');
+    for (const placeholder of PLACEHOLDERS) {
+      expect(template.split(placeholder).length - 1, placeholder).toBe(1);
+    }
+  });
+
+  it('carries bootstrap-mode and the sensitive-material rule in the update-arch-docs skill', () => {
+    const skill = readRepo('codev-skeleton/.claude/skills/update-arch-docs/SKILL.md');
+    expect(skill).toContain('## Mode: bootstrap-mode');
+    expect(skill).toContain('**Sensitive material.**');
+    expect(skill).toContain('The seeded universal lessons survive.');
+  });
+});
