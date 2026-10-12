@@ -19,6 +19,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { IDE_EXTENSION_DIR, IDE_EXTENSION_MANIFEST, IDE_EXTENSION_VSIX } from './ide-extension-manifest.mjs';
 
 const targets = process.argv.slice(2);
 if (targets.length === 0) {
@@ -45,16 +46,16 @@ try {
   }
 
   const globalRoot = execSync(`npm root -g --prefix "${prefix}"`, { encoding: 'utf8' }).trim();
-  const ideExtensionDir = join(globalRoot, '@cluesmith', 'codev', 'ide-extension');
-  const vsixPath = join(ideExtensionDir, 'codev-vscode.vsix');
+  const ideExtensionDir = join(globalRoot, '@cluesmith', 'codev', IDE_EXTENSION_DIR);
+  const vsixPath = join(ideExtensionDir, IDE_EXTENSION_VSIX);
   if (existsSync(vsixPath)) {
-    console.log('  OK: ide-extension/codev-vscode.vsix present');
+    console.log(`  OK: ${IDE_EXTENSION_DIR}/${IDE_EXTENSION_VSIX} present`);
   } else {
     console.error(`  FAIL: embedded sidebar vsix missing at ${vsixPath}`);
     failed = true;
   }
   try {
-    const manifest = JSON.parse(readFileSync(join(ideExtensionDir, 'manifest.json'), 'utf8'));
+    const manifest = JSON.parse(readFileSync(join(ideExtensionDir, IDE_EXTENSION_MANIFEST), 'utf8'));
     if (manifest.id === 'cluesmith.codev-vscode' && typeof manifest.version === 'string') {
       console.log(`  OK: ide-extension/manifest.json ${manifest.id}@${manifest.version}`);
     } else {
