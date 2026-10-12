@@ -1,9 +1,27 @@
 id: '1797'
 title: adopt-bootstrap-the-governance
 protocol: spir
-phase: plan
-plan_phases: []
-current_plan_phase: null
+phase: implement
+plan_phases:
+  - id: phase_1
+    title: Governance-doc classifier and validator library
+    status: in_progress
+  - id: phase_2
+    title: Skill bootstrap mode and bootstrap prompt template
+    status: pending
+  - id: phase_3
+    title: Harness capability for interactive task launch
+    status: pending
+  - id: phase_4
+    title: codev bootstrap-docs command core
+    status: pending
+  - id: phase_5
+    title: Three-way review of the drafts
+    status: pending
+  - id: phase_6
+    title: adopt and update integration plus docs
+    status: pending
+current_plan_phase: phase_1
 gates:
   spec-approval:
     status: approved
@@ -18,14 +36,16 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-12T22:27:25.866Z'
+updated_at: '2026-10-12T22:27:27.949Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:29:16.809Z'
     acknowledged_at: '2026-10-12T20:29:59.479Z'
+  - boundary: enter:implement
+    at: '2026-10-12T22:27:27.949Z'
 force_advanced:
   phase: plan
   iteration: 3
