@@ -526,9 +526,9 @@ describe('harness', () => {
   describe('buildInteractiveTaskLaunch', () => {
     const PROMPT = 'Bootstrap the governance docs.';
 
-    it('claude and codex pass the prompt as the positional argument', () => {
-      expect(CLAUDE_HARNESS.buildInteractiveTaskLaunch?.(PROMPT)).toEqual({ args: [PROMPT] });
-      expect(CODEX_HARNESS.buildInteractiveTaskLaunch?.(PROMPT)).toEqual({ args: [PROMPT] });
+    it('claude and codex pass the prompt as the positional argument after --', () => {
+      expect(CLAUDE_HARNESS.buildInteractiveTaskLaunch?.(PROMPT)).toEqual({ args: ['--', PROMPT] });
+      expect(CODEX_HARNESS.buildInteractiveTaskLaunch?.(PROMPT)).toEqual({ args: ['--', PROMPT] });
     });
 
     it('opencode and custom harnesses do not declare it', () => {
@@ -558,7 +558,7 @@ describe('harness', () => {
       expect(launch('claude --dangerously-skip-permissions')).toEqual({
         harnessName: 'claude',
         executable: 'claude',
-        args: ['--dangerously-skip-permissions', PROMPT],
+        args: ['--dangerously-skip-permissions', '--', PROMPT],
       });
     });
 
@@ -566,7 +566,7 @@ describe('harness', () => {
       expect(launch('/opt/homebrew/bin/codex')).toEqual({
         harnessName: 'codex',
         executable: '/opt/homebrew/bin/codex',
-        args: [PROMPT],
+        args: ['--', PROMPT],
       });
     });
 
@@ -574,7 +574,7 @@ describe('harness', () => {
       expect(launch(['claude', '--model', 'opus'])).toEqual({
         harnessName: 'claude',
         executable: 'claude',
-        args: ['--model', 'opus', PROMPT],
+        args: ['--model', 'opus', '--', PROMPT],
       });
     });
 
@@ -582,7 +582,7 @@ describe('harness', () => {
       expect(launch('/usr/local/bin/my-wrapper --yolo', 'codex')).toEqual({
         harnessName: 'codex',
         executable: '/usr/local/bin/my-wrapper',
-        args: ['--yolo', PROMPT],
+        args: ['--yolo', '--', PROMPT],
       });
     });
 
@@ -615,6 +615,15 @@ describe('harness', () => {
       expect(unsupportedReason('claude --resume')).toMatch(/--resume/);
     });
 
+    it('blocking flags match in the --flag=value form too', () => {
+      expect(unsupportedReason('claude --resume=abc123')).toMatch(/--resume=abc123/);
+    });
+
+    it('a variadic configured flag cannot swallow the prompt (it follows --)', () => {
+      expect(launch('claude --add-dir /a /b').args).toEqual(['--add-dir', '/a', '/b', '--', PROMPT]);
+      expect(launch('codex -i shot.png').args).toEqual(['-i', 'shot.png', '--', PROMPT]);
+    });
+
     it('claude subcommands are unsupported with a reason', () => {
       expect(unsupportedReason('claude doctor')).toMatch(/"doctor" subcommand/);
       expect(unsupportedReason('claude --dangerously-skip-permissions mcp')).toMatch(/"mcp" subcommand/);
@@ -634,7 +643,7 @@ describe('harness', () => {
     });
 
     it('a codex flag value is not misread as a subcommand', () => {
-      expect(launch('codex --model gpt-5-codex').args).toEqual(['--model', 'gpt-5-codex', PROMPT]);
+      expect(launch('codex --model gpt-5-codex').args).toEqual(['--model', 'gpt-5-codex', '--', PROMPT]);
     });
 
     it('holds the non-interactive codex subcommands by name', () => {

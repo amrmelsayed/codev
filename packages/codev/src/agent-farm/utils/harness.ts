@@ -179,8 +179,9 @@ export const CLAUDE_SUBCOMMANDS: readonly string[] = [
 
 /**
  * Claude flags that defeat an interactive prompt launch: `-p/--print` runs
- * headless, `--bg/--background` detaches the session, and `-r/--resume` takes an
- * optional value that would swallow the positional prompt.
+ * headless, `--bg/--background` detaches the session, and `-r/--resume` continues
+ * an existing conversation instead of starting the task in a fresh one. Matched
+ * with or without an `=value` suffix.
  */
 export const CLAUDE_INTERACTIVE_BLOCKING_FLAGS: readonly string[] = [
   '-p', '--print', '--bg', '--background', '-r', '--resume',
@@ -201,7 +202,20 @@ export const CODEX_SUBCOMMANDS: readonly string[] = [
   'features', 'help',
 ];
 
-/** The first token in `flags` that names a subcommand, or undefined. */
+/** The option name of a token, dropping any `=value` suffix (`--resume=x` → `--resume`). */
+function flagName(token: string): string {
+  const eq = token.indexOf('=');
+  if (token.startsWith('-') && eq > 0) return token.slice(0, eq);
+  return token;
+}
+
+/**
+ * The first token in `flags` that names a subcommand, or undefined. Every token is
+ * scanned, not just the first non-flag one, because a flag value (`--model
+ * gpt-5-codex`) is indistinguishable from a subcommand without the CLI's own
+ * option table. The cost is a false positive when a flag VALUE equals a
+ * subcommand name, which falls back to the prompt file: the safe direction.
+ */
 function findSubcommand(flags: string[], subcommands: readonly string[]): string | undefined {
   return flags.find(token => subcommands.includes(token));
 }
@@ -217,10 +231,12 @@ export const CLAUDE_HARNESS: HarnessProvider = {
   supportsContextReset: true,
   // Spec 1797: `claude [options] [prompt]` starts an interactive session with the
   // prompt as its first turn (verified against `claude --help`, Claude Code
-  // 2.1.296, 2026-10-13).
-  buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
+  // 2.1.296, 2026-10-13). The `--` ends option parsing so a configured variadic
+  // or optional-value flag (`--add-dir`, `--mcp-config`, …) cannot swallow the
+  // prompt (verified 2026-10-13: `claude -p --add-dir /tmp -- "<prompt>"`).
+  buildInteractiveTaskLaunch: (prompt) => ({ args: ['--', prompt] }),
   interactiveLaunchBlocker: (flags) => {
-    const flag = flags.find(token => CLAUDE_INTERACTIVE_BLOCKING_FLAGS.includes(token));
+    const flag = flags.find(token => CLAUDE_INTERACTIVE_BLOCKING_FLAGS.includes(flagName(token)));
     if (flag) return `the configured command passes ${flag}, which stops Claude opening an interactive session with the prompt`;
     const subcommand = findSubcommand(flags, CLAUDE_SUBCOMMANDS);
     if (subcommand) return `the configured command runs the claude "${subcommand}" subcommand, which does not start an interactive session with a prompt`;
@@ -265,8 +281,10 @@ export const CLAUDE_HARNESS: HarnessProvider = {
 export const CODEX_HARNESS: HarnessProvider = {
   // Spec 1797: `codex [OPTIONS] [PROMPT]` forwards to the interactive CLI with the
   // prompt as the session's first turn (verified against `codex --help`,
-  // codex-cli 0.162.1, 2026-10-13).
-  buildInteractiveTaskLaunch: (prompt) => ({ args: [prompt] }),
+  // codex-cli 0.162.1, 2026-10-13). The `--` ends option parsing so a configured
+  // multi-value flag (`-i/--image`) cannot swallow the prompt (verified
+  // 2026-10-13: `codex exec -i <file> -- "<prompt>"`).
+  buildInteractiveTaskLaunch: (prompt) => ({ args: ['--', prompt] }),
   interactiveLaunchBlocker: (flags) => {
     const subcommand = findSubcommand(flags, CODEX_SUBCOMMANDS);
     if (subcommand) return `the configured command runs the codex "${subcommand}" subcommand, which does not start an interactive session with a prompt`;
