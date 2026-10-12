@@ -106,10 +106,12 @@ export interface SpawnIdeOptions {
 export interface SpawnIdeResult {
   record: IdeServerRecord;
   /**
-   * True when an already-live server was adopted that has not loaded the
-   * current sidebar: the sidebar just changed, the recorded sidebar version or
-   * extensions directory differs from the current one (including a legacy
-   * record with neither), or its launch arguments are unknown (no prior record). The live server is never killed; the user restarts it.
+   * True when an already-live server was adopted that is not running what
+   * this start asked for: the sidebar just changed, the recorded server path,
+   * sidebar version or extensions directory differs from the current one
+   * (including a legacy record with neither), or its launch arguments are
+   * unknown (no prior record). The live server is never killed; the user
+   * restarts it.
    */
   restartRequired: boolean;
 }
@@ -244,7 +246,7 @@ function adoptLiveIdeServer(
   if (existing && existing.port === port) {
     prior = existing;
   }
-  const restartRequired = prior === null || !liveServerIsCurrent(prior, preflight);
+  const restartRequired = prior === null || !liveServerIsCurrent(prior, opts.serverPath, preflight);
 
   const record: IdeServerRecord = {
     prefix: IDE_DEFAULT_PREFIX,
@@ -267,13 +269,14 @@ function adoptLiveIdeServer(
 }
 
 /**
- * True when the live server recorded in `prior` already loaded what this
- * preflight prepared: the same extensions directory and, when a sidebar is
- * embedded, the same sidebar version. Compared against the record rather than
+ * True when the live server recorded in `prior` already runs what this start
+ * prepared: the same server binary, the same extensions directory and, when a
+ * sidebar is embedded, the same sidebar version. Compared against the record rather than
  * this preflight's install outcome, so a server left running after an earlier
  * start upgraded the sidebar is still reported stale on every later start.
  */
-function liveServerIsCurrent(prior: IdeServerRecord, preflight: IdePreflight): boolean {
+function liveServerIsCurrent(prior: IdeServerRecord, serverPath: string, preflight: IdePreflight): boolean {
+  if (prior.serverPath !== serverPath) return false;
   if (preflight.sidebarChanged) return false;
   if (prior.extensionsDir !== preflight.extensionsDir) return false;
   if (preflight.sidebarVersion === null) return true;

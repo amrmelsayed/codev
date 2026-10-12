@@ -314,6 +314,17 @@ describe('live-port adopt', () => {
     expect(restartRequired).toBe(true);
   });
 
+  it('flags a restart when the live server was started from a different server path', async () => {
+    fakes.seedRecord(recordOn(8200, 4100, { serverPath: '/old/bin/codev-ide-server' }));
+    fakes.ports.set(8200, [4100]);
+
+    const { record, restartRequired } = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
+
+    expect(restartRequired).toBe(true);
+    expect(record.serverPath).toBe(SERVER_PATH);
+    expect(fakes.ports.get(8200)).toEqual([4100]);
+  });
+
   it('does not flag a restart for a missing embedded sidebar when the server is otherwise current', async () => {
     fakes.seedRecord(recordOn(8200, 4100, { sidebarVersion: undefined }));
     fakes.ports.set(8200, [4100]);
