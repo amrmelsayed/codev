@@ -8,10 +8,10 @@ plan_phases:
     status: complete
   - id: phase_2
     title: Skill bootstrap mode and bootstrap prompt template
-    status: in_progress
+    status: complete
   - id: phase_3
     title: Harness capability for interactive task launch
-    status: pending
+    status: in_progress
   - id: phase_4
     title: codev bootstrap-docs command core
     status: pending
@@ -21,7 +21,7 @@ plan_phases:
   - id: phase_6
     title: adopt and update integration plus docs
     status: pending
-current_plan_phase: phase_2
+current_plan_phase: phase_3
 gates:
   spec-approval:
     status: approved
@@ -35,8 +35,8 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 2
-build_complete: true
+iteration: 1
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -87,7 +87,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_2-iter1-claude.txt
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-12T23:02:17.928Z'
+updated_at: '2026-10-12T23:05:12.675Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:29:16.809Z'
@@ -98,6 +98,8 @@ context_refreshes:
   - boundary: plan-phase:phase_2
     at: '2026-10-12T22:54:07.509Z'
     acknowledged_at: '2026-10-12T22:54:13.174Z'
+  - boundary: plan-phase:phase_3
+    at: '2026-10-12T23:05:12.674Z'
 force_advanced:
   phase: plan
   iteration: 3
