@@ -62,7 +62,7 @@ scar_rules:
       - codev/roles/builder.md
 
   - id: afx-from-root
-    canonical: "Run `afx spawn` and `afx cleanup` only from the main workspace root, never from inside a builder worktree — spawning from a worktree nests builders and breaks the workspace."
+    canonical: "Run `afx` commands only from the main workspace root, never from inside a builder worktree — spawning from a worktree nests builders and breaks the workspace."
     must_appear_on:
       - AGENTS.md
       - CLAUDE.md

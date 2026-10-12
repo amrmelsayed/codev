@@ -71,8 +71,6 @@ afx send 0042 "PR approved, please merge"
 afx send 0585 "check the test output" --file /tmp/test-results.txt
 ```
 
-**From a builder:** run `afx send` from your own worktree, so plain `architect` reaches your spawning architect rather than `main`.
-
 **Addressing forms** — the recipient isn't only a builder ID:
 
 | Form | Routes to |
