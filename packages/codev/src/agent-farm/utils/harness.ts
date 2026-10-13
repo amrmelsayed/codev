@@ -164,43 +164,8 @@ export interface CustomHarnessConfig {
 }
 
 // =============================================================================
-// Interactive launch blockers (Spec 1797)
+// Interactive launch blocker helpers (Spec 1797)
 // =============================================================================
-
-/**
- * Claude subcommands from `claude --help` (Claude Code 2.1.296, 2026-10-13),
- * including aliases. None of them opens an interactive session with a prompt.
- */
-export const CLAUDE_SUBCOMMANDS: readonly string[] = [
-  'agents', 'attach', 'auth', 'auto-mode', 'doctor', 'gateway', 'import',
-  'install', 'logs', 'mcp', 'plugin', 'plugins', 'purge', 'respawn', 'rm',
-  'setup-token', 'stop', 'kill', 'ultrareview', 'update', 'upgrade',
-];
-
-/**
- * Claude flags that defeat an interactive prompt launch: `-p/--print` runs
- * headless, `--bg/--background` detaches the session, and `-r/--resume` continues
- * an existing conversation instead of starting the task in a fresh one. Matched
- * with or without an `=value` suffix.
- */
-export const CLAUDE_INTERACTIVE_BLOCKING_FLAGS: readonly string[] = [
-  '-p', '--print', '--bg', '--background', '-r', '--resume',
-];
-
-/**
- * Every subcommand listed by `codex --help` (codex-cli 0.162.1, 2026-10-13),
- * including aliases, plus `mcp-server` from earlier releases. Each one either
- * runs non-interactively (`exec`/`e`, `review`, …) or reads its own positional
- * args (`resume`, `fork`), so a configured command carrying any of them must not
- * receive a positional prompt.
- */
-export const CODEX_SUBCOMMANDS: readonly string[] = [
-  'agents', 'exec', 'e', 'review', 'login', 'logout', 'mcp', 'mcp-server',
-  'plugin', 'app-server', 'remote-control', 'app', 'completion', 'update',
-  'doctor', 'sandbox', 'debug', 'apply', 'a', 'resume', 'queue', 'archive',
-  'delete', 'migrate-rollouts', 'unarchive', 'fork', 'cloud', 'exec-server',
-  'features', 'help',
-];
 
 /** The option name of a token, dropping any `=value` suffix (`--resume=x` → `--resume`). */
 function flagName(token: string): string {
@@ -223,6 +188,26 @@ function findSubcommand(flags: string[], subcommands: readonly string[]): string
 // =============================================================================
 // Built-in providers
 // =============================================================================
+
+/**
+ * Claude subcommands from `claude --help` (Claude Code 2.1.296, 2026-10-13),
+ * including aliases. None of them opens an interactive session with a prompt.
+ */
+const CLAUDE_SUBCOMMANDS: readonly string[] = [
+  'agents', 'attach', 'auth', 'auto-mode', 'doctor', 'gateway', 'import',
+  'install', 'logs', 'mcp', 'plugin', 'plugins', 'purge', 'respawn', 'rm',
+  'setup-token', 'stop', 'kill', 'ultrareview', 'update', 'upgrade',
+];
+
+/**
+ * Claude flags that defeat an interactive prompt launch: `-p/--print` runs
+ * headless, `--bg/--background` detaches the session, and `-r/--resume` continues
+ * an existing conversation instead of starting the task in a fresh one. Matched
+ * with or without an `=value` suffix.
+ */
+const CLAUDE_INTERACTIVE_BLOCKING_FLAGS: readonly string[] = [
+  '-p', '--print', '--bg', '--background', '-r', '--resume',
+];
 
 export const CLAUDE_HARNESS: HarnessProvider = {
   // Spec 1273: `/clear` empties the conversation while leaving the process — and
@@ -277,6 +262,21 @@ export const CLAUDE_HARNESS: HarnessProvider = {
     verifyOwnership: (sessionId, cwd, opts) => verifySessionOwnership(cwd, sessionId, opts),
   },
 };
+
+/**
+ * Every subcommand listed by `codex --help` (codex-cli 0.162.1, 2026-10-13),
+ * including aliases, plus `mcp-server` from earlier releases. Each one either
+ * runs non-interactively (`exec`/`e`, `review`, …) or reads its own positional
+ * args (`resume`, `fork`), so a configured command carrying any of them must not
+ * receive a positional prompt.
+ */
+const CODEX_SUBCOMMANDS: readonly string[] = [
+  'agents', 'exec', 'e', 'review', 'login', 'logout', 'mcp', 'mcp-server',
+  'plugin', 'app-server', 'remote-control', 'app', 'completion', 'update',
+  'doctor', 'sandbox', 'debug', 'apply', 'a', 'resume', 'queue', 'archive',
+  'delete', 'migrate-rollouts', 'unarchive', 'fork', 'cloud', 'exec-server',
+  'features', 'help',
+];
 
 export const CODEX_HARNESS: HarnessProvider = {
   // Spec 1797: `codex [OPTIONS] [PROMPT]` forwards to the interactive CLI with the

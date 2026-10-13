@@ -60,3 +60,5 @@
 - PR #1808 opened. PR CMAP: codex RC (review-time mutations escaped detection), claude APPROVE (fence, --> placement, stale base), gemini skipped. All fixed (9e87ce164) + merged main.
 - main integration review round 1 (4 must-fix): symlinks lstat-curated and hashed through the link; starter templates pinned; adopt exits 0 after successful adoption (ruling); agent-process + CONSULT_OWNED_PREFIXES moved to lib. Commits fd450a757, a7a469edc, d42fc36b3.
 - Real-repo run 2 on final code (execa): validation passed incl. missing-guidance (comment kept this time), clean detection, re-run byte-identical no-op. Suite after merge: 6384 passed; tsc clean.
+
+**Owner, while waiting at the pr gate:** the Claude and codex launch-blocker lists looked like Claude-specific knowledge sitting in the general-purpose harness module. Small fix on this PR: the lists are no longer exported and sit beside `CLAUDE_HARNESS` / `CODEX_HARNESS`, and the tests check the blocker through the provider instead of the constants. Filed #1810 (area/tower) for the proper split: one file per built-in provider.

@@ -322,3 +322,4 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - `cli.ts`'s `update --agent` JSON builder is duplicated in `update.test.ts`. Extracting it would let `instructions.bootstrapDocs` be unit-tested.
 - Observed, pre-existing: running `codev update` right after a fresh `adopt` produces `CLAUDE.md` / `AGENTS.md` `.codev-new` files and launches update's own (unawaited) merge session.
 - `adopt`'s Next steps still lists `consult plan  # Review the plan with an architect`, which reads oddly right after adoption (pre-existing).
+- #1810: split the built-in harness providers out of `harness.ts`, one file per harness. As a first step on this PR, the interactive-launch blocker lists (`CLAUDE_SUBCOMMANDS`, `CLAUDE_INTERACTIVE_BLOCKING_FLAGS`, `CODEX_SUBCOMMANDS`) are no longer exported and sit beside the provider that uses them; tests go through the provider's blocker.

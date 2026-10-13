@@ -11,8 +11,6 @@ import {
   getRetirement,
   getBuiltinHarness,
   resolveInteractiveTaskLauncher,
-  CODEX_SUBCOMMANDS,
-  CLAUDE_SUBCOMMANDS,
   type CustomHarnessConfig,
 } from '../utils/harness.js';
 
@@ -628,7 +626,7 @@ describe('harness', () => {
       expect(unsupportedReason('claude doctor')).toMatch(/"doctor" subcommand/);
       expect(unsupportedReason('claude --dangerously-skip-permissions mcp')).toMatch(/"mcp" subcommand/);
       for (const sub of ['agents', 'attach', 'auth', 'install', 'update', 'ultrareview']) {
-        expect(CLAUDE_SUBCOMMANDS).toContain(sub);
+        expect(unsupportedReason(`claude ${sub}`)).toMatch(`"${sub}" subcommand`);
       }
     });
 
@@ -646,9 +644,9 @@ describe('harness', () => {
       expect(launch('codex --model gpt-5-codex').args).toEqual(['--model', 'gpt-5-codex', '--', PROMPT]);
     });
 
-    it('holds the non-interactive codex subcommands by name', () => {
+    it('blocks the non-interactive codex subcommands by name', () => {
       for (const sub of ['exec', 'e', 'review', 'login', 'logout', 'mcp', 'resume', 'fork']) {
-        expect(CODEX_SUBCOMMANDS).toContain(sub);
+        expect(unsupportedReason(`codex ${sub}`)).toMatch(`"${sub}" subcommand`);
       }
     });
 
