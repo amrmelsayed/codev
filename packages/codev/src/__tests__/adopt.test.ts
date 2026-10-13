@@ -363,6 +363,26 @@ describe('adopt command', () => {
       expect(events.indexOf(`confirm:${DRAFT_QUESTION}`)).toBeLessThan(events.indexOf('bootstrap'));
     });
 
+    it('-y with a conflict does not wait on the merge session, which launches after Next steps', async () => {
+      makeProject('bootstrap-conflict-yes', { 'package.json': '{}', 'CLAUDE.md': '# Mine' });
+      let mergeStartedAt = -1;
+      let finishMerge: (() => void) | undefined;
+      const runMergeSession = vi.fn(() => {
+        mergeStartedAt = output.length;
+        return new Promise<{ code: number; signal: null }>(resolve => {
+          finishMerge = () => resolve({ code: 0, signal: null });
+        });
+      });
+
+      const { adopt } = await import('../commands/adopt.js');
+      const exitCode = await adopt({ yes: true }, { runMergeSession, runBootstrap: vi.fn(async () => 0) });
+
+      expect(exitCode).toBe(0);
+      expect(runMergeSession).toHaveBeenCalledTimes(1);
+      expect(output.findIndex(line => line.includes('Next steps:'))).toBeLessThan(mergeStartedAt);
+      finishMerge?.();
+    });
+
     it('a merge session that cannot launch prints the manual merge steps and still offers the pass', async () => {
       makeProject('bootstrap-merge-error', { 'package.json': '{}', 'CLAUDE.md': '# Mine' });
       const confirm = vi.fn(async (question: string) => question !== DRAFT_QUESTION);

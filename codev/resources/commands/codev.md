@@ -67,7 +67,7 @@ Adds codev structure to the current directory. Detects existing files (CLAUDE.md
 
 Use this when you want to add codev to a project that already has code.
 
-If CLAUDE.md or AGENTS.md conflicts, adopt launches Claude to merge the `.codev-new` versions and waits for that session to end. Then, on a project with code to document, it asks "Draft the governance docs from this codebase now?" (default No); yes runs `codev bootstrap-docs`. With `-y` nothing is launched and the command is listed under "Next steps" instead. An empty project gets neither the offer nor the hint.
+If CLAUDE.md or AGENTS.md conflicts, adopt launches Claude to merge the `.codev-new` versions; interactively it waits for that session to end. Then, on a project with code to document, it asks "Draft the governance docs from this codebase now?" (default No); yes runs `codev bootstrap-docs`. With `-y` nothing is launched and the command is listed under "Next steps" instead. An empty project gets neither the offer nor the hint.
 
 **Examples:**
 

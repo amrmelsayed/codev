@@ -213,6 +213,17 @@ describe('classifyProjectGovernance and shouldOfferBootstrap', () => {
     expect(bootstrapEligibleFiles(statuses).map(file => file.name)).not.toContain('arch-critical.md');
   });
 
+  it('never offers when the package skeleton lacks a starter (an offer must not throw)', () => {
+    writeStarters();
+    fs.writeFileSync(path.join(dir, 'main.py'), 'print(1)\n');
+    const emptyTemplates = fs.mkdtempSync(path.join(os.tmpdir(), 'codev-1797-no-starters-'));
+    try {
+      expect(shouldOfferBootstrap(dir, emptyTemplates)).toBe(false);
+    } finally {
+      fs.rmSync(emptyTemplates, { recursive: true, force: true });
+    }
+  });
+
   it('offers the pass only when a starter remains on a non-empty project', () => {
     writeStarters();
     expect(shouldOfferBootstrap(dir, templatesDir)).toBe(false);

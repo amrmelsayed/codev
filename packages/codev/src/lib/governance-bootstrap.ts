@@ -169,7 +169,15 @@ export function bootstrapEligibleFiles(statuses: readonly GovernanceStatus[]): G
  * to decide whether to offer or mention the pass.
  */
 export function shouldOfferBootstrap(root: string, templatesDir: string): boolean {
-  if (bootstrapEligibleFiles(classifyProjectGovernance(root, templatesDir)).length === 0) return false;
+  let statuses: GovernanceStatus[];
+  try {
+    statuses = classifyProjectGovernance(root, templatesDir);
+  } catch {
+    // A starter missing from the installed package: `codev bootstrap-docs` reports that
+    // loudly; an offer or a hint must not fail adopt or update over it.
+    return false;
+  }
+  if (bootstrapEligibleFiles(statuses).length === 0) return false;
   return isNonEmptyRepo(root);
 }
 

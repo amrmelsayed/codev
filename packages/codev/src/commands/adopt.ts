@@ -233,9 +233,8 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
     console.log(chalk.yellow('  ⚠'), `Skipped ${skippedCount} existing files`);
   }
 
-  // If there are root conflicts (CLAUDE.md, AGENTS.md), launch Claude to merge them, and wait:
-  // the bootstrap offer below must never share the terminal with a live session.
-  if (rootResult.conflicts.length > 0) {
+  // If there are root conflicts (CLAUDE.md, AGENTS.md), launch Claude to merge them.
+  const mergeConflicts = async (): Promise<void> => {
     console.log('');
     console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
     console.log(chalk.cyan('  Launching Claude to merge conflicts...'));
@@ -253,11 +252,17 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
         console.log(chalk.dim(`  ${file} ← ${file}.codev-new`));
       }
     }
-  }
+  };
+  const hasConflicts = rootResult.conflicts.length > 0;
 
-  // Offer the governance-doc bootstrap (Spec 1797) only on a project with something to
-  // document. With -y it is never launched; the command is listed under "Next steps".
+  // Interactively, the merge session is awaited: the bootstrap offer below must never share
+  // the terminal with a live session. Then offer the governance-doc bootstrap (Spec 1797)
+  // on a project with something to document. With -y nothing is offered, so nothing waits on
+  // the merge; it launches after "Next steps" as before, and the command is listed instead.
   let exitCode = 0;
+  if (hasConflicts && !yes) {
+    await mergeConflicts();
+  }
   let bootstrapPending = deps.shouldOfferBootstrap(targetDir);
   if (bootstrapPending && !yes) {
     console.log('');
@@ -280,6 +285,10 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
   console.log('  afx spawn                     # Spawn a builder to implement the plan');
   console.log('');
   console.log(chalk.dim('For more info, see: https://github.com/cluesmith/codev'));
+
+  if (hasConflicts && yes) {
+    mergeConflicts();
+  }
 
   return exitCode;
 }
