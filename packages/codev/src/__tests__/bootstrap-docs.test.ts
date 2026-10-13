@@ -29,6 +29,7 @@ import {
   type BootstrapDocsDeps,
 } from '../commands/bootstrap-docs.js';
 import type { InteractiveTaskLauncher } from '../agent-farm/utils/harness.js';
+import { guidanceCommentLines } from '../lib/governance-bootstrap.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const skeletonDir = path.join(repoRoot, 'codev-skeleton');
@@ -41,12 +42,19 @@ const STARTERS: Record<string, string> = {
   'lessons-learned.md': 'lessons-learned.starter.md',
 };
 
+/** A hot starter's guidance comment as a draft keeps it: the STARTER sentence deleted. */
+function guidance(name: string): string[] {
+  const starter = fs.readFileSync(path.join(templatesDir, STARTERS[name]), 'utf-8');
+  return [...guidanceCommentLines(starter), '-->', ''];
+}
+
 const DRAFTS: Record<string, string> = {
   'arch.md': '# Architecture\n\n## Shape\n\nA CLI and a worker.\n\n## Persistence\n\nOne SQLite file.\n',
   'lessons-learned.md': '# Lessons Learned\n\n## Testing\n\n- Run the worker tests against a real SQLite file.\n',
   'arch-critical.md': [
     '# arch-critical.md — Always-On System-Shape Facts (HOT tier)',
     '',
+    ...guidance('arch-critical.md'),
     '## Critical facts (consult before deciding)',
     '- The worker owns every write to the database.',
     '',
@@ -58,6 +66,7 @@ const DRAFTS: Record<string, string> = {
   'lessons-critical.md': [
     '# lessons-critical.md — Always-On Engineering Wisdom (HOT tier)',
     '',
+    ...guidance('lessons-critical.md'),
     '## Critical lessons (consult before deciding)',
     '- Test against real SQLite, never a mock.',
     '',
@@ -477,6 +486,7 @@ describe('codev bootstrap-docs: launched sessions', () => {
     const hot = [
       '# arch-critical.md — Always-On System-Shape Facts (HOT tier)',
       '',
+      ...guidance('arch-critical.md'),
       '## Critical facts (consult before deciding)',
       '- One fact.',
       '',

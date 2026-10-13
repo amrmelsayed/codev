@@ -25,6 +25,7 @@ import {
   classifyProjectFile,
   classifyProjectGovernance,
   isNonEmptyRepo,
+  knownStarterTexts,
   topLevelHeadings,
   validateColdFile,
   validateHotFile,
@@ -454,7 +455,8 @@ function validateDrafts(root: string, eligible: GovernanceFile[], templatesDir: 
       return { name: file.name, state: 'written', violations: validateColdFile(content, true), unmappedInfo: [] };
     }
     const cold = readIfExists(path.join(root, governancePath(file.coldDoc!))) ?? '';
-    const { violations, unmappedSections } = validateHotFile(content, cold, file);
+    const starter = knownStarterTexts(file, templatesDir)[0];
+    const { violations, unmappedSections } = validateHotFile(content, cold, file, starter);
     let unmappedInfo: string[] = [];
     if (topLevelHeadings(cold).length > HOT_CAP_MAP_TOPICS) unmappedInfo = unmappedSections;
     return { name: file.name, state: 'written', violations, unmappedInfo };

@@ -21,6 +21,7 @@ import {
   isNonEmptyRepo,
   validateHotFile,
   validateColdFile,
+  guidanceCommentLines,
   isStarterMarker,
   nonCommentLineCount,
   type GovernanceFile,
@@ -399,6 +400,40 @@ describe('empty hot sections', () => {
       '"## Critical facts" has no entries',
       '"## Map of arch.md" has no entries',
     ]);
+  });
+});
+
+describe('hot guidance comment', () => {
+  const archCritical = readRepo('codev/resources/arch-critical.md');
+  const arch = readRepo('codev/resources/arch.md');
+  const starter = knownStarterTexts(ARCH_CRITICAL, templatesDir)[0];
+  const body = archCritical.slice(archCritical.indexOf('## Critical facts'));
+  const title = '# arch-critical.md — Always-On System-Shape Facts (HOT tier)';
+
+  function guidanceKinds(draft: string): string[] {
+    return validateHotFile(draft, arch, ARCH_CRITICAL, starter).violations
+      .filter(v => v.kind === 'missing-guidance')
+      .map(v => v.kind);
+  }
+
+  it('takes every line of the starter comment except the STARTER sentence', () => {
+    const lines = guidanceCommentLines(starter);
+    expect(lines[0].startsWith('<!-- HOT tier:')).toBe(true);
+    expect(lines.some(line => line.includes('STARTER:'))).toBe(false);
+    expect(lines.length).toBeGreaterThan(1);
+  });
+
+  it('passes a draft that kept the comment with only the STARTER sentence deleted', () => {
+    const draft = [title, '', ...guidanceCommentLines(starter), '-->', '', body].join('\n');
+    expect(guidanceKinds(draft)).toEqual([]);
+  });
+
+  it('flags a draft that dropped the comment', () => {
+    expect(guidanceKinds([title, '', body].join('\n'))).toEqual(['missing-guidance']);
+  });
+
+  it('is not checked without a starter (curated files keep their own wording)', () => {
+    expect(validateHotFile(archCritical, arch, ARCH_CRITICAL).violations).toEqual([]);
   });
 });
 

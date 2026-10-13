@@ -335,7 +335,8 @@ export type ViolationKind =
   | 'unknown-map-section'
   | 'ambiguous-map-section'
   | 'unmapped-section'
-  | 'too-many-cold-sections';
+  | 'too-many-cold-sections'
+  | 'missing-guidance';
 
 export interface Violation {
   kind: ViolationKind;
@@ -361,12 +362,39 @@ function entriesHeading(file: GovernanceFile): string {
 }
 
 /**
+ * The lines of a hot starter's guidance comment a bootstrapped draft must keep: every line
+ * of the starter's first HTML comment except the one carrying the `STARTER:` sentence.
+ */
+export function guidanceCommentLines(starter: string): string[] {
+  const lines = toLines(starter).map(line => line.trim());
+  const start = lines.findIndex(line => line.startsWith('<!--'));
+  if (start === -1) return [];
+  const end = lines.findIndex((line, i) => i >= start && line.includes('-->'));
+  const comment = lines.slice(start, end === -1 ? lines.length : end + 1);
+  return comment.filter(line => line !== '' && !line.includes('STARTER:'));
+}
+
+/**
  * Check a drafted hot file: no starter text, both sections present and non-empty, the cap
  * (per section, comment lines excluded), and every map topic naming exactly one real cold
- * section.
+ * section. Given the file's starter, also check the draft kept the starter's guidance
+ * comment (the cap and displacement rules for whoever edits the file next).
  */
-export function validateHotFile(content: string, coldContent: string, file: GovernanceFile): HotValidation {
+export function validateHotFile(
+  content: string,
+  coldContent: string,
+  file: GovernanceFile,
+  starter?: string,
+): HotValidation {
   const violations = leftoverMarkers(content);
+
+  if (starter !== undefined) {
+    const kept = new Set(toLines(content).map(line => line.trim()));
+    const dropped = guidanceCommentLines(starter).filter(line => !kept.has(line));
+    if (dropped.length > 0) {
+      violations.push({ kind: 'missing-guidance', message: `the starter's guidance comment was dropped or edited: ${dropped[0]}` });
+    }
+  }
 
   const heading = entriesHeading(file);
   const hasEntries = topLevelHeadings(content).some(h => h.startsWith(heading));
