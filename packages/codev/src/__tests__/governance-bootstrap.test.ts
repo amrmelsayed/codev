@@ -15,6 +15,9 @@ import {
   knownStarterTexts,
   classifyGovernanceFile,
   classifyProjectFile,
+  classifyProjectGovernance,
+  bootstrapEligibleFiles,
+  shouldOfferBootstrap,
   isNonEmptyRepo,
   validateHotFile,
   validateColdFile,
@@ -171,6 +174,54 @@ describe('isNonEmptyRepo', () => {
     writeCodevGenerated();
     write('build/out.js');
     expect(isNonEmptyRepo(dir)).toBe(false);
+  });
+});
+
+describe('classifyProjectGovernance and shouldOfferBootstrap', () => {
+  let dir: string;
+
+  function writeResource(name: string, content: string): void {
+    fs.mkdirSync(path.join(dir, 'codev', 'resources'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'codev', 'resources', name), content);
+  }
+
+  function writeStarters(): void {
+    for (const file of GOVERNANCE_FILES) {
+      writeResource(file.name, knownStarterTexts(file, templatesDir)[0]);
+    }
+  }
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codev-1797-offer-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('makes every starter eligible on a fresh adopt', () => {
+    writeStarters();
+    const names = bootstrapEligibleFiles(classifyProjectGovernance(dir, templatesDir)).map(file => file.name);
+    expect(names.sort()).toEqual(GOVERNANCE_FILES.map(file => file.name).sort());
+  });
+
+  it('holds back a hot starter whose cold doc is missing', () => {
+    writeStarters();
+    fs.rmSync(path.join(dir, 'codev', 'resources', 'arch.md'));
+    const statuses = classifyProjectGovernance(dir, templatesDir);
+    expect(statuses.find(status => status.file.name === 'arch-critical.md')?.heldBack).toContain('arch.md');
+    expect(bootstrapEligibleFiles(statuses).map(file => file.name)).not.toContain('arch-critical.md');
+  });
+
+  it('offers the pass only when a starter remains on a non-empty project', () => {
+    writeStarters();
+    expect(shouldOfferBootstrap(dir, templatesDir)).toBe(false);
+    fs.writeFileSync(path.join(dir, 'main.py'), 'print(1)\n');
+    expect(shouldOfferBootstrap(dir, templatesDir)).toBe(true);
+    for (const file of GOVERNANCE_FILES) {
+      writeResource(file.name, `# ${file.name}\n\n## Real\n\nProject-specific content.\n`);
+    }
+    expect(shouldOfferBootstrap(dir, templatesDir)).toBe(false);
   });
 });
 

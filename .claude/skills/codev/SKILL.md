@@ -1,6 +1,6 @@
 ---
 name: codev
-description: Codev project management CLI — init, adopt, update, and doctor commands. Check this skill before running any `codev` command (except `consult`, `porch`, or `afx` which have their own skills). Use when setting up new projects, adding codev to existing repos, updating framework files, or diagnosing missing dependencies.
+description: Codev project management CLI — init, adopt, bootstrap-docs, update, and doctor commands. Check this skill before running any `codev` command (except `consult`, `porch`, or `afx` which have their own skills). Use when setting up new projects, adding codev to existing repos, updating framework files, or diagnosing missing dependencies.
 ---
 
 # codev - Project Management CLI
@@ -10,6 +10,7 @@ description: Codev project management CLI — init, adopt, update, and doctor co
 ```
 codev init [project-name]      Create a new codev project directory
 codev adopt                    Add codev to the current directory
+codev bootstrap-docs           Draft the governance docs from this codebase
 codev update                   Update protocols, roles, skills from package
 codev doctor                   Check system dependencies
 ```
@@ -30,6 +31,17 @@ Adds codev to the **current directory** (existing project). Run from the project
 ```bash
 codev adopt                    # Interactive
 codev adopt -y                 # Skip conflict prompts
+```
+
+On a project with code, adopt then offers to draft the governance docs (default No); with `-y` it only prints the command.
+
+## codev bootstrap-docs
+
+Drafts `codev/resources/{arch,lessons-learned,arch-critical,lessons-critical}.md` from the codebase and git history. Rewrites only files that are still untouched starters; curated files are never edited. Always confirms before launching the agent, then reports what changed and runs a three-way review of the drafts. Nothing is committed.
+
+```bash
+codev bootstrap-docs --dry-run # Eligible files and the launch, nothing run
+codev bootstrap-docs           # Draft, report, review
 ```
 
 ## codev update

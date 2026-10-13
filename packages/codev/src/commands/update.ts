@@ -34,6 +34,10 @@ import {
   CODEV_GITIGNORE_ENTRIES,
 } from '../lib/gitignore.js';
 import { auditPrGates, formatPrGateWarning } from '../lib/pr-gate-audit.js';
+import { shouldOfferBootstrap } from '../lib/governance-bootstrap.js';
+
+export const BOOTSTRAP_DOCS_HINT =
+  'Governance docs are still placeholders: run `codev bootstrap-docs` to draft them from this codebase.';
 
 export interface UpdateOptions {
   dryRun?: boolean;
@@ -60,6 +64,8 @@ export interface UpdateResult {
   gitignoreSkipped?: boolean;
   /** Loud warnings for PR-producing protocol overrides missing a `pr` gate (#943). */
   prGateWarnings?: string[];
+  /** Set when governance files are still starters on a non-empty project (Spec 1797). */
+  bootstrapDocsHint?: string;
   error?: string;
 }
 
@@ -278,6 +284,12 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
       }
     }
 
+    // Starters left on a project with something to document point at the bootstrap pass
+    // (Spec 1797). A dry run has not backfilled anything, so it says nothing.
+    if (!dryRun && shouldOfferBootstrap(targetDir, path.join(templatesDir, 'templates'))) {
+      result.bootstrapDocsHint = BOOTSTRAP_DOCS_HINT;
+    }
+
     // Refresh the always-on hot-tier managed block in CLAUDE.md / AGENTS.md (Spec 987).
     // Non-clobbering: only the marked block is replaced; user content is preserved.
     // Logged as a side effect (not added to result.updated, which tracks template copies).
@@ -346,6 +358,12 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
       for (const w of prGateWarnings) {
         log(`  ${chalk.yellow('⚠')} ${formatPrGateWarning(w)}`);
       }
+    }
+
+    // In agent mode the hint travels in the JSON `instructions` instead.
+    if (result.bootstrapDocsHint && !agent) {
+      log('');
+      log(chalk.cyan(result.bootstrapDocsHint));
     }
 
     if (dryRun) {

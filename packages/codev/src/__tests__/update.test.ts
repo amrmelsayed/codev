@@ -651,4 +651,66 @@ describe('update command', () => {
       expect(reloaded['new-file.md']).toBe('hash3');
     });
   });
+
+  // Spec 1797: a non-empty project left with governance starters is pointed at bootstrap-docs.
+  describe('bootstrap-docs hint', () => {
+    function hintLines(spy: ReturnType<typeof vi.fn> | unknown): number {
+      const calls = (spy as { mock: { calls: unknown[][] } }).mock.calls;
+      return calls.filter(call => call.join(' ').includes('codev bootstrap-docs')).length;
+    }
+
+    function makeProject(name: string, withSource: boolean): string {
+      const projectDir = path.join(testBaseDir, name);
+      fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });
+      if (withSource) fs.writeFileSync(path.join(projectDir, 'main.py'), 'print(1)\n');
+      process.chdir(projectDir);
+      return projectDir;
+    }
+
+    it('prints the hint exactly once when starters remain on a non-empty project', async () => {
+      makeProject('hint-nonempty', true);
+      const { update, BOOTSTRAP_DOCS_HINT } = await import('../commands/update.js');
+      const result = await update();
+      expect(result.bootstrapDocsHint).toBe(BOOTSTRAP_DOCS_HINT);
+      expect(hintLines(console.log)).toBe(1);
+    });
+
+    it('prints nothing once the governance docs carry real content', async () => {
+      const projectDir = makeProject('hint-populated', true);
+      const { update } = await import('../commands/update.js');
+      await update();
+      for (const name of ['arch-critical.md', 'lessons-critical.md', 'arch.md', 'lessons-learned.md']) {
+        fs.writeFileSync(path.join(projectDir, 'codev', 'resources', name), `# ${name}\n\n## Real\n\nProject content.\n`);
+      }
+      vi.mocked(console.log).mockClear();
+      const result = await update();
+      expect(result.bootstrapDocsHint).toBeUndefined();
+      expect(hintLines(console.log)).toBe(0);
+    });
+
+    it('prints nothing on an empty project', async () => {
+      makeProject('hint-empty', false);
+      const { update } = await import('../commands/update.js');
+      const result = await update();
+      expect(result.bootstrapDocsHint).toBeUndefined();
+      expect(hintLines(console.log)).toBe(0);
+    });
+
+    it('prints nothing on a dry run', async () => {
+      makeProject('hint-dryrun', true);
+      const { update } = await import('../commands/update.js');
+      const result = await update({ dryRun: true });
+      expect(result.bootstrapDocsHint).toBeUndefined();
+      expect(hintLines(console.log)).toBe(0);
+    });
+
+    it('agent mode carries the hint in the result instead of logging it', async () => {
+      makeProject('hint-agent', true);
+      const { update, BOOTSTRAP_DOCS_HINT } = await import('../commands/update.js');
+      const result = await update({ agent: true });
+      expect(result.bootstrapDocsHint).toBe(BOOTSTRAP_DOCS_HINT);
+      expect(hintLines(console.log)).toBe(0);
+      expect(hintLines(console.error)).toBe(0);
+    });
+  });
 });

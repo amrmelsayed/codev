@@ -21,7 +21,9 @@ import { loadConfig } from '../lib/config.js';
 import { getTemplatesDir } from '../lib/templates.js';
 import {
   GOVERNANCE_FILES,
+  bootstrapEligibleFiles,
   classifyProjectFile,
+  classifyProjectGovernance,
   isNonEmptyRepo,
   topLevelHeadings,
   validateColdFile,
@@ -29,6 +31,7 @@ import {
   HOT_CAP_MAP_TOPICS,
   type GovernanceClass,
   type GovernanceFile,
+  type GovernanceStatus,
   type Violation,
 } from '../lib/governance-bootstrap.js';
 import {
@@ -125,12 +128,7 @@ export type BootstrapOutcome =
   | 'declined'
   | 'ran';
 
-export interface FileStatus {
-  file: GovernanceFile;
-  class: GovernanceClass;
-  /** Why a placeholder is not rewritten this run (its paired cold doc is missing). */
-  heldBack?: string;
-}
+export type FileStatus = GovernanceStatus;
 
 export interface DraftValidation {
   name: string;
@@ -304,7 +302,7 @@ function isExecutableOnPath(executable: string): boolean {
  * this process ignores SIGINT; otherwise interrupting the agent would kill the CLI before it
  * could report what the session changed.
  */
-function spawnAgentProcess(launch: AgentLaunch, cwd: string): Promise<AgentExit> {
+export function spawnAgentProcess(launch: AgentLaunch, cwd: string): Promise<AgentExit> {
   const ignoreInterrupt = (): void => {};
   process.on('SIGINT', ignoreInterrupt);
   return new Promise<AgentExit>(resolve => {
@@ -720,18 +718,8 @@ export async function runBootstrapDocs(
     return { exitCode: 1, outcome: 'no-codev', files: [], launched: false };
   }
 
-  const files: FileStatus[] = GOVERNANCE_FILES.map(file => ({
-    file,
-    class: classifyProjectFile(root, file, templatesDir),
-  }));
-  // A hot map is built from its cold doc's sections; with the cold doc missing there is
-  // nothing to build it from, so the hot file waits for `codev update` too.
-  for (const status of files) {
-    if (status.class !== 'placeholder' || !status.file.coldDoc) continue;
-    const cold = files.find(other => other.file.name === status.file.coldDoc);
-    if (cold?.class === 'missing') status.heldBack = `${status.file.coldDoc} is missing`;
-  }
-  const eligible = files.filter(status => status.class === 'placeholder' && !status.heldBack).map(status => status.file);
+  const files: FileStatus[] = classifyProjectGovernance(root, templatesDir);
+  const eligible = bootstrapEligibleFiles(files);
   const curated = files.filter(status => status.class === 'curated').map(status => status.file.name);
 
   log(chalk.bold('Governance docs:'));

@@ -8,10 +8,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import { getTemplatesDir } from '../lib/templates.js';
 import { confirm } from '../lib/cli-prompts.js';
+import { shouldOfferBootstrap } from '../lib/governance-bootstrap.js';
+import { runBootstrapDocs, spawnAgentProcess, type AgentExit } from './bootstrap-docs.js';
 import {
   createUserDirs,
   createProjectsDir,
@@ -24,6 +25,26 @@ import { updateGitignore } from '../lib/gitignore.js';
 
 interface AdoptOptions {
   yes?: boolean;
+}
+
+/** Seams for tests: every prompt and every child session is replaceable. */
+export interface AdoptDeps {
+  confirm(question: string, defaultYes: boolean): Promise<boolean>;
+  /** Run the interactive conflict-merge session and wait for it to exit. */
+  runMergeSession(prompt: string, cwd: string): Promise<AgentExit>;
+  /** Whether `codev bootstrap-docs` has eligible files and something to document. */
+  shouldOfferBootstrap(root: string): boolean;
+  /** Run the bootstrap pass (it shows its own launch statement and confirm); returns its exit code. */
+  runBootstrap(root: string): Promise<number>;
+}
+
+function defaultDeps(): AdoptDeps {
+  return {
+    confirm,
+    runMergeSession: (prompt, cwd) => spawnAgentProcess({ executable: 'claude', args: [prompt] }, cwd),
+    shouldOfferBootstrap: root => shouldOfferBootstrap(root, path.join(getTemplatesDir(), 'templates')),
+    runBootstrap: async root => (await runBootstrapDocs({ cwd: root })).exitCode,
+  };
 }
 
 interface Conflict {
@@ -61,10 +82,13 @@ function detectConflicts(targetDir: string): Conflict[] {
 }
 
 /**
- * Add codev to an existing project
+ * Add codev to an existing project.
+ *
+ * Returns the process exit code: 0, or the bootstrap pass's code when the human ran it.
  */
-export async function adopt(options: AdoptOptions = {}): Promise<void> {
+export async function adopt(options: AdoptOptions = {}, overrides: Partial<AdoptDeps> = {}): Promise<number> {
   const { yes = false } = options;
+  const deps: AdoptDeps = { ...defaultDeps(), ...overrides };
   const targetDir = process.cwd();
   const projectName = path.basename(targetDir);
 
@@ -90,7 +114,7 @@ export async function adopt(options: AdoptOptions = {}): Promise<void> {
     }
     console.log('');
 
-    const proceed = await confirm('Continue and skip conflicting files?', false);
+    const proceed = await deps.confirm('Continue and skip conflicting files?', false);
     if (!proceed) {
       console.log(chalk.dim('Aborted.'));
       process.exit(0);
@@ -100,7 +124,7 @@ export async function adopt(options: AdoptOptions = {}): Promise<void> {
   // Ask about permission mode
   let skipPermissions = false;
   if (!yes) {
-    skipPermissions = await confirm('Allow AI agents to run commands without confirmation prompts?', true);
+    skipPermissions = await deps.confirm('Allow AI agents to run commands without confirmation prompts?', true);
   }
 
   // Create minimal codev structure using shared scaffold utilities
@@ -208,16 +232,9 @@ export async function adopt(options: AdoptOptions = {}): Promise<void> {
   if (skippedCount > 0) {
     console.log(chalk.yellow('  ⚠'), `Skipped ${skippedCount} existing files`);
   }
-  console.log('');
-  console.log(chalk.bold('Next steps:'));
-  console.log('');
-  console.log('  consult plan                 # Review the plan with an architect');
-  console.log('  afx tower start               # Start the Tower daemon');
-  console.log('  afx spawn                     # Spawn a builder to implement the plan');
-  console.log('');
-  console.log(chalk.dim('For more info, see: https://github.com/cluesmith/codev'));
 
-  // If there are root conflicts (CLAUDE.md, AGENTS.md), spawn Claude to merge
+  // If there are root conflicts (CLAUDE.md, AGENTS.md), launch Claude to merge them, and wait:
+  // the bootstrap offer below must never share the terminal with a live session.
   if (rootResult.conflicts.length > 0) {
     console.log('');
     console.log(chalk.cyan('═══════════════════════════════════════════════════════════'));
@@ -227,19 +244,42 @@ export async function adopt(options: AdoptOptions = {}): Promise<void> {
 
     const mergePrompt = `Merge ${rootResult.conflicts.join(' and ')} from the .codev-new versions. Add new sections from the .codev-new files, preserve my customizations, then delete the .codev-new files when done.`;
 
-    // Spawn Claude interactively with merge instructions as initial prompt
-    const claude = spawn('claude', [mergePrompt], {
-      stdio: 'inherit',
-      cwd: targetDir,
-    });
-
-    claude.on('error', (err) => {
-      console.error(chalk.red('Failed to launch Claude:'), err.message);
+    const mergeExit = await deps.runMergeSession(mergePrompt, targetDir);
+    if (mergeExit.error !== undefined) {
+      console.error(chalk.red('Failed to launch Claude:'), mergeExit.error);
       console.log('');
       console.log('Please merge the conflicts manually:');
       for (const file of rootResult.conflicts) {
         console.log(chalk.dim(`  ${file} ← ${file}.codev-new`));
       }
-    });
+    }
   }
+
+  // Offer the governance-doc bootstrap (Spec 1797) only on a project with something to
+  // document. With -y it is never launched; the command is listed under "Next steps".
+  let exitCode = 0;
+  let bootstrapPending = deps.shouldOfferBootstrap(targetDir);
+  if (bootstrapPending && !yes) {
+    console.log('');
+    if (await deps.confirm('Draft the governance docs from this codebase now?', false)) {
+      console.log('');
+      exitCode = await deps.runBootstrap(targetDir);
+      // A declined or manual pass leaves the placeholders, so the command is still worth listing.
+      bootstrapPending = deps.shouldOfferBootstrap(targetDir);
+    }
+  }
+
+  console.log('');
+  console.log(chalk.bold('Next steps:'));
+  console.log('');
+  if (bootstrapPending) {
+    console.log('  codev bootstrap-docs          # Draft the governance docs from this codebase');
+  }
+  console.log('  consult plan                 # Review the plan with an architect');
+  console.log('  afx tower start               # Start the Tower daemon');
+  console.log('  afx spawn                     # Spawn a builder to implement the plan');
+  console.log('');
+  console.log(chalk.dim('For more info, see: https://github.com/cluesmith/codev'));
+
+  return exitCode;
 }

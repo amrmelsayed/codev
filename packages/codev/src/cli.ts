@@ -82,7 +82,7 @@ program
   .option('-y, --yes', 'Skip conflict prompts')
   .action(async (options) => {
     try {
-      await adopt({ yes: options.yes });
+      process.exitCode = await adopt({ yes: options.yes });
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -138,6 +138,7 @@ program
               ? 'For each conflict, merge the .codev-new file into the original. Preserve user customizations and incorporate new sections from .codev-new. Delete the .codev-new file after merging.'
               : null,
             commit: `Stage and commit all changed files with message: '[Maintenance] Update codev to v${version}'`,
+            bootstrapDocs: result.bootstrapDocsHint ?? null,
           },
           ...(result.error ? { error: result.error } : {}),
         };

@@ -131,6 +131,48 @@ export function classifyProjectFile(root: string, file: GovernanceFile, template
   return classifyGovernanceFile(content, knownStarterTexts(file, templatesDir));
 }
 
+export interface GovernanceStatus {
+  file: GovernanceFile;
+  class: GovernanceClass;
+  /** Why a placeholder is not rewritten this run (its paired cold doc is missing). */
+  heldBack?: string;
+}
+
+/**
+ * Classify all four governance files of the project at `root`.
+ *
+ * A hot map is built from its cold doc's sections; with the cold doc missing there is
+ * nothing to build it from, so that hot placeholder is held back until `codev update`
+ * restores the cold starter.
+ */
+export function classifyProjectGovernance(root: string, templatesDir: string): GovernanceStatus[] {
+  const statuses: GovernanceStatus[] = GOVERNANCE_FILES.map(file => ({
+    file,
+    class: classifyProjectFile(root, file, templatesDir),
+  }));
+  for (const status of statuses) {
+    if (status.class !== 'placeholder' || !status.file.coldDoc) continue;
+    const cold = statuses.find(other => other.file.name === status.file.coldDoc);
+    if (cold?.class === 'missing') status.heldBack = `${status.file.coldDoc} is missing`;
+  }
+  return statuses;
+}
+
+/** The files a bootstrap pass may rewrite: untouched starters that are not held back. */
+export function bootstrapEligibleFiles(statuses: readonly GovernanceStatus[]): GovernanceFile[] {
+  return statuses.filter(status => status.class === 'placeholder' && !status.heldBack).map(status => status.file);
+}
+
+/**
+ * Whether `codev bootstrap-docs` has work to do at `root`: some governance file is still an
+ * eligible starter and the project holds something to document. Adopt and update use this
+ * to decide whether to offer or mention the pass.
+ */
+export function shouldOfferBootstrap(root: string, templatesDir: string): boolean {
+  if (bootstrapEligibleFiles(classifyProjectGovernance(root, templatesDir)).length === 0) return false;
+  return isNonEmptyRepo(root);
+}
+
 // =============================================================================
 // Non-empty repository
 // =============================================================================
