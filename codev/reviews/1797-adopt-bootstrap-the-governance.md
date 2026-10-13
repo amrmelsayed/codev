@@ -261,6 +261,16 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Concern**: adopt's exit code (ruling) → **Addressed**: a7a469edc (adopt exits 0 after a successful adoption; the adopt path is tested)
 - **Concern**: Layering → **Addressed**: d42fc36b3 (`lib/agent-process.ts`; `CONSULT_OWNED_PREFIXES` in `lib/tree-snapshot.ts`; lazy `bootstrap-docs` load)
 
+### PR Review (Round 2, on the round-1 fixes)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: The command docs still said the review never changes the exit code → **Addressed**: both trees now describe reviewer-time changes failing the run, and adopt exiting `0`
+- **Concern**: adopt's JSDoc still described returning the bootstrap exit code → **Addressed**
+- **Concern**: The approved spec and plan lack `approved` / `validated` frontmatter → **Addressed**: added (both approved 2026-10-12 at their porch gates)
+#### Claude (APPROVE)
+- Verified all four round-1 items fixed with non-vacuous tests. Non-blocking: commit subjects in the digest are untrusted, instruction-shaped text (bounded by detect-and-report, eligible-only writes and human review); `.consult/` is a blanket detection exemption; a human-driven launch is still unexercised (owner-assigned) → **N/A**: recorded; the first two are listed under Follow-up Items
+
 ## Lessons Learned
 
 ### What Went Well
@@ -307,6 +317,8 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 
 - `REVIEW_MODELS` in `bootstrap-docs.ts` should respect `porch.consultation.models` (or a project consult config) instead of fixed gemini/codex/claude.
 - Gemini skip detection matches consult's `SUMMARY: … lane skipped` wording. If that wording changes, a skipped lane is reported as reviewed, with the skip note as its feedback file. A structured skip signal from `consult` would remove the coupling.
+- Commit subjects in the git digest are untrusted, instruction-shaped text inlined into the agent prompt. The fence keeps them data-shaped, but nothing stops a crafted subject from reading as an instruction. Detection and human review bound the impact.
+- `.consult/` is exempt from change detection as a whole (consult owns it); a narrower exemption (`bootstrap-docs/`, `history.log`) would watch the rest.
 - `cli.ts`'s `update --agent` JSON builder is duplicated in `update.test.ts`. Extracting it would let `instructions.bootstrapDocs` be unit-tested.
 - Observed, pre-existing: running `codev update` right after a fresh `adopt` produces `CLAUDE.md` / `AGENTS.md` `.codev-new` files and launches update's own (unawaited) merge session.
 - `adopt`'s Next steps still lists `consult plan  # Review the plan with an architect`, which reads oddly right after adoption (pre-existing).
