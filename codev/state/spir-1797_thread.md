@@ -57,3 +57,6 @@
 - Real-repo verification run on sindresorhus/execa (877 commits) with the branch build, under a pty with a headless `claude -p` wrapper as the configured agent: four execa-specific drafts, validation passed, nothing outside the eligible files, codex + claude draft review found real accuracy errors (gemini skipped), re-run a byte-identical no-op.
 - Finding: both hot drafts dropped the starter's guidance comment (spec's hot-file shape keeps it; no reviewer noticed). Fixed: validator `missing-guidance` + an explicit prompt rule. Re-validating the execa drafts flags both.
 - Review doc written; cold arch.md + lessons-learned.md updated (hot tier at cap, unchanged).
+- PR #1808 opened. PR CMAP: codex RC (review-time mutations escaped detection), claude APPROVE (fence, --> placement, stale base), gemini skipped. All fixed (9e87ce164) + merged main.
+- main integration review round 1 (4 must-fix): symlinks lstat-curated and hashed through the link; starter templates pinned; adopt exits 0 after successful adoption (ruling); agent-process + CONSULT_OWNED_PREFIXES moved to lib. Commits fd450a757, a7a469edc, d42fc36b3.
+- Real-repo run 2 on final code (execa): validation passed incl. missing-guidance (comment kept this time), clean detection, re-run byte-identical no-op. Suite after merge: 6384 passed; tsc clean.

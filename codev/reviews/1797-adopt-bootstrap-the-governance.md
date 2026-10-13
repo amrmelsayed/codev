@@ -33,6 +33,13 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Finding, fixed in this phase:** both hot drafts dropped the starter's cap/displacement guidance comment entirely. The skill says to keep it (minus the `STARTER:` sentence), the spec's "hot-file shape" requires it, and neither reviewer noticed. The validator now reports `missing-guidance` when a draft lacks any line of the starter's comment other than the `STARTER:` sentence, and the session prompt states the rule next to "leave no starter text", which is what the agent appears to have over-applied. Re-validating the real execa drafts with the new check flags both hot files.
 - **Not verified:** a real human-driven interactive session. The interactive Yes/No path is unit-tested only, and so is the `adopt` offer with a merge session.
 
+**Run 2, on the final code (after integration review round 1).** Fresh clone of `sindresorhus/execa`, built at d42fc36b3 (the round-1 fixes; the later merge from `main` touched no file this feature uses). Same pty and headless driver as run 1.
+
+- **Result:** all four files written, validation passed under the stricter checks (`missing-guidance` included), and "No changes outside the eligible files"; exit 0 (the post-review re-snapshot found nothing). This time both hot files kept the starter's guidance comment, with only the `STARTER:` sentence removed: arch-critical.md and lessons-critical.md are 32 lines each. `arch.md` and `lessons-learned.md` hold 12 sections each. The three seeded lessons were kept.
+- **Draft review:** Codex and Claude reviewed, and Gemini was named as skipped. Both again found claims to tighten before commit: IPC `serialization: 'json'` limits, Windows `.com` handling and escaping, and sync `timeout`. Both found the drafts clean of sensitive material.
+- **Re-run:** "Nothing needs bootstrapping", exit 0, no agent launched, all four files byte-identical (shasum).
+- **Not verified, unchanged:** a human-driven interactive session. Main is asking the owner for one interactive launch from the branch build.
+
 ## Deviations from Plan
 
 - **Phase 1:** none of substance. `hot-tier.test.ts` now imports the shared cap/map helpers instead of keeping its own copies.
@@ -46,11 +53,18 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Phase 5:** the reviewer set is fixed at gemini/codex/claude (`REVIEW_MODELS`) and ignores `porch.consultation.models`. This was outside the plan; a follow-up item is listed below. The summary prints **before** the review, and reviewer edits to the drafts are detected by re-hashing.
 - **Phase 6:**
   - Eligibility (classify, hold back, eligible, non-empty) moved into `lib/governance-bootstrap.ts` (`classifyProjectGovernance`, `bootstrapEligibleFiles`, `shouldOfferBootstrap`) so adopt, update and bootstrap-docs share one definition.
-  - `adopt` now returns an exit code (the bootstrap's when it ran), and the CLI sets `process.exitCode`.
+  - `adopt` briefly returned the bootstrap's exit code. Integration review reversed this (see the review phase below).
   - `adopt -y` does not await the merge session (there is nothing to sequence after it). The plan claimed `codev/resources/commands/` had no skeleton twin, but `codev-skeleton/resources/commands/codev.md` and `overview.md` exist, so both trees were updated.
   - `instructions.bootstrapDocs` in `update --agent` JSON is verified manually only, because `cli.ts`'s JSON builder is duplicated in `update.test.ts` (pre-existing).
 - **Side fix, not phase work:** `agent-farm/__tests__/cloud-config.test.ts` set its 0644 precondition with an explicit `chmodSync`. Under a `umask 077` shell it failed deterministically and blocked porch's test check (d15693931).
-- **Review phase:** the validator gained a `missing-guidance` check, and the bootstrap prompt gained an explicit keep-the-guidance-comment rule. Both came from the real-repo run (above). Tests: `governance-bootstrap.test.ts` (4 new), fixtures in `bootstrap-docs.test.ts` updated.
+- **Review phase, PR consultation and integration review round 1:**
+  - Re-snapshot after the draft review. Anything the reviewers changed is named and fails the run: drafts, source, HEAD, the index (Codex). Before, it was only printed for governance files.
+  - The git digest gets a fence it cannot close (`fenceFor`), and `missing-guidance` accepts the closing `-->` on the last kept line (Claude).
+  - Symlinked or non-regular governance paths are classified with lstat as curated, never eligible, and named in the per-file status. Governance hashes now cover the resolved content as well as the link target, so a write through a symlink pointing outside the repo is caught (main, item 1).
+  - The four shipped starter templates are pinned by hash. A change fails with "append the previous text to EARLIER_STARTERS" (main, item 2).
+  - Main ruled that `adopt` exits 0 once adoption succeeds. A failing bootstrap pass is reported in a yellow line, not propagated; `codev bootstrap-docs` run directly keeps its non-zero exit (main, item 3).
+  - `spawnAgentProcess` / `AgentExit` moved to `lib/agent-process.ts`, and `CONSULT_OWNED_PREFIXES` to `lib/tree-snapshot.ts` (consult re-exports it). `adopt` loads `bootstrap-docs` lazily, so `cli.ts`'s lazy import is effective again (main, item 4).
+- **Review phase (real-repo run 1):** the validator gained a `missing-guidance` check, and the bootstrap prompt gained an explicit keep-the-guidance-comment rule. Both came from the real-repo run (above). Tests: `governance-bootstrap.test.ts` (4 new), fixtures in `bootstrap-docs.test.ts` updated.
 - **Process:** porch force-advanced phase_4 at its iteration-3 ceiling, so commit `b87516dcd` (symlinks hashed by target) had no CMAP round of its own. The architect asked to review it explicitly at PR integration review.
 
 ## Consultation Feedback
@@ -227,6 +241,25 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Concern**: `shouldOfferBootstrap` can throw and abort adopt/update over a hint; `adopt -y` with a CLAUDE.md conflict now waits on an interactive session → **Addressed**: fix commit 510e32aaf "offer never throws; adopt -y does not wait on the merge"
 - **Concern**: Minor: the instance `codev/resources/cheatsheet.md` lacks the new row → **Addressed**: row added (thread log)
 - **Concern**: Minor: nothing tests that `instructions.bootstrapDocs` reaches the `--agent` JSON → Not applied: the duplicated JSON builder predates this work; wiring checked manually in a scratch repo only
+
+### PR Review (Round 1)
+#### Gemini
+- Skipped / CONSULT_ERROR: VERDICT COMMENT, "Gemini lane skipped: agy produced no review output"
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Change detection ends before the draft review. Reviewer edits to source, git state or drafts go unseen or do not affect the exit code → **Addressed**: 9e87ce164. The tree is re-snapshotted after the review against the post-session state, every change is named, and the exit is non-zero. Tests cover a draft edit, a source edit plus commit, and a clean review.
+- **Concern**: Branch behind `main`; `d15693931` does not follow the `[Spec 1797][Phase: …]` format → **Addressed** (merge from `main`) / **Rebutted** (format): `d15693931` is a declared side fix unrelated to the spec, and rewriting pushed history is not allowed.
+#### Claude (APPROVE)
+- **Concern**: `missing-guidance` false positive when `-->` closes the last kept line → **Addressed**: 9e87ce164 (trailing `-->` ignored when comparing, plus a test)
+- **Concern**: A commit subject containing a code fence can close the digest's fixed fence → **Addressed**: 9e87ce164 (the digest is wrapped with `fenceFor`, plus a test)
+- **Concern**: Branch 11 commits behind `main` → **Addressed**: merged from `main`
+- **Concern**: Minor: `adopt -y`'s `mergeConflicts()` is a floating promise → **N/A**: `spawnAgentProcess` never rejects, and the shape is the one it replaced
+- Read `b87516dcd` in full: no concerns
+
+### Integration Review (main, Round 1)
+- **Concern**: A symlinked governance file is classified through the link while change detection hashes only the link target → **Addressed**: fd450a757 (lstat classification, curated and named, content hashed through the link, plus tests including a write through an out-of-repo link)
+- **Concern**: The starter history is unpinned → **Addressed**: fd450a757 (hash pin test naming `EARLIER_STARTERS`)
+- **Concern**: adopt's exit code (ruling) → **Addressed**: a7a469edc (adopt exits 0 after a successful adoption; the adopt path is tested)
+- **Concern**: Layering → **Addressed**: d42fc36b3 (`lib/agent-process.ts`; `CONSULT_OWNED_PREFIXES` in `lib/tree-snapshot.ts`; lazy `bootstrap-docs` load)
 
 ## Lessons Learned
 
