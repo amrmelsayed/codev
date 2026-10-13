@@ -54,6 +54,13 @@ import {
 /** Where the rendered prompt is saved, for the manual fallback and for the record. */
 export const PROMPT_FILE = '.consult/bootstrap-docs/prompt.md';
 
+/** Where the draft review's prompt and each reviewer's feedback are written. */
+export const REVIEW_DIR = '.consult/bootstrap-docs';
+export const REVIEW_PROMPT_FILE = `${REVIEW_DIR}/review-prompt.md`;
+
+/** The three reviewers of the drafts, run in parallel. */
+export const REVIEW_MODELS = ['gemini', 'codex', 'claude'] as const;
+
 /** Bounds of the git-log survey inlined into the prompt (see the plan's Executive Summary). */
 const RECENT_COMMITS = 300;
 const TARGETED_COMMITS = 150;
@@ -104,6 +111,8 @@ export interface BootstrapDocsDeps {
   confirm(question: string): Promise<boolean>;
   stdinIsTTY: boolean;
   spawnAgent(launch: AgentLaunch, cwd: string): Promise<AgentExit>;
+  /** Run `consult` with these arguments in `cwd` and wait for it. */
+  runConsult(args: string[], cwd: string): Promise<AgentExit>;
   log(line: string): void;
 }
 
@@ -149,6 +158,23 @@ export interface ChangeReport {
   scope: string;
 }
 
+export type ReviewStatus = 'ok' | 'skipped' | 'failed';
+
+export interface ReviewOutcome {
+  model: string;
+  status: ReviewStatus;
+  /** Why a reviewer was skipped or failed. */
+  detail?: string;
+}
+
+export interface DraftReview {
+  /** Nothing was written, so nothing was reviewed. */
+  ran: boolean;
+  /** Set when `consult` could not be started for any reviewer. */
+  unavailable?: string;
+  reviewers: ReviewOutcome[];
+}
+
 export interface BootstrapDocsResult {
   exitCode: number;
   outcome: BootstrapOutcome;
@@ -157,6 +183,7 @@ export interface BootstrapDocsResult {
   agentExit?: AgentExit;
   report?: ChangeReport;
   validation?: DraftValidation[];
+  review?: DraftReview;
 }
 
 function governancePath(name: string): string {
@@ -288,8 +315,32 @@ function spawnAgentProcess(launch: AgentLaunch, cwd: string): Promise<AgentExit>
 }
 
 /** Defaults for every seam but `skeletonDir`, which is resolved only when not overridden. */
+/**
+ * Run one `consult` process. Its progress output is discarded (three in parallel would
+ * interleave on the terminal); the last stderr line is kept as the reason when it fails.
+ */
+function runConsultProcess(args: string[], cwd: string): Promise<AgentExit> {
+  return new Promise<AgentExit>(resolve => {
+    const child = spawn('consult', args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr?.on('data', chunk => {
+      stderr = (stderr + String(chunk)).slice(-4000);
+    });
+    child.on('error', err => resolve({ code: null, signal: null, error: err.message }));
+    child.on('exit', (code, signal) => {
+      const lastLine = stderr.trim().split('\n').pop();
+      if (code !== 0 && lastLine) {
+        resolve({ code, signal, error: lastLine });
+      } else {
+        resolve({ code, signal });
+      }
+    });
+  });
+}
+
 function defaultDeps(): Omit<BootstrapDocsDeps, 'skeletonDir'> {
   return {
+    runConsult: runConsultProcess,
     resolveLauncher: resolveConfiguredLauncher,
     isExecutableAvailable: isExecutableOnPath,
     confirm: question => confirm(question, false),
@@ -411,6 +462,107 @@ function validateDrafts(root: string, eligible: GovernanceFile[], templatesDir: 
 }
 
 // =============================================================================
+// Draft review
+// =============================================================================
+
+/** The argv for one reviewer: general mode, so no project detection is needed. */
+export function reviewConsultArgs(model: string): string[] {
+  return ['-m', model, '--prompt-file', REVIEW_PROMPT_FILE, '--output', `${REVIEW_DIR}/${model}.md`];
+}
+
+/** A code fence longer than any backtick run in `content`, so the draft cannot close it. */
+function fenceFor(content: string): string {
+  const longest = Math.max(0, ...(content.match(/`+/g) ?? []).map(run => run.length));
+  return '`'.repeat(Math.max(3, longest + 1));
+}
+
+function renderDrafts(root: string, names: string[]): string {
+  return names
+    .map(name => {
+      const rel = governancePath(name);
+      const content = fs.readFileSync(path.join(root, rel), 'utf-8');
+      const fence = fenceFor(content);
+      return `### \`${rel}\`\n\n${fence}markdown\n${content.replace(/\n$/, '')}\n${fence}`;
+    })
+    .join('\n\n');
+}
+
+/** A consult artifact that records a non-blocking skip, e.g. Gemini without credentials. */
+const SKIP_SUMMARY = /^SUMMARY: .*lane skipped\W+(.*)$/m;
+
+/**
+ * Run the 3-way general consult on the written drafts and save the feedback under
+ * `.consult/bootstrap-docs/`. Never applies anything and never fails the pass: a reviewer
+ * that fails or skips is named, and `consult` being unavailable is a warning.
+ */
+async function reviewDrafts(
+  root: string,
+  skeletonDir: string,
+  written: string[],
+  deps: BootstrapDocsDeps,
+): Promise<DraftReview> {
+  if (written.length === 0) return { ran: false, reviewers: [] };
+
+  const template = fs.readFileSync(path.join(skeletonDir, 'templates', 'bootstrap-docs-review-prompt.md'), 'utf-8');
+  const prompt = renderPrompt(template, {
+    PROJECT_NAME: path.basename(root),
+    DRAFTS: renderDrafts(root, written),
+  });
+  fs.mkdirSync(path.join(root, REVIEW_DIR), { recursive: true });
+  fs.writeFileSync(path.join(root, REVIEW_PROMPT_FILE), prompt);
+
+  deps.log('');
+  deps.log(`Reviewing the drafts with ${REVIEW_MODELS.join(', ')} (feedback goes to ${REVIEW_DIR}/; nothing is applied)…`);
+
+  const exits = await Promise.all(REVIEW_MODELS.map(model => {
+    const output = path.join(root, REVIEW_DIR, `${model}.md`);
+    // A file left by an earlier run must not pass for this run's feedback.
+    fs.rmSync(output, { force: true });
+    return deps.runConsult(reviewConsultArgs(model), root);
+  }));
+
+  const reviewers: ReviewOutcome[] = REVIEW_MODELS.map((model, i) => {
+    const exit = exits[i];
+    const output = readIfExists(path.join(root, REVIEW_DIR, `${model}.md`));
+    if (exit.error !== undefined && exit.code === null) return { model, status: 'failed', detail: exit.error };
+    if (exit.signal) return { model, status: 'failed', detail: `terminated by ${exit.signal}` };
+    if (exit.code !== 0) {
+      let detail = `exit ${exit.code}`;
+      if (exit.error) detail += `: ${exit.error}`;
+      return { model, status: 'failed', detail };
+    }
+    if (output === null || output.trim() === '') return { model, status: 'failed', detail: 'no feedback was written' };
+    const skipped = output.match(SKIP_SUMMARY);
+    if (skipped) return { model, status: 'skipped', detail: skipped[1].trim() };
+    return { model, status: 'ok' };
+  });
+
+  // Every reviewer failed to start: consult itself is missing or broken.
+  if (exits.every(exit => exit.code === null && exit.error !== undefined)) {
+    return { ran: true, unavailable: exits[0].error, reviewers };
+  }
+  return { ran: true, reviewers };
+}
+
+function printReview(log: (line: string) => void, review: DraftReview): void {
+  if (!review.ran) return;
+  if (review.unavailable !== undefined) {
+    log(chalk.yellow(`  Draft review: \`consult\` could not run (${escapeControlChars(review.unavailable)}); the drafts were not reviewed.`));
+    return;
+  }
+  const reviewed = review.reviewers.filter(reviewer => reviewer.status === 'ok').map(reviewer => reviewer.model);
+  if (reviewed.length > 0) {
+    log(`  Draft review: feedback from ${reviewed.join(', ')} is in ${REVIEW_DIR}/ (read it before committing; nothing was applied).`);
+  } else {
+    log(chalk.yellow('  Draft review: no reviewer produced feedback.'));
+  }
+  for (const reviewer of review.reviewers) {
+    if (reviewer.status === 'ok') continue;
+    log(chalk.yellow(`    - ${reviewer.model} ${reviewer.status}: ${escapeControlChars(reviewer.detail ?? 'unknown')}`));
+  }
+}
+
+// =============================================================================
 // Output
 // =============================================================================
 
@@ -476,6 +628,7 @@ function printSummary(
   validation: DraftValidation[],
   report: ChangeReport,
   agentExit: AgentExit,
+  review: DraftReview,
 ): void {
   log('');
   log(chalk.bold('Bootstrap summary'));
@@ -526,6 +679,7 @@ function printSummary(
     log('  No changes outside the eligible files.');
   }
   if (report.detectionLost === undefined) log(`  ${report.scope}`);
+  printReview(log, review);
 
   log('');
   if (report.identityChanges.length > 0 || report.indexChanged) {
@@ -668,15 +822,18 @@ export async function runBootstrapDocs(
   const hashesAfter = hashGovernanceFiles(root);
   const report = buildChangeReport(eligibleNames, before, after, hashesBefore, hashesAfter);
   const validation = validateDrafts(root, eligible, templatesDir);
+  const written = validation.filter(draft => draft.state === 'written').map(draft => draft.name);
+  const review = await reviewDrafts(root, deps.skeletonDir, written, deps);
 
-  printSummary(log, validation, report, agentExit);
+  printSummary(log, validation, report, agentExit, review);
 
   const agentFailed = agentExit.error !== undefined || agentExit.signal !== null || agentExit.code !== 0;
   const draftsFailed = validation.some(draft => draft.state !== 'written' || draft.violations.length > 0);
   let exitCode = 0;
   if (agentFailed || draftsFailed || reportHasChanges(report)) exitCode = 1;
 
-  return { exitCode, outcome: 'ran', files, launched: true, agentExit, report, validation };
+  // The review informs the human; its outcome never changes the exit code.
+  return { exitCode, outcome: 'ran', files, launched: true, agentExit, report, validation, review };
 }
 
 /** CLI entry: run the pass and hand back the process exit code. */

@@ -13,9 +13,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { Command } from 'commander';
+import { registerConsultOptions } from '../commands/consult/cli-options.js';
 import {
   MAX_PROMPT_BYTES,
   PROMPT_FILE,
+  REVIEW_DIR,
+  REVIEW_PROMPT_FILE,
+  reviewConsultArgs,
   buildGitDigest,
   renderPrompt,
   runBootstrapDocs,
@@ -65,6 +70,18 @@ const DRAFTS: Record<string, string> = {
 let dir: string;
 let lines: string[];
 let spawned: AgentLaunch[];
+let consulted: string[][];
+
+/** A consult stub that writes each reviewer's feedback where `--output` says. */
+function consultWriting(content: (model: string) => string | null = () => 'Looks right.\n') {
+  return async (args: string[]): Promise<AgentExit> => {
+    consulted.push(args);
+    const model = args[args.indexOf('-m') + 1];
+    const body = content(model);
+    if (body !== null) write(args[args.indexOf('--output') + 1], body);
+    return { code: 0, signal: null };
+  };
+}
 
 function git(...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', ...args], {
@@ -127,6 +144,7 @@ function deps(agent: () => AgentExit | void = () => {}, overrides: Partial<Boots
       spawned.push(launch);
       return agent() ?? { code: 0, signal: null };
     },
+    runConsult: consultWriting(),
     log: line => lines.push(line),
     ...overrides,
   };
@@ -140,6 +158,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-docs-'));
   lines = [];
   spawned = [];
+  consulted = [];
 });
 
 afterEach(() => {
@@ -586,5 +605,95 @@ describe('prompt helpers', () => {
     const digest = buildGitDigest(dir);
     expect(digest).toContain('add feature');
     expect(digest.match(/Revert the cache layer/g)).toHaveLength(1);
+  });
+});
+
+describe('codev bootstrap-docs: draft review', () => {
+  it('nothing written ⇒ no consult', async () => {
+    setUpGitProject();
+    const result = await runBootstrapDocs({ cwd: dir }, deps());
+    expect(consulted).toEqual([]);
+    expect(result.review?.ran).toBe(false);
+  });
+
+  it('three reviewers succeed ⇒ pointer printed; outputs never reach the change report', async () => {
+    setUpGitProject();
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts()));
+    expect(consulted.map(args => args[1])).toEqual(['gemini', 'codex', 'claude']);
+    expect(result.review?.reviewers.every(reviewer => reviewer.status === 'ok')).toBe(true);
+    expect(output()).toContain(`feedback from gemini, codex, claude is in ${REVIEW_DIR}/`);
+    expect(result.report?.outOfScope).toEqual([]);
+    expect(result.exitCode).toBe(0);
+
+    const prompt = read(REVIEW_PROMPT_FILE);
+    expect(prompt).toContain('### `codev/resources/arch.md`');
+    expect(prompt).toContain('One SQLite file.');
+    expect(prompt).toContain('Sensitive material');
+    expect(prompt).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+
+  it('reviews only the drafts that were written', async () => {
+    setUpGitProject();
+    await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(['arch.md'])));
+    const prompt = read(REVIEW_PROMPT_FILE);
+    expect(prompt).toContain('`codev/resources/arch.md`');
+    expect(prompt).not.toContain('`codev/resources/arch-critical.md`');
+  });
+
+  it('a failed and a skipped reviewer are named; the exit code is unchanged (scenario 16)', async () => {
+    setUpGitProject();
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), {
+      runConsult: async args => {
+        consulted.push(args);
+        const model = args[args.indexOf('-m') + 1];
+        const out = args[args.indexOf('--output') + 1];
+        if (model === 'codex') return { code: 1, signal: null, error: 'codex auth failed' };
+        if (model === 'gemini') {
+          write(out, 'VERDICT: COMMENT\nSUMMARY: Gemini lane skipped — agy is not authenticated\n');
+        } else {
+          write(out, 'Fine.\n');
+        }
+        return { code: 0, signal: null };
+      },
+    }));
+    expect(result.exitCode).toBe(0);
+    expect(result.review?.reviewers).toEqual([
+      { model: 'gemini', status: 'skipped', detail: 'agy is not authenticated' },
+      { model: 'codex', status: 'failed', detail: 'exit 1: codex auth failed' },
+      { model: 'claude', status: 'ok' },
+    ]);
+    expect(output()).toContain('feedback from claude is in');
+    expect(output()).toContain('codex failed: exit 1: codex auth failed');
+    expect(output()).toContain('gemini skipped: agy is not authenticated');
+  });
+
+  it('a reviewer that exits 0 without writing feedback counts as failed', async () => {
+    setUpGitProject();
+    write(`${REVIEW_DIR}/claude.md`, 'stale feedback from an earlier run\n');
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), {
+      runConsult: consultWriting(model => (model === 'claude' ? null : 'ok\n')),
+    }));
+    expect(result.review?.reviewers.find(reviewer => reviewer.model === 'claude'))
+      .toEqual({ model: 'claude', status: 'failed', detail: 'no feedback was written' });
+  });
+
+  it('consult missing entirely ⇒ warning, the pass completes', async () => {
+    setUpGitProject();
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), {
+      runConsult: async () => ({ code: null, signal: null, error: 'spawn consult ENOENT' }),
+    }));
+    expect(result.exitCode).toBe(0);
+    expect(result.review?.unavailable).toBe('spawn consult ENOENT');
+    expect(output()).toContain('`consult` could not run (spawn consult ENOENT); the drafts were not reviewed.');
+    expect(output()).toContain('Review before commit');
+  });
+
+  it('builds argv the consult CLI accepts, in general mode', () => {
+    for (const model of ['gemini', 'codex', 'claude']) {
+      const cmd = registerConsultOptions(new Command('consult').exitOverride().argument('[subcommand]'));
+      cmd.parse(reviewConsultArgs(model), { from: 'user' });
+      expect(cmd.opts()).toEqual({ model, promptFile: REVIEW_PROMPT_FILE, output: `${REVIEW_DIR}/${model}.md` });
+      expect(cmd.args).toEqual([]);
+    }
   });
 });
