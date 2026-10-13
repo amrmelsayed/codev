@@ -135,6 +135,19 @@ function readRepoPrefix(workspaceRoot: string): string {
 }
 
 /**
+ * Paths `consult` writes itself on every run, and which therefore are not
+ * evidence of anything.
+ *
+ * `.consult/history.log` is appended by `logQuery()` after the lane returns, so
+ * it lands inside the window a consult or bootstrap tripwire measures. In this repo `.consult/` is
+ * gitignored and never surfaces — which is exactly why it was not obvious. A
+ * live run against a scratch repo without that entry reported the log file as a
+ * mutation on the very first try. An adopter's `.gitignore` is not something to
+ * depend on for correctness here.
+ */
+export const CONSULT_OWNED_PREFIXES = ['.consult/'];
+
+/**
  * Hash a working-tree file, or mark it absent.
  *
  * Absent is a real state, not an error: a path can appear in porcelain output as a staged

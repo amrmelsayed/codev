@@ -41,6 +41,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
+  CONSULT_OWNED_PREFIXES,
   diffSnapshotEntries,
   escapeControlChars,
   type IdentityChange,
@@ -51,6 +52,7 @@ import {
 // re-exported so consult callers and tests keep one import site. This module keeps what is
 // consult's own: which paths a lane may write, and the warnings it prints.
 export {
+  CONSULT_OWNED_PREFIXES,
   snapshotTree,
   diffRepositoryIdentity,
   escapeControlChars,
@@ -58,19 +60,6 @@ export {
   type TreeSnapshot,
   type IdentityChange,
 } from '../../lib/tree-snapshot.js';
-
-/**
- * Paths `consult` writes itself on every run, and which therefore are not
- * evidence of anything.
- *
- * `.consult/history.log` is appended by `logQuery()` after the lane returns, so
- * it lands inside the window this module measures. In this repo `.consult/` is
- * gitignored and never surfaces — which is exactly why it was not obvious. A
- * live run against a scratch repo without that entry reported the log file as a
- * mutation on the very first try. An adopter's `.gitignore` is not something to
- * depend on for correctness here.
- */
-export const CONSULT_OWNED_PREFIXES = ['.consult/'];
 
 /**
  * Review files written by consultation lanes, which are not evidence either.

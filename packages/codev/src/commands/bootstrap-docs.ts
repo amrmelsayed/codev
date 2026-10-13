@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import chalk from 'chalk';
+import { spawnAgentProcess, type AgentExit, type AgentLaunch } from '../lib/agent-process.js';
 import { confirm } from '../lib/cli-prompts.js';
 import { loadConfig } from '../lib/config.js';
 import { getTemplatesDir } from '../lib/templates.js';
@@ -36,6 +37,7 @@ import {
   type Violation,
 } from '../lib/governance-bootstrap.js';
 import {
+  CONSULT_OWNED_PREFIXES,
   FILESYSTEM_WALK_LIMIT,
   FILESYSTEM_WALK_SKIPPED,
   diffRepositoryIdentity,
@@ -48,12 +50,13 @@ import {
   type IdentityChange,
   type TreeSnapshot,
 } from '../lib/tree-snapshot.js';
-import { CONSULT_OWNED_PREFIXES } from './consult/tree-tripwire.js';
 import {
   resolveInteractiveTaskLauncher,
   type CustomHarnessConfig,
   type InteractiveTaskLauncher,
 } from '../agent-farm/utils/harness.js';
+
+export type { AgentExit, AgentLaunch };
 
 /** Where the rendered prompt is saved, for the manual fallback and for the record. */
 export const PROMPT_FILE = '.consult/bootstrap-docs/prompt.md';
@@ -92,18 +95,6 @@ export interface BootstrapDocsOptions {
   cwd?: string;
   /** Report eligibility and the resolved launch, launch nothing, write nothing. */
   dryRun?: boolean;
-}
-
-export interface AgentLaunch {
-  executable: string;
-  args: string[];
-}
-
-export interface AgentExit {
-  code: number | null;
-  signal: NodeJS.Signals | null;
-  /** Set when the process could not be started at all. */
-  error?: string;
 }
 
 /** Seams for tests: the agent, the prompt and the environment are all replaceable. */
@@ -294,25 +285,6 @@ function isExecutableOnPath(executable: string): boolean {
     }
   }
   return false;
-}
-
-/**
- * Run the agent on this terminal and wait for it to exit.
- *
- * Ctrl-C reaches the whole foreground process group, so while the agent owns the terminal
- * this process ignores SIGINT; otherwise interrupting the agent would kill the CLI before it
- * could report what the session changed.
- */
-export function spawnAgentProcess(launch: AgentLaunch, cwd: string): Promise<AgentExit> {
-  const ignoreInterrupt = (): void => {};
-  process.on('SIGINT', ignoreInterrupt);
-  return new Promise<AgentExit>(resolve => {
-    const child = spawn(launch.executable, launch.args, { stdio: 'inherit', cwd });
-    child.on('error', err => resolve({ code: null, signal: null, error: err.message }));
-    child.on('exit', (code, signal) => resolve({ code, signal }));
-  }).finally(() => {
-    process.off('SIGINT', ignoreInterrupt);
-  });
 }
 
 /** Defaults for every seam but `skeletonDir`, which is resolved only when not overridden. */
