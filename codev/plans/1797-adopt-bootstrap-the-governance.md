@@ -1,3 +1,8 @@
+---
+approved: 2026-10-12
+validated: [gemini, codex, claude]
+---
+
 # Plan: Bootstrap the governance docs from an existing codebase
 
 **Specification**: [codev/specs/1797-adopt-bootstrap-the-governance.md](../specs/1797-adopt-bootstrap-the-governance.md)

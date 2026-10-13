@@ -109,7 +109,7 @@ Nothing is committed: review the drafts, edit, then commit them yourself.
 
 **Manual fallback:** when no supported agent CLI is found, or the prompt is too long to pass as an argument, nothing is launched; give `.consult/bootstrap-docs/prompt.md` to your own agent as its first message.
 
-**Exit codes:** `0` when nothing needed doing, the launch was declined, or the drafts are clean; `1` when there is no `codev/` directory, the agent failed, a draft is missing or breaks the hot-tier rules, or anything outside the four files changed. The review never changes the exit code.
+**Exit codes:** `0` when nothing needed doing, the launch was declined, or the drafts are clean; `1` when there is no `codev/` directory, the agent failed, a draft is missing or breaks the hot-tier rules, or anything changed outside the four files (during the session) or anywhere (while the reviewers ran). Reviewer verdicts never change the exit code. Under `codev adopt`, a pass with problems is reported in its summary, and adopt still exits `0`.
 
 **Examples:**
 

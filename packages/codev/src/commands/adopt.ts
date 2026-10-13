@@ -88,7 +88,8 @@ function detectConflicts(targetDir: string): Conflict[] {
 /**
  * Add codev to an existing project.
  *
- * Returns the process exit code: 0, or the bootstrap pass's code when the human ran it.
+ * Once adoption succeeds, a bootstrap pass the human ran never fails adopt: its problems are
+ * in its own summary (`codev bootstrap-docs` run directly keeps its non-zero exit).
  */
 export async function adopt(options: AdoptOptions = {}, overrides: Partial<AdoptDeps> = {}): Promise<void> {
   const { yes = false } = options;

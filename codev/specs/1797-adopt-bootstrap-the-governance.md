@@ -1,3 +1,8 @@
+---
+approved: 2026-10-12
+validated: [gemini, codex, claude]
+---
+
 # Specification: Bootstrap the governance docs from an existing codebase
 
 ## Problem Statement
