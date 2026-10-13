@@ -683,9 +683,47 @@ describe('codev bootstrap-docs: draft review', () => {
       runConsult: async () => ({ code: null, signal: null, error: 'spawn consult ENOENT' }),
     }));
     expect(result.exitCode).toBe(0);
-    expect(result.review?.unavailable).toBe('spawn consult ENOENT');
-    expect(output()).toContain('`consult` could not run (spawn consult ENOENT); the drafts were not reviewed.');
+    expect(result.review?.unavailable).toBe('`consult` could not run: spawn consult ENOENT');
+    expect(output()).toContain('Draft review did not run (`consult` could not run: spawn consult ENOENT)');
     expect(output()).toContain('Review before commit');
+  });
+
+  it('prints the change report before the review starts', async () => {
+    setUpGitProject();
+    let summaryFirst = false;
+    await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), {
+      runConsult: async args => {
+        summaryFirst = output().includes('No changes outside the eligible files.');
+        return consultWriting()(args);
+      },
+    }));
+    expect(summaryFirst).toBe(true);
+  });
+
+  it('a review that cannot be prepared still ends with the footer', async () => {
+    setUpGitProject();
+    const brokenSkeleton = path.join(dir, '..', `${path.basename(dir)}-noreview`);
+    fs.cpSync(skeletonDir, brokenSkeleton, { recursive: true });
+    fs.rmSync(path.join(brokenSkeleton, 'templates', 'bootstrap-docs-review-prompt.md'));
+    try {
+      const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), { skeletonDir: brokenSkeleton }));
+      expect(result.exitCode).toBe(0);
+      expect(result.review?.unavailable).toContain('the review could not be prepared');
+      expect(output()).toContain('Review before commit');
+    } finally {
+      fs.rmSync(brokenSkeleton, { recursive: true, force: true });
+    }
+  });
+
+  it('a draft changed while the reviewers ran is named', async () => {
+    setUpGitProject();
+    await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts(), {
+      runConsult: async args => {
+        write(resource('arch.md'), `${DRAFTS['arch.md']}\nreviewer edit\n`);
+        return consultWriting()(args);
+      },
+    }));
+    expect(output()).toContain('codev/resources/arch.md changed while the reviewers ran');
   });
 
   it('builds argv the consult CLI accepts, in general mode', () => {

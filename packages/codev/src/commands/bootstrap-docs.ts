@@ -170,9 +170,11 @@ export interface ReviewOutcome {
 export interface DraftReview {
   /** Nothing was written, so nothing was reviewed. */
   ran: boolean;
-  /** Set when `consult` could not be started for any reviewer. */
+  /** Why the review did not run: `consult` could not start, or the review could not be prepared. */
   unavailable?: string;
   reviewers: ReviewOutcome[];
+  /** Governance files whose content changed while the reviewers ran. */
+  changedDuringReview?: string[];
 }
 
 export interface BootstrapDocsResult {
@@ -539,7 +541,7 @@ async function reviewDrafts(
 
   // Every reviewer failed to start: consult itself is missing or broken.
   if (exits.every(exit => exit.code === null && exit.error !== undefined)) {
-    return { ran: true, unavailable: exits[0].error, reviewers };
+    return { ran: true, unavailable: `\`consult\` could not run: ${exits[0].error}`, reviewers };
   }
   return { ran: true, reviewers };
 }
@@ -547,8 +549,11 @@ async function reviewDrafts(
 function printReview(log: (line: string) => void, review: DraftReview): void {
   if (!review.ran) return;
   if (review.unavailable !== undefined) {
-    log(chalk.yellow(`  Draft review: \`consult\` could not run (${escapeControlChars(review.unavailable)}); the drafts were not reviewed.`));
+    log(chalk.yellow(`  Draft review did not run (${escapeControlChars(review.unavailable)}); the drafts were not reviewed.`));
     return;
+  }
+  for (const rel of review.changedDuringReview ?? []) {
+    log(chalk.red(`  ${rel} changed while the reviewers ran; the validation above describes the version before it.`));
   }
   const reviewed = review.reviewers.filter(reviewer => reviewer.status === 'ok').map(reviewer => reviewer.model);
   if (reviewed.length > 0) {
@@ -628,7 +633,6 @@ function printSummary(
   validation: DraftValidation[],
   report: ChangeReport,
   agentExit: AgentExit,
-  review: DraftReview,
 ): void {
   log('');
   log(chalk.bold('Bootstrap summary'));
@@ -679,6 +683,9 @@ function printSummary(
     log('  No changes outside the eligible files.');
   }
   if (report.detectionLost === undefined) log(`  ${report.scope}`);
+}
+
+function printFooter(log: (line: string) => void, report: ChangeReport, review: DraftReview): void {
   printReview(log, review);
 
   log('');
@@ -823,9 +830,21 @@ export async function runBootstrapDocs(
   const report = buildChangeReport(eligibleNames, before, after, hashesBefore, hashesAfter);
   const validation = validateDrafts(root, eligible, templatesDir);
   const written = validation.filter(draft => draft.state === 'written').map(draft => draft.name);
-  const review = await reviewDrafts(root, deps.skeletonDir, written, deps);
-
-  printSummary(log, validation, report, agentExit, review);
+  // The summary prints before the review, which can take minutes, so an interrupted review
+  // never costs the human the change report.
+  printSummary(log, validation, report, agentExit);
+  const hashesBeforeReview = hashGovernanceFiles(root);
+  let review: DraftReview;
+  try {
+    review = await reviewDrafts(root, deps.skeletonDir, written, deps);
+  } catch (err) {
+    review = { ran: true, unavailable: `the review could not be prepared: ${(err as Error).message}`, reviewers: [] };
+  }
+  const hashesAfterReview = hashGovernanceFiles(root);
+  review.changedDuringReview = GOVERNANCE_FILES
+    .filter(file => hashesBeforeReview.get(file.name) !== hashesAfterReview.get(file.name))
+    .map(file => governancePath(file.name));
+  printFooter(log, report, review);
 
   const agentFailed = agentExit.error !== undefined || agentExit.signal !== null || agentExit.code !== 0;
   const draftsFailed = validation.some(draft => draft.state !== 'written' || draft.violations.length > 0);
