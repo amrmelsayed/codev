@@ -1,0 +1,279 @@
+# Review: Bootstrap the governance docs from an existing codebase
+
+## Summary
+
+A new, re-runnable `codev bootstrap-docs` command drafts the four governance docs (hot `arch-critical.md` / `lessons-critical.md`, cold `arch.md` / `lessons-learned.md`) from a codebase and a bounded git-log digest. It launches the configured agent interactively with a new **bootstrap mode** of the `update-arch-docs` skill inlined into the prompt. The CLI owns everything deterministic: per-file eligibility, change detection, mechanical validation, a 3-way review of the drafts, and the "review before commit" summary. `codev adopt` offers the pass after its conflict-merge session exits, and `codev update` prints a hint. The work shipped in six plan phases, all committed on this branch. The pass never commits or reverts anything.
+
+## Spec Compliance
+
+- [x] Real pre-existing repo yields four project-specific files with no slots, `_No … yet._` lines or `STARTER:` text: see **Real-repo verification** below (review phase)
+- [x] Each hot file passes the section-scoped hot cap: validator `validateHotFile` (Phase 1), run by `bootstrap-docs` after every session (Phase 4)
+- [x] Each hot map passes map validity (map → real cold `## ` section always; full coverage only when the cold doc has ≤12 sections) (Phase 1)
+- [x] Cold `arch.md` describes the real system shape with no file enumeration, changelog, aspirational content or sensitive material: content contract in the skill's bootstrap mode plus the new all-modes sensitive-material rule (Phase 2), checked by the human in the real-repo run below
+- [x] A curated governance file changing, HEAD/index changing, or any other path changing is named and exits non-zero; nothing is reverted (Phase 4, `lib/tree-snapshot.ts`)
+- [x] Re-run on a populated result: no change, no agent, "nothing needs bootstrapping" (Phase 4; also in the real-repo run)
+- [x] The pass never commits, stages or pushes; it ends with a "review before commit" summary listing files and validation result (Phase 4)
+- [x] 3-way review of the drafts, outputs saved under `.consult/bootstrap-docs/`, each unavailable/failed reviewer named, `consult` missing degrades to a warning (Phase 5)
+- [x] `adopt` on an empty repo leaves placeholders and offers nothing (Phase 6)
+- [x] `adopt -y` never launches the bootstrap agent; it lists `codev bootstrap-docs` under Next steps (Phase 6; verified on a scratch repo)
+- [x] `adopt` never runs two agent sessions at once: the offer appears only after the merge session exits (Phase 6)
+- [x] The validator flags leftover slot/marker, over-cap section, map entry naming a missing cold section, an eligible file left unwritten (Phase 1/4). It also flags empty sections (a carry-forward from phase_1) and a dropped guidance comment (review phase)
+- [x] Unsupported or missing harness: nothing launched, placeholders kept, prompt written to `.consult/bootstrap-docs/prompt.md`, manual instructions printed (Phase 3/4)
+- [x] Both trees updated; the skill change is in all four shipped copies with parity tests green (Phase 2/6)
+- [x] Unit tests cover the classifier (seeded lessons, half-edited starter), the non-empty-repo rule, the validator (cap counting, map direction, >12-section cold docs), the change report and the no-op re-run (Phases 1, 4)
+
+### Real-repo verification (spec test scenario 18)
+
+Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 877 commits). The command was the branch build (`codev adopt -y`, then `codev bootstrap-docs`). Because `bootstrap-docs` awaits an interactive session and a builder has no human at a terminal, the run went through a pty (`script`), and the configured agent was a wrapper that runs `claude -p --dangerously-skip-permissions "$@"`. Everything else was the production path: eligibility, the confirm prompt, prompt rendering, the git digest, change detection, validation, the 3-way draft review and the summary.
+
+- **Result:** all four files were written with execa-specific content. `arch.md` has 12 sections: method factory, async/sync spines, options normalization, Windows command resolution, stdio model, termination, IPC and more. `lessons-learned.md` has 12 sections, each traced to fix commits. Each hot file has 10 entries plus a 12-entry map that names every cold section, in 27 lines. No slot lines, `_No … yet._` lines or `STARTER:` text remained. The three seeded universal lessons were kept.
+- **Validator and detection:** "validation passed" for all four files; "No changes outside the eligible files"; nothing was staged or committed.
+- **Draft review:** Codex and Claude reviewed, and Gemini was named as skipped (agy produced no output). Both reviewers found real accuracy errors in the drafts. For example, `maxBuffer` was described as terminating the subprocess (it only destroys the stream), and Unix `killDescendants` was described as never signalling after exit. Codex also questioned the three seeded universal lessons taking hot slots; their survival is the architect's spec-gate ruling. Both reviewers confirmed no sensitive material. This is the intended division of labour: the agent drafts, the reviewers check claims against the code, and the human decides.
+- **Re-run:** all four files classified as curated, "Nothing needs bootstrapping", exit 0, no agent launched, all four files byte-identical (shasum).
+- **Finding, fixed in this phase:** both hot drafts dropped the starter's cap/displacement guidance comment entirely. The skill says to keep it (minus the `STARTER:` sentence), the spec's "hot-file shape" requires it, and neither reviewer noticed. The validator now reports `missing-guidance` when a draft lacks any line of the starter's comment other than the `STARTER:` sentence, and the session prompt states the rule next to "leave no starter text", which is what the agent appears to have over-applied. Re-validating the real execa drafts with the new check flags both hot files.
+- **Not verified:** a real human-driven interactive session. The interactive Yes/No path is unit-tested only, and so is the `adopt` offer with a merge session.
+
+## Deviations from Plan
+
+- **Phase 1:** none of substance. `hot-tier.test.ts` now imports the shared cap/map helpers instead of keeping its own copies.
+- **Phase 3:** prompt args are `['--', prompt]`, not the plan's literal `[prompt]`. CMAP showed that a variadic or optional-value flag in the user's configured command (`--add-dir`, `--resume`) swallows a bare trailing prompt. Both CLIs were verified to honour `--`. Per-harness launch blockers moved to a provider-level `interactiveLaunchBlocker?(flags)` hook, replacing a name-keyed if-chain. Codex blocks all its subcommands, `mcp-server` included.
+- **Phase 4:**
+  - A hot placeholder whose cold doc is **missing** is held back (its map would have nothing to point at) and reported with the `codev update` hint.
+  - A 100 KB prompt-size guard falls back to the manual prompt file.
+  - `lib/tree-snapshot.ts` handles cases the plan did not anticipate: re-keying paths for a project in a repo subdirectory, an unborn HEAD shown as `(no commits)`, and symlinks hashed by target.
+  - The non-git walk honours the root `.gitignore`, following the plan after an iter1 detour.
+  - The parent ignores SIGINT while the agent owns the terminal, so Ctrl-C inside the session cannot kill the CLI before it prints its report.
+- **Phase 5:** the reviewer set is fixed at gemini/codex/claude (`REVIEW_MODELS`) and ignores `porch.consultation.models`. This was outside the plan; a follow-up item is listed below. The summary prints **before** the review, and reviewer edits to the drafts are detected by re-hashing.
+- **Phase 6:**
+  - Eligibility (classify, hold back, eligible, non-empty) moved into `lib/governance-bootstrap.ts` (`classifyProjectGovernance`, `bootstrapEligibleFiles`, `shouldOfferBootstrap`) so adopt, update and bootstrap-docs share one definition.
+  - `adopt` now returns an exit code (the bootstrap's when it ran), and the CLI sets `process.exitCode`.
+  - `adopt -y` does not await the merge session (there is nothing to sequence after it). The plan claimed `codev/resources/commands/` had no skeleton twin, but `codev-skeleton/resources/commands/codev.md` and `overview.md` exist, so both trees were updated.
+  - `instructions.bootstrapDocs` in `update --agent` JSON is verified manually only, because `cli.ts`'s JSON builder is duplicated in `update.test.ts` (pre-existing).
+- **Side fix, not phase work:** `agent-farm/__tests__/cloud-config.test.ts` set its 0644 precondition with an explicit `chmodSync`. Under a `umask 077` shell it failed deterministically and blocked porch's test check (d15693931).
+- **Review phase:** the validator gained a `missing-guidance` check, and the bootstrap prompt gained an explicit keep-the-guidance-comment rule. Both came from the real-repo run (above). Tests: `governance-bootstrap.test.ts` (4 new), fixtures in `bootstrap-docs.test.ts` updated.
+- **Process:** porch force-advanced phase_4 at its iteration-3 ceiling, so commit `b87516dcd` (symlinks hashed by target) had no CMAP round of its own. The architect asked to review it explicitly at PR integration review.
+
+## Consultation Feedback
+
+### Specify Phase (Round 1)
+#### Gemini (APPROVE)
+- **Concern**: No rule against secrets, internal hostnames or tokens leaking from code/git log into the docs; also asked for a graceful consult fallback, keeping drafts on validation failure, and telling the user when to exit the session → **Addressed**: all four taken into the spec (rebuttal "Gemini recommendations: Taken")
+#### Codex (REQUEST_CHANGES)
+- **Concern**: The "only touches placeholder files" rule cannot be enforced against an interactive agent that has write access → **Addressed**: changed to detect-and-report: pre/post snapshot of the four files plus git state, non-zero exit, never auto-reverted
+- **Concern**: The map rule is impossible when the cold doc has more than 12 sections → **Addressed**: map entries must point at real cold sections (always checked); full coverage is required only when the cold doc has 12 or fewer sections
+- **Concern**: The placeholder classifier conflicts with the three seeded lessons in `lessons-critical.md` → **Addressed**: exact rule is verbatim subset of a shipped starter plus a marker still present; seeded lessons count as starter text
+- **Concern**: Harness launch contract is underspecified → **Addressed**: launch is an optional harness capability; an unsupported harness gets a prompt file plus manual instructions
+- **Concern**: "Non-empty repository" is undefined → **Addressed**: defined via `git ls-files --cached --others --exclude-standard` (filesystem walk outside git), minus Codev-generated files
+- **Concern**: Consult availability, failure handling and output location are undefined → **Addressed**: each reviewer runs independently, output goes to `.consult/bootstrap-docs/` (exempt from detection), and a missing `consult` only warns
+#### Claude (REQUEST_CHANGES)
+- **Concern**: Map coverage cannot be checked deterministically (this repo's own arch.md has 19 sections against a 12-topic cap) → **Addressed**: same fix as Codex, plus scenario 12 against this repo's own files
+- **Concern**: The 35-line cap does not say what it counts; a naive bullet count fails this repo's own file → **Addressed**: caps are counted per section and exclude HTML comment lines
+- **Concern**: "Curated file byte-identical" can only be detected, not guaranteed → **Addressed**: reworded as detect-and-report
+- **Concern**: adopt's merge session is never awaited, so two agents would fight over stdin; risk impact is not Low → **Addressed**: awaiting the merge session is now a success criterion; impact raised to High
+- **Concern**: No rule against sensitive material, and the run silently inherits `--dangerously-skip-permissions` → **Addressed**: new bright-line rejection in every skill mode; permission mode is stated before launch and needs confirmation
+- **Concern**: Minor (STARTER comment handling, cost notice, empty-repo rule, real-repo gate, partial writes) → **Addressed**: all taken (rebuttal "Non-blocking items also taken")
+
+### Plan Phase (Round 1)
+#### Gemini (APPROVE)
+- **Concern**: Advisory items: `git log` with no commits, bare `- Section` map entries, command tokenisation, order of the Next-steps output → **Addressed**: `rev-parse --verify HEAD` guard, bare entry valid and tested, reuse of the architect.ts split, Next steps moved to the end of adopt
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Missing governance files treated as eligible, against the spec → **Addressed**: `missing` is its own class and not eligible; the user is told to run `codev update`
+- **Concern**: Non-git repos snapshot only the four files, so source edits go unseen → **Addressed**: filesystem-walk snapshot added in `lib/tree-snapshot.ts`
+- **Concern**: Four-copy skill parity is not enforced → **Addressed**: `update-arch-docs` added to `TOUCHED_SKILLS`
+- **Concern**: Classifier too broad (trims whitespace, mixes starter versions) → **Addressed**: verbatim match (CRLF to LF only) against a single starter version
+#### Claude (REQUEST_CHANGES)
+- **Concern**: The map-matching rule fails the plan's own fixture (`## Critical (Prevent Major Failures)` against `- Critical: …`) → **Addressed**: match on name part or short name, and it must resolve to exactly one section
+- **Concern**: `change-snapshot.ts` reimplements `tree-tripwire.ts` → **Addressed**: core moved to `lib/tree-snapshot.ts`; consult re-exports it
+- **Concern**: Parity not enforced; the unsupported-harness fallback is never reached because of the Claude default → **Addressed**: added to `TOUCHED_SKILLS`; launch requires positive identification of a built-in harness
+- **Concern**: The adopt test mocks would hang or auto-accept the new prompt → **Addressed**: both mock edits named in the adopt/update phase
+- **Concern**: `.claude/settings.local.json` would cause a false out-of-scope exit → **Addressed** (round 1) as informational, then reversed in round 2 after Codex objected
+- **Concern**: Minor: `codev/templates/` is not a mirror; framework-ref check is manual; Phase 4 too heavy → **Addressed**: template is skeleton-only; check marked manual; consult split into its own phase
+
+### Plan Phase (Round 2)
+#### Gemini (APPROVE)
+- **Concern**: A non-zero agent exit or spawn error should fail the command → **Addressed**: now reported and fails the command; drafts are kept
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `.claude/settings.local.json` cannot be informational-only under the spec → **Addressed**: it fails the command again, annotated "harness-written, usually benign"
+- **Concern**: Porcelain status plus hashes cannot see an index-only change → **Addressed**: SHA-256 of `git ls-files --stage -z` added, with a re-stage test
+#### Claude (REQUEST_CHANGES)
+- **Concern**: `validateHotFile` duplicates `hot-tier.test.ts`, and the two disagree on three rules → **Addressed**: helpers moved into the library and imported by the test; shipped topic/prefix rule kept, plus the exactly-one-section rule
+- **Concern**: Third adopt mock breakage (`execFileSync` missing) → **Addressed**: named in phase 6
+- **Concern**: Tests depend on the built `packages/codev/skeleton` → **Addressed**: tests read `codev-skeleton/` via a repo-root path
+- **Concern**: The mixed-starter test cannot fail (the pre-#1012 starter is a subset of the current one) → **Addressed**: tested with a synthetic two-version set
+- **Concern**: `claude -p` / `codex exec` would launch headless → **Addressed**: treated as unsupported, with a reason
+
+### Plan Phase (Round 3)
+#### Gemini (APPROVE)
+- **Concern**: Cosmetic leftover in the risk table ("scratch paths informational") → **Addressed**: fixed (see Codex)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Git-backed snapshots ignore gitignored paths → **Rebutted**: the spec scopes detection to "the four files and the git state"; gitignored paths never reach a commit and hashing them is slow and noisy. The architect (main) ruled the detector stays git-scoped, and the owner approved the plan gate without overriding that
+- **Concern**: `--grep` alternation without `-E` → **Addressed**: uses `-i -E`
+- **Concern**: Contradictions in the executive summary and risk table → **Addressed**: both fixed
+#### Claude (APPROVE)
+- **Concern**: Minor: `cli.ts`/`UpdateResult` missing from phase 6; Codex flag-value read as a subcommand; retired-harness throw escapes; tripwire move understated as "pure"; unbounded non-git walk → **Addressed**: all five accepted (named subcommand list, `RetiredHarnessError` caught, signature change named, 50k-file bound)
+
+### Phase 1 (Round 1)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: The implementation files were untracked, so they were missing from the PR scope → **Addressed**: committed in c4b0ac538 "feat: governance-doc classifier and validator library" (the review ran before the commit)
+#### Claude (APPROVE)
+- **Concern**: `nonCommentLineCount` leaves one blank line per comment block (effective cap 34) → **Addressed**: whole-line comments removed entirely, with a regression test
+- **Concern**: Unguarded `git ls-files` call → **Addressed**: falls back to the filesystem walk on error
+- **Concern**: The non-git ignore compiler skips `!` negations → **Rebutted**: kept and documented; it can only make the walk ignore more; noted as a carry-forward for phase 4
+
+### Phase 1 (Round 2)
+#### Gemini
+- Skipped / CONSULT_ERROR: VERDICT COMMENT, "Gemini lane skipped: agy produced no review output"
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Whitespace can hide a leftover marker from the validator → **Addressed**: `isStarterMarker` trims; fix commit 2423178be "whitespace-tolerant marker detection, starter guard, map separators"
+#### Claude (APPROVE)
+- **Concern**: An empty starter set silently classifies everything as curated; only the em dash is accepted as a map separator; unreadable dirs throw → **Addressed**: `knownStarterTexts` throws on a missing starter, en dash and hyphen accepted, unreadable dirs skipped (2423178be)
+- **Concern**: Loose `Critical`/`Map` prefix lookup; deletion-only starters classify as placeholder → **Rebutted**: matches the shipped hot-tier semantics and the spec's subset predicate
+
+### Phase 1 (Round 3)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (APPROVE)
+- **Concern**: An empty draft (headings only, or a cold doc with no sections) passes validation → **Addressed** in phase 4: the validator now reports `empty-section` (thread log, phase_4)
+- **Concern**: `globToRegex` over-matches `**`, so the non-git walk can over-ignore → **Addressed** (documented): the imprecision is now stated in the ignore compiler's doc comment (phase_4 iter1 rebuttal)
+- **Concern**: Nits: `entriesHeading` hardcodes the filename; `SLOT_LINE` flags `- <url>` bullets → `SLOT_LINE` **Addressed** (URL/mailto bullets excluded by a lookahead); `entriesHeading` **N/A** (non-blocking nit at an approving round, left as is)
+
+### Phase 2 (Round 1)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Seeded-lesson demotion could edit a curated `lessons-learned.md` → **Addressed**: demotion happens only when that file is eligible; fix commit f9a8ac98d "map full-coverage rule, curated-cold displacement guard, prompt rules last"
+#### Claude (REQUEST_CHANGES)
+- **Concern**: The skill never states the full-coverage map rule that the validator enforces as a failure (the common case, cold doc with 12 or fewer sections) → **Addressed**: stated in step 4 and in the prompt (f9a8ac98d)
+- **Concern**: Minor: rules block does not close the prompt; literal map headings left to inference; "has just adopted" wording is wrong for late adopters → **Addressed**: all fixed (f9a8ac98d)
+
+### Phase 2 (Round 2)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (COMMENT)
+- **Concern**: Cold section names that are prefixes of each other (`Security` / `Security Model`) cause an ambiguous-map violation; deleting the `STARTER:` line can drop the `-->` → **Addressed**: fix commit 93ef2b4ec "exact map heading wins over prefix, keep comment close when removing STARTER sentence"
+
+### Phase 3 (Round 1)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `CODEX_SUBCOMMANDS` omits `mcp-server` → **Addressed**: added with a regression test (it is absent from codex 0.162.1 but existed in earlier releases); fix commit 19396aae6 "provider-level interactive launch blockers; Claude subcommands, --bg, --resume; codex mcp-server"
+#### Claude (APPROVE)
+- **Concern**: The Claude guard covers only `-p/--print` (not subcommands, `--bg`, `--resume`); headless rules keyed by harness name → **Addressed**: `CLAUDE_SUBCOMMANDS`, `--bg/--background`, `-r/--resume` now block; rules moved to the provider-level `interactiveLaunchBlocker?(flags)` (19396aae6)
+- **Concern**: Substring harness detection; unrelated cloud-config fix in scope → **Rebutted**: same detection semantics as role injection, and an explicit `architectHarness` is the precise override; the cloud-config fix is a separate, approved side commit
+
+### Phase 3 (Round 2)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (COMMENT)
+- **Concern**: Optional-value and variadic flags (`--add-dir`, `--mcp-config`, codex `-i`) swallow the appended prompt; the `--flag=value` form is unmatched → **Addressed**: the prompt is passed as `['--', prompt]` (both CLIs verified to honour `--`), and blockers match `--flag=value`; fix commit 5c8b9e88e "end option parsing before the prompt; match --flag=value blockers"
+
+### Phase 4 (Round 1)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: The non-git snapshot ignores root `.gitignore`, against the plan → **Addressed**: now honoured; the ignore compiler moved into `lib/tree-snapshot.ts`; fix commit 7053a931f "honour root .gitignore outside git; prompt-size guard; permission wording"
+- **Concern**: The unrelated flaky `session-manager` test is permanently skipped → **Rebutted**: the builder role's flaky-test rule says to skip it, annotate it and document it; it was already skipped under CI; later tracked as #1800
+- **Concern**: The planned 100 KB prompt-size guard is missing → **Addressed**: `MAX_PROMPT_BYTES = 100_000` falls back to the manual prompt file (7053a931f)
+#### Claude (COMMENT)
+- **Concern**: Missing prompt-size guard (E2BIG with no pointer to the prompt file) → **Addressed**: guard added; a spawn error now prints where the prompt file is (7053a931f)
+- **Concern**: `defaultDeps()` makes the tests need a build → **Addressed**: `skeletonDir` is resolved lazily
+- **Concern**: `describePermissions` describes restrictive flags as a permission bypass → **Addressed**: only known bypass forms say "will NOT ask"
+- **Concern**: Minor: non-git mode does not see an in-session `git init`; a declined run leaves the prompt file unmentioned; `.gitignore` deviation → **Addressed**: scope line states the `git init` gap; both decline paths name the prompt file; `.gitignore` now honoured
+
+### Phase 4 (Round 2)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: The first commit in an unborn repo (HEAD going from none to a commit) is not detected → **Addressed**: unborn HEAD compared as `(no commits)`, with a regression test; fix commit 4d5c6c835 "project in a repo subdirectory; first commit in an unborn repo"
+- **Concern**: The summary always says "nothing has been staged or committed" → **Addressed**: the message is conditional when HEAD, the branch or the index moved
+#### Claude (REQUEST_CHANGES)
+- **Concern**: The change detector mis-keys paths when the project is in a subdirectory of the repo (drafts reported out-of-scope, content hashes `<absent>`), reproduced → **Addressed**: `--show-prefix` re-keying, with hashing at the repo top level; new test (4d5c6c835)
+- **Concern**: Minor: the "nothing needs bootstrapping" headline ignores missing files → **Addressed**: adds the `codev update` hint
+- **Concern**: Minor: flaky test skipped in this PR; SIGINT ignored for the agent's whole lifetime → **Rebutted**: flaky-test rule (see Round 1); ignoring SIGINT is intended so the CLI can still report after Ctrl-C
+
+### Phase 4 (Round 3)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: Symlinks are all hashed as `<special>`, so a retargeted link is invisible → **Addressed**: hashed as `<link:TARGET>`, with a test; fix commit b87516dcd "compare symlinks by target in tree snapshots". Porch force-advanced the phase at the iteration-3 ceiling, so this commit was not re-reviewed; main will review it at PR integration
+#### Claude (APPROVE)
+- **Concern**: `report.scope` contradicts `detectionLost` → **Addressed**: scope line omitted when detection is lost (b87516dcd)
+- **Concern**: Cosmetic: a Ctrl-C exit counts as failure; prompt file written before confirm; an unwritten cold doc makes map validation noisy → **Rebutted**: all intended or accurate (the spec treats agent failure as a failure; the prompt file is kept so a declined run can point at it; map errors follow from the unwritten file)
+- **Concern**: The flaky test needs a tracking issue → **Addressed**: tracked as #1800
+
+### Phase 5 (Round 1)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (APPROVE)
+- **Concern**: An error inside `reviewDrafts` loses the change report; the summary waits for the slow review; reviewer edits after validation go unseen → **Addressed**: fix commit 697d27039 "summary before the review; review errors never lose it" (review errors become a named warning; drafts re-hashed after the review)
+- **Concern**: Minor: `REVIEW_MODELS` ignores `porch.consultation.models`; Gemini skip detection depends on a hardcoded string → `REVIEW_MODELS` not applied (outside the plan, noted for the review doc); skip-string coupling **N/A**: kept; if consult's skip wording changes, a skipped Gemini lane would be listed as reviewed, with the skip note as its feedback file (follow-up item)
+
+### Phase 6 (Round 1)
+#### Gemini
+- Skipped / CONSULT_ERROR: VERDICT COMMENT, "Gemini lane skipped: agy produced no review output"
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (APPROVE)
+- **Concern**: `shouldOfferBootstrap` can throw and abort adopt/update over a hint; `adopt -y` with a CLAUDE.md conflict now waits on an interactive session → **Addressed**: fix commit 510e32aaf "offer never throws; adopt -y does not wait on the merge"
+- **Concern**: Minor: the instance `codev/resources/cheatsheet.md` lacks the new row → **Addressed**: row added (thread log)
+- **Concern**: Minor: nothing tests that `instructions.bootstrapDocs` reaches the `--agent` JSON → Not applied: the duplicated JSON builder predates this work; wiring checked manually in a scratch repo only
+
+## Lessons Learned
+
+### What Went Well
+
+- Splitting the work as "skill owns content, CLI owns everything deterministic" kept the agent's job small and made every guarantee in the spec unit-testable without a model.
+- Promoting the consult tree tripwire into `lib/tree-snapshot.ts` meant change detection started from code that had already been through review, instead of a new implementation.
+- CMAP earned its cost here. Across phases 3 and 4 it found real defects that would have shipped: a variadic flag swallowing the prompt, a project in a repo subdirectory being mis-keyed, an unborn HEAD gaining a first commit unseen, and symlink retargets being invisible.
+
+### Challenges Encountered
+
+- **Change detection has many edge cases.** Each phase_4 round found another blind spot in the git snapshot. Each was reproduced on a scratch repo before fixing.
+- **Environment leakage into tests.** A developer's global git excludes file hid harness scratch paths in test repos, and a `umask 077` shell broke an unrelated permission test. The fixes: pin `core.excludesFile=/dev/null` in scratch repos, and set permission preconditions explicitly.
+- **Driving an interactive agent from automation.** The CLI awaits an interactive session by design, so the real-repo verification ran under a pty with a headless stand-in for the agent (details above).
+
+### What Would Be Done Differently
+
+- Run the real-repo verification at the end of phase 4, not in the review phase. The one shape defect it found (a dropped guidance comment) was invisible to every unit test and every CMAP round, because all fixtures were hand-written drafts that already had the right shape.
+
+- Enumerate the git-repo shapes up front (subdirectory project, unborn HEAD, symlinks, no git) as a test matrix in the plan. In this project they were discovered one CMAP round at a time.
+- Check the plan's "no skeleton twin" style claims with `ls` while writing the plan.
+
+### Methodology Improvements
+
+- A phase force-advanced at the iteration ceiling leaves its last fix unreviewed. Porch could emit a reminder in the review phase listing such commits, so the integration review covers them without someone remembering to.
+- Boundary refresh tasks are emitted once. Twice in this project the task was not captured, and the refresh was skipped. Saving `porch next` output to a file worked around it; porch could re-emit the task until it is acknowledged.
+
+## Architecture Updates
+
+- Routed: cold: `codev/resources/arch.md` § Governance Docs (Hot/Cold Tiers), new paragraph "First population on an existing codebase (Spec 1797)". It covers the `bootstrap-docs` command, the shared eligibility/validator module `lib/governance-bootstrap.ts`, the detect-and-report guarantee via `lib/tree-snapshot.ts`, the `buildInteractiveTaskLaunch` harness capability and the prompt-file fallback.
+- Hot tier unchanged: the fact is subsystem detail, not a cross-cutting rule every builder needs up front, and `arch-critical.md` is at its cap. The existing hot fact on two-tier governance docs still holds.
+
+## Lessons Learned Updates
+
+- Routed: cold: Architecture: when the CLI hands a task to an interactive agent, design for detect-and-report (git-state snapshot, name changes, non-zero exit, never auto-revert). Includes the three snapshot blind spots found in review.
+- Routed: cold: Testing: scratch git repos in tests inherit the developer's global git config (pin `core.excludesFile=/dev/null`). A `umask 077` shell filters `writeFileSync` modes, so set permission preconditions explicitly.
+- Hot tier unchanged: both lessons are narrow to their subsystem, and `lessons-critical.md` is at its cap.
+
+## Flaky Tests
+
+- `packages/codev/src/terminal/__tests__/session-manager.test.ts`, "no stderr tail logged for file-based stderr (Bugfix #324)": it timed out waiting for session-exit in 2 of 4 local full-suite runs (once when run alone). It was already skipped in CI. It is now `it.skip` with a FLAKY annotation citing #1800.
+- A forge `pr-create` test failed once in a porch test check (`CODEV_PR_TITLE` / `CODEV_PR_BODY` required) and passed on immediate rerun. It was not touched by this branch and was noted on #1800.
+
+## Follow-up Items
+
+- `REVIEW_MODELS` in `bootstrap-docs.ts` should respect `porch.consultation.models` (or a project consult config) instead of fixed gemini/codex/claude.
+- Gemini skip detection matches consult's `SUMMARY: … lane skipped` wording. If that wording changes, a skipped lane is reported as reviewed, with the skip note as its feedback file. A structured skip signal from `consult` would remove the coupling.
+- `cli.ts`'s `update --agent` JSON builder is duplicated in `update.test.ts`. Extracting it would let `instructions.bootstrapDocs` be unit-tested.
+- Observed, pre-existing: running `codev update` right after a fresh `adopt` produces `CLAUDE.md` / `AGENTS.md` `.codev-new` files and launches update's own (unawaited) merge session.
+- `adopt`'s Next steps still lists `consult plan  # Review the plan with an architect`, which reads oddly right after adoption (pre-existing).

@@ -52,3 +52,8 @@
   - update: UpdateResult.bootstrapDocsHint, printed once after the summary; --agent puts it in instructions.bootstrapDocs; --dry-run says nothing.
   - Plan said codev/resources/commands/ has no skeleton twin: wrong, codev-skeleton/resources/commands/codev.md + overview.md exist; both trees updated. codev skill updated in all four copies; skeleton cheatsheet row added. README/INSTALL describe no post-adopt governance step, left alone.
 - phase_6 iter1 CMAP: X/C APPROVE, G skipped (agy no output). Applied Claude's notes: shouldOfferBootstrap returns false if a starter is missing from the package (a hint must not fail adopt/update); `adopt -y` no longer awaits the merge session (nothing to sequence; launches after Next steps as before, so Tower's `adopt --yes` auto-adopt is no worse than before); our codev/resources/cheatsheet.md got the row too. Not applied: cli.ts JSON builder is duplicated in update.test.ts (pre-existing), so instructions.bootstrapDocs wiring is verified manually only (scratch-repo run), not by a unit test.
+
+## Review
+- Real-repo verification run on sindresorhus/execa (877 commits) with the branch build, under a pty with a headless `claude -p` wrapper as the configured agent: four execa-specific drafts, validation passed, nothing outside the eligible files, codex + claude draft review found real accuracy errors (gemini skipped), re-run a byte-identical no-op.
+- Finding: both hot drafts dropped the starter's guidance comment (spec's hot-file shape keeps it; no reviewer noticed). Fixed: validator `missing-guidance` + an explicit prompt rule. Re-validating the execa drafts flags both.
+- Review doc written; cold arch.md + lessons-learned.md updated (hot tier at cap, unchanged).
