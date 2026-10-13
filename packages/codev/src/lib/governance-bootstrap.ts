@@ -123,17 +123,41 @@ export function classifyGovernanceFile(content: string | null, starters: string[
   return 'curated';
 }
 
-/** Read and classify one governance file of the project at `root`. */
+/**
+ * What a governance path is when it is not a regular file (`a symlink`, `not a regular
+ * file`), else undefined. Read with lstat, never through the link: change detection hashes
+ * a symlink by its target, so a write through the link would go unseen.
+ */
+export function governancePathKind(root: string, file: GovernanceFile): string | undefined {
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(path.join(root, 'codev', 'resources', file.name));
+  } catch {
+    return undefined;
+  }
+  if (stat.isSymbolicLink()) return 'a symlink';
+  if (!stat.isFile()) return 'not a regular file';
+  return undefined;
+}
+
+/**
+ * Read and classify one governance file of the project at `root`. A symlink or any other
+ * non-regular path is `curated`: it is never rewritten, whatever it points at.
+ */
 export function classifyProjectFile(root: string, file: GovernanceFile, templatesDir: string): GovernanceClass {
+  const starters = knownStarterTexts(file, templatesDir);
   const filePath = path.join(root, 'codev', 'resources', file.name);
+  if (governancePathKind(root, file) !== undefined) return 'curated';
   let content: string | null = null;
   if (fs.existsSync(filePath)) content = fs.readFileSync(filePath, 'utf-8');
-  return classifyGovernanceFile(content, knownStarterTexts(file, templatesDir));
+  return classifyGovernanceFile(content, starters);
 }
 
 export interface GovernanceStatus {
   file: GovernanceFile;
   class: GovernanceClass;
+  /** Set when the path is not a regular file (`a symlink`); such a path is never eligible. */
+  pathKind?: string;
   /** Why a placeholder is not rewritten this run (its paired cold doc is missing). */
   heldBack?: string;
 }
@@ -146,10 +170,12 @@ export interface GovernanceStatus {
  * restores the cold starter.
  */
 export function classifyProjectGovernance(root: string, templatesDir: string): GovernanceStatus[] {
-  const statuses: GovernanceStatus[] = GOVERNANCE_FILES.map(file => ({
-    file,
-    class: classifyProjectFile(root, file, templatesDir),
-  }));
+  const statuses: GovernanceStatus[] = GOVERNANCE_FILES.map(file => {
+    const status: GovernanceStatus = { file, class: classifyProjectFile(root, file, templatesDir) };
+    const pathKind = governancePathKind(root, file);
+    if (pathKind !== undefined) status.pathKind = pathKind;
+    return status;
+  });
   for (const status of statuses) {
     if (status.class !== 'placeholder' || !status.file.coldDoc) continue;
     const cold = statuses.find(other => other.file.name === status.file.coldDoc);

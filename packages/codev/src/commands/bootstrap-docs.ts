@@ -367,8 +367,25 @@ function takeSnapshot(root: string, mode?: Detector['mode']): Detector {
   return { mode: 'filesystem', snapshot: snapshotFilesystem(root), index: null };
 }
 
+/**
+ * Each governance file's identity: the path itself, plus what it resolves to when it is a
+ * symlink, so a retarget and a write through the link are both a change.
+ */
 function hashGovernanceFiles(root: string): Map<string, string> {
-  return new Map(GOVERNANCE_FILES.map(file => [file.name, hashPath(path.join(root, governancePath(file.name)))]));
+  return new Map(GOVERNANCE_FILES.map(file => {
+    const absolute = path.join(root, governancePath(file.name));
+    let identity = hashPath(absolute);
+    if (identity.startsWith('<link:')) identity += hashResolved(absolute);
+    return [file.name, identity];
+  }));
+}
+
+function hashResolved(absolute: string): string {
+  try {
+    return hashPath(fs.realpathSync(absolute));
+  } catch {
+    return '<dangling>';
+  }
 }
 
 function detectorScope(before: Detector, after: Detector): string {
@@ -584,6 +601,7 @@ function printFileStatuses(log: (line: string) => void, files: FileStatus[]): vo
   for (const status of files) {
     let label = CLASS_LABEL[status.class];
     if (status.heldBack) label = `placeholder, held back: ${status.heldBack}`;
+    if (status.pathKind) label = `${status.pathKind}, never rewritten (read as input, not edited)`;
     log(`  ${governancePath(status.file.name)}: ${label}`);
   }
 }

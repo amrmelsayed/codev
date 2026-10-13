@@ -364,6 +364,31 @@ describe('codev bootstrap-docs: launched sessions', () => {
     expect(read(PROMPT_FILE)).toBe(prompt);
   });
 
+  it('a symlinked starter is named, never rewritten, and a write through it is caught', async () => {
+    setUpGitProject();
+    // The link points outside the repository, where git sees nothing.
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-docs-link-'));
+    try {
+      const target = path.join(outside, 'arch.md');
+      fs.writeFileSync(target, fs.readFileSync(path.join(templatesDir, 'arch.starter.md'), 'utf-8'));
+      fs.rmSync(path.join(dir, resource('arch.md')));
+      fs.symlinkSync(target, path.join(dir, resource('arch.md')));
+      git('add', '.');
+      git('commit', '-q', '-m', 'link arch.md');
+
+      const result = await runBootstrapDocs({ cwd: dir }, deps(() => {
+        writeDrafts(['arch-critical.md', 'lessons-critical.md', 'lessons-learned.md']);
+        fs.writeFileSync(target, DRAFTS['arch.md']);
+      }));
+      expect(output()).toContain('codev/resources/arch.md: a symlink, never rewritten');
+      expect(result.validation?.map(draft => draft.name)).not.toContain('arch.md');
+      expect(result.report?.governanceChanged).toEqual([resource('arch.md')]);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it('a curated-file edit, a source edit and a commit are each named; nothing reverted (scenario 13)', async () => {
     setUpGitProject();
     writeDrafts(['arch.md']);

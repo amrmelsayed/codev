@@ -6,6 +6,7 @@
  * is needed.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -178,6 +179,30 @@ describe('isNonEmptyRepo', () => {
   });
 });
 
+describe('starter history', () => {
+  // The classifier recognises a placeholder only by a starter text it knows. Editing a shipped
+  // starter without recording the old text would turn every project still holding that old
+  // starter into "curated", silently making it ineligible.
+  const PINNED: Record<string, string> = {
+    'arch-critical.md': '71c356a1c8ddfc075cec72b8fe72199200c69ac84a8cdf03eeca5eb04264379f',
+    'lessons-critical.md': '124e8c529c430d73384d4cbab97fcd5f6feb466b03457564ea281b771c47d69c',
+    'arch.starter.md': 'f9e5708f2a2f6ae34eb3b3daa6cc938eaabfd019e8f1d8856f703699982829d1',
+    'lessons-learned.starter.md': 'ad0825faef5a51250e2e0faf946510cbaeb08337fda5bd65122d9e25e31652be',
+  };
+
+  it('pins every shipped starter template', () => {
+    expect(GOVERNANCE_FILES.map(file => file.starter).sort()).toEqual(Object.keys(PINNED).sort());
+    for (const [starter, pinned] of Object.entries(PINNED)) {
+      const text = fs.readFileSync(path.join(templatesDir, starter), 'utf-8').replace(/\r\n/g, '\n');
+      const hash = crypto.createHash('sha256').update(text).digest('hex');
+      expect(
+        hash,
+        `${starter} changed: append the previous text to EARLIER_STARTERS in lib/governance-bootstrap.ts, then update this hash`,
+      ).toBe(pinned);
+    }
+  });
+});
+
 describe('classifyProjectGovernance and shouldOfferBootstrap', () => {
   let dir: string;
 
@@ -198,6 +223,29 @@ describe('classifyProjectGovernance and shouldOfferBootstrap', () => {
 
   afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a symlinked starter is curated, named as a symlink, and never eligible', () => {
+    writeStarters();
+    const target = path.join(dir, 'shared-arch.md');
+    fs.writeFileSync(target, knownStarterTexts(ARCH, templatesDir)[0]);
+    fs.rmSync(path.join(dir, 'codev', 'resources', 'arch.md'));
+    fs.symlinkSync(target, path.join(dir, 'codev', 'resources', 'arch.md'));
+
+    const statuses = classifyProjectGovernance(dir, templatesDir);
+    const arch = statuses.find(status => status.file.name === 'arch.md')!;
+    expect(arch.class).toBe('curated');
+    expect(arch.pathKind).toBe('a symlink');
+    expect(bootstrapEligibleFiles(statuses).map(file => file.name)).not.toContain('arch.md');
+  });
+
+  it('a directory where a governance file belongs is curated, never eligible', () => {
+    writeStarters();
+    fs.rmSync(path.join(dir, 'codev', 'resources', 'lessons-learned.md'));
+    fs.mkdirSync(path.join(dir, 'codev', 'resources', 'lessons-learned.md'));
+    const status = classifyProjectGovernance(dir, templatesDir).find(s => s.file.name === 'lessons-learned.md')!;
+    expect(status.class).toBe('curated');
+    expect(status.pathKind).toBe('not a regular file');
   });
 
   it('makes every starter eligible on a fresh adopt', () => {
