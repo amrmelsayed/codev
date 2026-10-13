@@ -82,7 +82,7 @@ program
   .option('-y, --yes', 'Skip conflict prompts')
   .action(async (options) => {
     try {
-      process.exitCode = await adopt({ yes: options.yes });
+      await adopt({ yes: options.yes });
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);

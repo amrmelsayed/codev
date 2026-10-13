@@ -276,9 +276,8 @@ describe('adopt command', () => {
       const runBootstrap = vi.fn(async () => 0);
 
       const { adopt } = await import('../commands/adopt.js');
-      const exitCode = await adopt({ yes: true }, { confirm, runBootstrap });
+      await adopt({ yes: true }, { confirm, runBootstrap });
 
-      expect(exitCode).toBe(0);
       expect(confirm).not.toHaveBeenCalled();
       expect(runBootstrap).not.toHaveBeenCalled();
       expect(hintPrinted()).toBe(true);
@@ -317,7 +316,7 @@ describe('adopt command', () => {
       expect(hintPrinted()).toBe(true);
     });
 
-    it('accepting runs the pass, returns its exit code, and drops the hint once the docs are drafted', async () => {
+    it('accepting runs the pass and drops the hint once the docs are drafted; a failing pass does not fail adopt', async () => {
       const root = makeProject('bootstrap-accept');
       const confirm = vi.fn(async () => true);
       const runBootstrap = vi.fn(async (at: string) => {
@@ -326,10 +325,13 @@ describe('adopt command', () => {
       });
 
       const { adopt } = await import('../commands/adopt.js');
-      const exitCode = await adopt({}, { confirm, runBootstrap });
+      const exitCodeBefore = process.exitCode;
+      await expect(adopt({}, { confirm, runBootstrap })).resolves.toBeUndefined();
 
       expect(runBootstrap).toHaveBeenCalledWith(root);
-      expect(exitCode).toBe(1);
+      // Adoption succeeded: the pass's non-zero exit is reported, not propagated.
+      expect(process.exitCode).toBe(exitCodeBefore);
+      expect(output.some(line => line.includes('Codev is adopted. The bootstrap pass reported problems'))).toBe(true);
       expect(hintPrinted()).toBe(false);
       // Next steps come last, after the pass.
       const nextSteps = output.findIndex(line => line.includes('Next steps:'));
@@ -375,9 +377,8 @@ describe('adopt command', () => {
       });
 
       const { adopt } = await import('../commands/adopt.js');
-      const exitCode = await adopt({ yes: true }, { runMergeSession, runBootstrap: vi.fn(async () => 0) });
+      await adopt({ yes: true }, { runMergeSession, runBootstrap: vi.fn(async () => 0) });
 
-      expect(exitCode).toBe(0);
       expect(runMergeSession).toHaveBeenCalledTimes(1);
       expect(output.findIndex(line => line.includes('Next steps:'))).toBeLessThan(mergeStartedAt);
       finishMerge?.();

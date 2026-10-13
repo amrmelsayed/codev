@@ -12,7 +12,7 @@ import chalk from 'chalk';
 import { getTemplatesDir } from '../lib/templates.js';
 import { confirm } from '../lib/cli-prompts.js';
 import { shouldOfferBootstrap } from '../lib/governance-bootstrap.js';
-import { runBootstrapDocs, spawnAgentProcess, type AgentExit } from './bootstrap-docs.js';
+import { spawnAgentProcess, type AgentExit } from '../lib/agent-process.js';
 import {
   createUserDirs,
   createProjectsDir,
@@ -43,7 +43,11 @@ function defaultDeps(): AdoptDeps {
     confirm,
     runMergeSession: (prompt, cwd) => spawnAgentProcess({ executable: 'claude', args: [prompt] }, cwd),
     shouldOfferBootstrap: root => shouldOfferBootstrap(root, path.join(getTemplatesDir(), 'templates')),
-    runBootstrap: async root => (await runBootstrapDocs({ cwd: root })).exitCode,
+    runBootstrap: async root => {
+      // Loaded only when the user accepts the offer, so `codev` startup does not pay for it.
+      const { runBootstrapDocs } = await import('./bootstrap-docs.js');
+      return (await runBootstrapDocs({ cwd: root })).exitCode;
+    },
   };
 }
 
@@ -86,7 +90,7 @@ function detectConflicts(targetDir: string): Conflict[] {
  *
  * Returns the process exit code: 0, or the bootstrap pass's code when the human ran it.
  */
-export async function adopt(options: AdoptOptions = {}, overrides: Partial<AdoptDeps> = {}): Promise<number> {
+export async function adopt(options: AdoptOptions = {}, overrides: Partial<AdoptDeps> = {}): Promise<void> {
   const { yes = false } = options;
   const deps: AdoptDeps = { ...defaultDeps(), ...overrides };
   const targetDir = process.cwd();
@@ -259,7 +263,6 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
   // the terminal with a live session. Then offer the governance-doc bootstrap (Spec 1797)
   // on a project with something to document. With -y nothing is offered, so nothing waits on
   // the merge; it launches after "Next steps" as before, and the command is listed instead.
-  let exitCode = 0;
   if (hasConflicts && !yes) {
     await mergeConflicts();
   }
@@ -268,7 +271,14 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
     console.log('');
     if (await deps.confirm('Draft the governance docs from this codebase now?', false)) {
       console.log('');
-      exitCode = await deps.runBootstrap(targetDir);
+      // Adoption has succeeded by now; a pass that reports problems says so in its own
+      // summary and does not turn adopt into a failure (`codev bootstrap-docs` run directly
+      // keeps its non-zero exit).
+      const bootstrapExit = await deps.runBootstrap(targetDir);
+      if (bootstrapExit !== 0) {
+        console.log('');
+        console.log(chalk.yellow('Codev is adopted. The bootstrap pass reported problems (see its summary above); review the drafts before committing.'));
+      }
       // A declined or manual pass leaves the placeholders, so the command is still worth listing.
       bootstrapPending = deps.shouldOfferBootstrap(targetDir);
     }
@@ -289,6 +299,4 @@ export async function adopt(options: AdoptOptions = {}, overrides: Partial<Adopt
   if (hasConflicts && yes) {
     mergeConflicts();
   }
-
-  return exitCode;
 }
