@@ -389,8 +389,10 @@ export function validateHotFile(
   const violations = leftoverMarkers(content);
 
   if (starter !== undefined) {
-    const kept = new Set(toLines(content).map(line => line.trim()));
-    const dropped = guidanceCommentLines(starter).filter(line => !kept.has(line));
+    // Where the closing `-->` lands (own line, or the end of the last kept line) is free.
+    const unclosed = (line: string): string => line.trim().replace(/\s*-->$/, '');
+    const kept = new Set(toLines(content).map(unclosed));
+    const dropped = guidanceCommentLines(starter).filter(line => !kept.has(unclosed(line)));
     if (dropped.length > 0) {
       violations.push({ kind: 'missing-guidance', message: `the starter's guidance comment was dropped or edited: ${dropped[0]}` });
     }

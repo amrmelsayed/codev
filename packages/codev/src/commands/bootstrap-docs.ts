@@ -173,7 +173,7 @@ export interface DraftReview {
   unavailable?: string;
   reviewers: ReviewOutcome[];
   /** Governance files whose content changed while the reviewers ran. */
-  changedDuringReview?: string[];
+  changesDuringReview?: ChangeReport;
 }
 
 export interface BootstrapDocsResult {
@@ -253,7 +253,7 @@ function buildPrompt(root: string, skeletonDir: string, eligible: string[], cura
     PROJECT_NAME: path.basename(root),
     ELIGIBLE_FILES: fileList(eligible),
     CURATED_FILES: fileList(curated),
-    GIT_DIGEST: buildGitDigest(root),
+    GIT_DIGEST: fenced(buildGitDigest(root)),
     SKILL: skill.trim(),
   });
 }
@@ -478,6 +478,12 @@ function fenceFor(content: string): string {
   return '`'.repeat(Math.max(3, longest + 1));
 }
 
+/** `content` in a code block it cannot close (a commit subject may hold a fence of its own). */
+function fenced(content: string): string {
+  const fence = fenceFor(content);
+  return `${fence}\n${content}\n${fence}`;
+}
+
 function renderDrafts(root: string, names: string[]): string {
   return names
     .map(name => {
@@ -551,9 +557,6 @@ function printReview(log: (line: string) => void, review: DraftReview): void {
   if (review.unavailable !== undefined) {
     log(chalk.yellow(`  Draft review did not run (${escapeControlChars(review.unavailable)}); the drafts were not reviewed.`));
     return;
-  }
-  for (const rel of review.changedDuringReview ?? []) {
-    log(chalk.red(`  ${rel} changed while the reviewers ran; the validation above describes the version before it.`));
   }
   const reviewed = review.reviewers.filter(reviewer => reviewer.status === 'ok').map(reviewer => reviewer.model);
   if (reviewed.length > 0) {
@@ -666,30 +669,44 @@ function printSummary(
 
   if (reportHasChanges(report)) {
     log(chalk.red('  Changes outside the eligible files (nothing has been reverted):'));
-    for (const rel of report.governanceChanged) log(chalk.red(`    - ${rel} (governance file that was not eligible)`));
-    for (const change of report.identityChanges) {
-      log(chalk.red(`    - ${change.field} moved: ${escapeControlChars(change.before)} -> ${escapeControlChars(change.after)} (check \`git reflog\`)`));
-    }
-    if (report.indexChanged) log(chalk.red('    - the git index changed (check `git diff --cached`)'));
-    for (const change of report.outOfScope) {
-      let line = `    - ${escapeControlChars(change.path)}`;
-      if (change.annotation) line += ` (${change.annotation})`;
-      log(chalk.red(line));
-    }
-    if (report.detectionLost !== undefined) {
-      log(chalk.red(`    - the working tree could not be read after the session (${escapeControlChars(report.detectionLost)}); whether anything else changed is unknown`));
-    }
+    printChanges(log, report, 'governance file that was not eligible');
   } else {
     log('  No changes outside the eligible files.');
   }
   if (report.detectionLost === undefined) log(`  ${report.scope}`);
 }
 
+/** One line per change in `report`; `governanceLabel` says why a governance file is listed. */
+function printChanges(log: (line: string) => void, report: ChangeReport, governanceLabel: string): void {
+  for (const rel of report.governanceChanged) log(chalk.red(`    - ${rel} (${governanceLabel})`));
+  for (const change of report.identityChanges) {
+    log(chalk.red(`    - ${change.field} moved: ${escapeControlChars(change.before)} -> ${escapeControlChars(change.after)} (check \`git reflog\`)`));
+  }
+  if (report.indexChanged) log(chalk.red('    - the git index changed (check `git diff --cached`)'));
+  for (const change of report.outOfScope) {
+    let line = `    - ${escapeControlChars(change.path)}`;
+    if (change.annotation) line += ` (${change.annotation})`;
+    log(chalk.red(line));
+  }
+  if (report.detectionLost !== undefined) {
+    log(chalk.red(`    - the working tree could not be read afterwards (${escapeControlChars(report.detectionLost)}); whether anything else changed is unknown`));
+  }
+}
+
 function printFooter(log: (line: string) => void, report: ChangeReport, review: DraftReview): void {
   printReview(log, review);
 
+  const duringReview = review.changesDuringReview;
+  if (duringReview !== undefined && reportHasChanges(duringReview)) {
+    log(chalk.red('  Changes made while the reviewers ran (nothing has been reverted):'));
+    printChanges(log, duringReview, 'changed during the review; the validation above describes the version before it');
+  }
+
+  const gitMoved = [report, duringReview].some(
+    changes => changes !== undefined && (changes.identityChanges.length > 0 || changes.indexChanged),
+  );
   log('');
-  if (report.identityChanges.length > 0 || report.indexChanged) {
+  if (gitMoved) {
     log(chalk.yellow('Review before commit — Codev staged and committed nothing, but git state moved during the session (see above).'));
     log('  Check `git log` and `git diff --cached` before trusting what is staged or committed.');
   } else {
@@ -823,25 +840,31 @@ export async function runBootstrapDocs(
   // The summary prints before the review, which can take minutes, so an interrupted review
   // never costs the human the change report.
   printSummary(log, validation, report, agentExit);
-  const hashesBeforeReview = hashGovernanceFiles(root);
   let review: DraftReview;
   try {
     review = await reviewDrafts(root, deps.skeletonDir, written, deps);
   } catch (err) {
     review = { ran: true, unavailable: `the review could not be prepared: ${(err as Error).message}`, reviewers: [] };
   }
-  const hashesAfterReview = hashGovernanceFiles(root);
-  review.changedDuringReview = GOVERNANCE_FILES
-    .filter(file => hashesBeforeReview.get(file.name) !== hashesAfterReview.get(file.name))
-    .map(file => governancePath(file.name));
+  // The reviewers are agents too: anything they changed, drafts included, is named and fails
+  // the run, measured from the post-session state (nothing is eligible to change here).
+  const changesDuringReview = buildChangeReport(
+    new Set(),
+    after,
+    takeSnapshot(root, before.mode),
+    hashesAfter,
+    hashGovernanceFiles(root),
+  );
+  review.changesDuringReview = changesDuringReview;
   printFooter(log, report, review);
 
   const agentFailed = agentExit.error !== undefined || agentExit.signal !== null || agentExit.code !== 0;
   const draftsFailed = validation.some(draft => draft.state !== 'written' || draft.violations.length > 0);
   let exitCode = 0;
   if (agentFailed || draftsFailed || reportHasChanges(report)) exitCode = 1;
+  if (reportHasChanges(changesDuringReview)) exitCode = 1;
 
-  // The review informs the human; its outcome never changes the exit code.
+  // Reviewer verdicts inform the human and never change the exit code; changes they made do.
   return { exitCode, outcome: 'ran', files, launched: true, agentExit, report, validation, review };
 }
 

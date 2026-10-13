@@ -14,9 +14,7 @@ Read these files as input, but do **not** edit them (they already hold curated c
 
 A bounded digest of the repository's history, prepared for you: the most recent commit subjects plus subjects matching fix, revert, incident and similar words. Use it to find scar tissue for `lessons-learned.md`. Inspect individual commits with `git show <hash>` when one looks significant; do not walk the full log.
 
-```
 {{GIT_DIGEST}}
-```
 
 ## The update-arch-docs skill
 

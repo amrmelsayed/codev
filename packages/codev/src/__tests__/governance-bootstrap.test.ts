@@ -428,6 +428,12 @@ describe('hot guidance comment', () => {
     expect(guidanceKinds(draft)).toEqual([]);
   });
 
+  it('accepts the closing --> on the last kept line', () => {
+    const kept = guidanceCommentLines(starter);
+    kept[kept.length - 1] += ' -->';
+    expect(guidanceKinds([title, '', ...kept, '', body].join('\n'))).toEqual([]);
+  });
+
   it('flags a draft that dropped the comment', () => {
     expect(guidanceKinds([title, '', body].join('\n'))).toEqual(['missing-guidance']);
   });
