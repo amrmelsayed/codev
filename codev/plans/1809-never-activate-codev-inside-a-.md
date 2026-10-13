@@ -138,14 +138,29 @@ export function isBuilderWorktreePath(p: string): boolean;
 - The listing guard at `:277` and the seven `!p.includes('/.builders/')` filters in
   `tower-routes.ts` stay as they are. I switch the `:277` guard to the predicate so it shares
   the rule. The route filters keep their current semantics, and changing them is out of scope.
-- `getKnownWorkspacePaths()` filters out worktree paths, so cron and other consumers no longer
-  see them.
+- `getKnownWorkspacePaths()` filters out worktree paths, so listing, cron and activation no
+  longer see them. The current unfiltered union moves to a new accessor,
+  `getAllKnownWorkspacePaths()`, and `getKnownWorkspacePaths()` becomes that list minus
+  worktree paths.
+- **Stop must still reach a live stray (main's condition on B).** The deactivate route
+  (`tower-routes.ts:757-768`) returns 404 "Workspace not found" unless the path is in
+  `getKnownWorkspacePaths()`. With that list filtered, `afx workspace stop` run from a live
+  stray worktree would hit the 404, leaving section C's remedy hint pointing at a command that
+  fails. So the route's `isKnown` check switches to the unfiltered `getAllKnownWorkspacePaths()`.
+  That list includes the stray's in-memory terminal entry and its `terminal_sessions` row, so a
+  live stray stays reachable. `stopInstance` itself is unchanged. The filtered list stays
+  limited to listing, cron and activation; stop/deactivate is the only consumer of the
+  unfiltered one.
 
 ### C. Stale-row cleanup pass on Tower startup (for main)
 
 New function `pruneBuilderWorktreeWorkspaces()` in `tower-instances.ts`. It runs once per boot
 in `tower-server.ts`, right after `reconcileTerminalSessions()` (`:707`), when the in-memory
 terminal maps are populated and liveness is known.
+
+**Boot order (main's condition):** reconcile, then prune, then the #341 orphan-shellper kill
+(`killOrphanedShellpers`, `tower-server.ts:~723`). Liveness is decided before anything is
+killed. The prune itself never kills anything.
 
 - Candidates: every distinct `workspace_path` in `known_workspaces` and `architect` for which
   `isBuilderWorktreePath` is true.
@@ -161,8 +176,11 @@ terminal maps are populated and liveness is known.
   from them, and `builders` rows under worktree paths are not part of this issue.
 - **Live:** never killed, never signalled, rows kept. Log one WARN line per live path, naming
   the path and terminal ids, with the hint "stray architect in a builder worktree; stop it with
-  `afx workspace stop` from that worktree". It is reported again on every boot until someone
-  stops it, after which the next boot prunes its rows.
+  `afx workspace stop` from that worktree". That remedy works because the deactivate route
+  keeps the unfiltered check (see B), and a test covers it. It is reported again on every boot
+  until someone stops it, after which the next boot prunes its rows.
+- **Exactly one INFO line per boot** with the counts (paths pruned, rows deleted, live paths
+  kept). It is logged even when every count is zero, so a quiet boot is visible.
 - **Why a startup pass and not a one-time global.db migration:** migrations run in `db/index.ts`
   before reconcile, so they cannot see liveness. A one-time migration would also leave behind
   the rows of sessions that were live when it ran. The pass is idempotent and costs one indexed
@@ -226,15 +244,19 @@ terminal maps are populated and liveness is known.
 **Tower (main):**
 - `packages/codev/src/agent-farm/servers/tower-instances.ts`:
   - `:199`: `registerKnownWorkspace` guard;
-  - `:215`: `getKnownWorkspacePaths` filter;
+  - `:215`: `getKnownWorkspacePaths` filter; new unfiltered `getAllKnownWorkspacePaths()`;
   - `:277`: listing guard switched to the predicate;
   - `:453`: the `launchInstance` refusal;
   - new `pruneBuilderWorktreeWorkspaces()`.
+- `packages/codev/src/agent-farm/servers/tower-routes.ts:~758`: the deactivate route's
+  `isKnown` uses `getAllKnownWorkspacePaths()`.
 - `packages/codev/src/agent-farm/servers/tower-server.ts:~707`: call the prune pass after
-  reconcile.
+  reconcile and before the #341 orphan sweep.
 - `packages/codev/src/agent-farm/__tests__/`: new tests for the refusal (no row written, no
   architect spawned), the `registerKnownWorkspace` no-op, and the prune pass (dead rows deleted,
-  live rows kept and reported, non-worktree rows untouched).
+  live rows kept and reported, non-worktree rows untouched, one INFO count line per boot), and
+  the deactivate condition: a live stray worktree workspace can be stopped through
+  `/deactivate` (no 404), and its rows then prune on the next boot.
 
 **Extension (vscode):**
 - `apps/vscode/src/workspace-detector.ts`: `detectWorkspace()`, tagged result.
@@ -281,6 +303,12 @@ anything that does.
 - **Alternative: a client-side check in `afx workspace start`.** Not needed. Tower's error
   string is printed verbatim, so one server-side guard covers the CLI, the extension, the web
   launch UI and any other client.
+- **Ordering with #1803 (main's cross-link).** #1803 adds a startup pass that re-adopts a
+  responsive, unregistered shellper whose WELCOME names a known workspace and role. It lives in
+  the same region of `tower-server.ts`. Whichever lands second rebases. Once the re-adopt step
+  exists it must run **before** this prune, so a re-adopted worktree architect counts as live
+  and is reported instead of pruned. The order becomes reconcile, re-adopt, prune, then the
+  orphan kill.
 - **Alternative: a one-time global.db migration (v19) for the cleanup.** Rejected; see C. It
   cannot check liveness.
 
@@ -298,7 +326,10 @@ anything that does.
     `known_workspaces` row, and calls no terminal-manager spawn;
   - `registerKnownWorkspace` with a worktree path writes nothing;
   - prune: a dead worktree row is deleted, a worktree path with a live shellper pid or
-    in-memory entry is kept and logged at WARN, and a normal workspace row is untouched.
+    in-memory entry is kept and logged at WARN, and a normal workspace row is untouched;
+  - deactivate: `POST /api/workspaces/<stray worktree>/deactivate` on a live stray returns 200
+    and stops it. A later prune pass then deletes its rows. `getKnownWorkspacePaths()` excludes
+    the path, while `getAllKnownWorkspacePaths()` includes it.
 - Extension:
   - the detector classifies root, worktree and override-pointing-at-worktree correctly;
   - the connection manager in worktree mode never calls `activateWorkspace` or
@@ -329,5 +360,7 @@ is installed. Tower runs from this worktree's build.
 6. Restart Tower:
    - the log shows the prune counts;
    - the stale `.builders` rows are gone, apart from live ones;
-   - live stray architects are listed at WARN and still running (`afx status` / `ps`).
+   - live stray architects are listed at WARN and still running (`afx status` / `ps`);
+   - for one live stray, run `afx workspace stop` from its worktree. It stops, and is not a 404.
+     Restart Tower again: that stray's rows are pruned.
 7. An empty window and a non-codev folder: unchanged (the welcome quadrants still show).
