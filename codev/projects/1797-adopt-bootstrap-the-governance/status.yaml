@@ -17,11 +17,11 @@ plan_phases:
     status: complete
   - id: phase_5
     title: Three-way review of the drafts
-    status: in_progress
+    status: complete
   - id: phase_6
     title: adopt and update integration plus docs
-    status: pending
-current_plan_phase: phase_5
+    status: in_progress
+current_plan_phase: phase_6
 gates:
   spec-approval:
     status: approved
@@ -36,7 +36,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -151,7 +151,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1797/codev/projects/1797-adopt-bootstrap-the-governance/1797-phase_4-iter3-claude.txt
 started_at: '2026-10-12T20:18:01.796Z'
-updated_at: '2026-10-13T00:03:58.233Z'
+updated_at: '2026-10-13T00:09:01.950Z'
 context_refreshes:
   - boundary: enter:plan
     at: '2026-10-12T20:29:16.809Z'
@@ -171,6 +171,8 @@ context_refreshes:
   - boundary: plan-phase:phase_5
     at: '2026-10-12T23:59:50.857Z'
     acknowledged_at: '2026-10-13T00:00:00.468Z'
+  - boundary: plan-phase:phase_6
+    at: '2026-10-13T00:09:01.950Z'
 force_advanced:
   phase: phase_4
   iteration: 3
