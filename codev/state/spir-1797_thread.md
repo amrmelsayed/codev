@@ -62,3 +62,9 @@
 - Real-repo run 2 on final code (execa): validation passed incl. missing-guidance (comment kept this time), clean detection, re-run byte-identical no-op. Suite after merge: 6384 passed; tsc clean.
 
 **Owner, while waiting at the pr gate:** the Claude and codex launch-blocker lists looked like Claude-specific knowledge sitting in the general-purpose harness module. Small fix on this PR: the lists are no longer exported and sit beside `CLAUDE_HARNESS` / `CODEX_HARNESS`, and the tests check the blocker through the provider instead of the constants. Filed #1810 (area/tower) for the proper split: one file per built-in provider.
+
+**Team review (waleedkadous) on PR #1808, handled at the owner's direction:**
+- Dropped the CLI-built git digest. The skill's bootstrap-mode survey now tells the agent how to explore history itself, and the prompt's restated rules are gone.
+- #1811 in this PR: `codev update` refreshes unedited shipped skills (hash history generated from git). An edited skill gets `.codev-new` copies on every update; the owner chose this over a lock file. `bootstrap-docs` now runs the installed skill by name when it matches the package, and inlines the packaged skill otherwise.
+- Suite 6397 passed, tsc clean.
+- Real-repo run 3 (an old adopter's clone: pre-branch skill, then `update`, then bootstrap) is in progress.

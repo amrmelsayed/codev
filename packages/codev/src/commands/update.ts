@@ -9,7 +9,8 @@
  *    4. Remove .update-hashes.json
  *
  * B. AI-assistant file refresh (runs every time):
- *    1. Update CLAUDE.md, AGENTS.md, and provider skill trees from package
+ *    1. Update CLAUDE.md, AGENTS.md, and provider skill trees from package. A skill the
+ *       user never edited is replaced; an edited one gets `.codev-new` copies (#1811).
  */
 
 import * as fs from 'node:fs';
@@ -23,7 +24,6 @@ import {
   loadHashStore,
 } from '../lib/templates.js';
 import {
-  copySkills,
   copyRootFiles,
   copyHotTierDefaults,
   copyColdTierDefaults,
@@ -35,6 +35,7 @@ import {
 } from '../lib/gitignore.js';
 import { auditPrGates, formatPrGateWarning } from '../lib/pr-gate-audit.js';
 import { shouldOfferBootstrap } from '../lib/governance-bootstrap.js';
+import { refreshSkills, CODEV_NEW_SUFFIX } from '../lib/skill-refresh.js';
 
 export const BOOTSTRAP_DOCS_HINT =
   'Governance docs are still placeholders: run `codev bootstrap-docs` to draft them from this codebase.';
@@ -226,12 +227,30 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
 
     const templatesDir = getTemplatesDir();
 
-    // Add missing provider-native skills without replacing customizations.
+    // Refresh provider-native skills (#1811): add missing ones, replace the ones the user
+    // never edited, and offer an edited one's new version as `.codev-new` for the merge.
     if (!dryRun) {
-      const skillsResult = copySkills(targetDir, templatesDir, { skipExisting: true });
-      for (const skill of skillsResult.copied) {
+      const skillsResult = refreshSkills(targetDir, templatesDir, { force });
+      for (const skill of skillsResult.added) {
         result.newFiles.push(skill);
         log(chalk.green('  + (new)'), skill);
+      }
+      for (const skill of skillsResult.updated) {
+        result.updated.push(skill);
+        log(chalk.blue('  ~ (updated)'), skill);
+      }
+      for (const file of skillsResult.conflicts) {
+        result.conflicts.push({
+          file,
+          codevNew: `${file}${CODEV_NEW_SUFFIX}`,
+          reason: 'Skill edited locally; new version differs',
+        });
+        log(chalk.yellow('  ! (conflict)'), file);
+        log(chalk.dim('    New version saved as:'), `${file}${CODEV_NEW_SUFFIX}`);
+      }
+      for (const skill of skillsResult.notDirectories) {
+        result.skipped.push(skill);
+        log(chalk.dim('  - (skipped, not a directory)'), skill);
       }
     }
 
@@ -327,8 +346,9 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
     if (result.updated.length > 0) {
       log(chalk.blue(`  ~ ${result.updated.length} updated`));
     }
-    if (result.rootConflicts.length > 0) {
-      log(chalk.yellow(`  ! ${result.rootConflicts.length} conflicts`));
+    const conflictCount = result.conflicts.length + result.rootConflicts.length;
+    if (conflictCount > 0) {
+      log(chalk.yellow(`  ! ${conflictCount} conflicts`));
     }
     if (result.gitignoreAdded && result.gitignoreAdded.length > 0) {
       log(chalk.green(`  gitignore: added ${result.gitignoreAdded.length} entries`));
@@ -340,7 +360,7 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
       !result.migrated &&
       result.newFiles.length === 0 &&
       result.updated.length === 0 &&
-      result.rootConflicts.length === 0 &&
+      conflictCount === 0 &&
       (!result.gitignoreAdded || result.gitignoreAdded.length === 0)
     ) {
       log(chalk.dim('  Already up to date!'));
@@ -377,7 +397,7 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
     }
 
     // Combine all conflicts for Claude merge
-    const allConflicts = result.rootConflicts.map(c => c.file);
+    const allConflicts = [...result.rootConflicts, ...result.conflicts].map(c => c.file);
 
     if (allConflicts.length > 0) {
       log('');

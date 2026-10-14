@@ -5,7 +5,8 @@
  * The CLI owns everything deterministic: which files are still untouched starters, whether
  * there is anything to document, the launch, the before/after change report, validation of
  * the drafts and the summary. The agent owns only the writing, under the rules of the
- * `update-arch-docs` skill's bootstrap mode, which is inlined into its prompt.
+ * `update-arch-docs` skill's bootstrap mode: the project's installed copy when it matches
+ * the package (#1811), the packaged text inlined into the prompt otherwise.
  *
  * An interactive agent cannot be sandboxed from here, so the guarantee is detect-and-report:
  * anything that moved outside the eligible files is named and the exit code is non-zero.
@@ -14,7 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import { spawnAgentProcess, type AgentExit, type AgentLaunch } from '../lib/agent-process.js';
 import { confirm } from '../lib/cli-prompts.js';
@@ -55,6 +56,8 @@ import {
   type CustomHarnessConfig,
   type InteractiveTaskLauncher,
 } from '../agent-farm/utils/harness.js';
+import { classifySkill, skillRelDir, type SkillState } from '../lib/skill-refresh.js';
+import { SKILL_PROVIDERS } from '../lib/scaffold.js';
 
 export type { AgentExit, AgentLaunch };
 
@@ -67,12 +70,6 @@ export const REVIEW_PROMPT_FILE = `${REVIEW_DIR}/review-prompt.md`;
 
 /** The three reviewers of the drafts, run in parallel. */
 export const REVIEW_MODELS = ['gemini', 'codex', 'claude'] as const;
-
-/** Bounds of the git-log survey inlined into the prompt (see the plan's Executive Summary). */
-const RECENT_COMMITS = 300;
-const TARGETED_COMMITS = 150;
-const TARGETED_PATTERN = 'fix|revert|hotfix|incident|regression|rollback|outage|security';
-const NO_HISTORY = 'No commit history; work from the code alone.';
 
 /**
  * Largest prompt passed as a command-line argument. Linux caps one argument at 128 KB
@@ -186,44 +183,6 @@ function governancePath(name: string): string {
 // Prompt
 // =============================================================================
 
-function gitOutput(root: string, args: string[]): string | null {
-  try {
-    return execFileSync('git', args, {
-      cwd: root,
-      encoding: 'utf-8',
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The bounded history survey: the last 300 commit subjects plus up to 150 incident-shaped
- * subjects from full history, de-duplicated. A repository with no commits (or no git) gets
- * an explicit "work from the code alone" instead of a failing `git log`.
- */
-export function buildGitDigest(root: string): string {
-  if (gitOutput(root, ['rev-parse', '--verify', '--quiet', 'HEAD']) === null) return NO_HISTORY;
-
-  const format = ['--no-merges', '--format=%h %ad %s', '--date=short'];
-  const recent = (gitOutput(root, ['log', ...format, '-n', String(RECENT_COMMITS)]) ?? '')
-    .split('\n')
-    .filter(line => line !== '');
-  const seen = new Set(recent);
-  const targeted = (gitOutput(root, ['log', ...format, '-i', '-E', `--grep=${TARGETED_PATTERN}`, '-n', String(TARGETED_COMMITS)]) ?? '')
-    .split('\n')
-    .filter(line => line !== '' && !seen.has(line));
-
-  if (recent.length === 0) return NO_HISTORY;
-  const sections = [`Recent commits (newest first, up to ${RECENT_COMMITS}):`, ...recent];
-  if (targeted.length > 0) {
-    sections.push('', `Older fix / revert / incident commits (up to ${TARGETED_COMMITS}):`, ...targeted);
-  }
-  return sections.join('\n');
-}
-
 /**
  * Fill `{{NAME}}` placeholders in one pass, so text inserted for one placeholder (the skill
  * text in particular) is never itself scanned for placeholders.
@@ -237,15 +196,56 @@ function fileList(names: string[]): string {
   return names.map(name => `- \`${governancePath(name)}\``).join('\n');
 }
 
-function buildPrompt(root: string, skeletonDir: string, eligible: string[], curated: string[]): string {
+const BOOTSTRAP_SKILL = 'update-arch-docs';
+
+/** Where the agent gets the bootstrap-mode rules from. */
+export type SkillSource =
+  | { kind: 'installed'; dir: string }
+  | { kind: 'inline'; reason: string };
+
+const INLINE_REASONS: Record<Exclude<SkillState, 'current'>, string> = {
+  missing: 'is missing',
+  shipped: 'is an older version (`codev update` refreshes it)',
+  edited: 'has local edits',
+  'not-a-directory': 'is not a regular directory',
+};
+
+/**
+ * Run the project's installed skill by name when the launching harness loads it and the copy
+ * is identical to the package's, so the rules the agent follows are exactly the ones the
+ * drafts are validated against. Anything else gets the packaged text inlined.
+ */
+export function chooseSkillSource(root: string, skeletonDir: string, harnessName: string | undefined): SkillSource {
+  const provider = SKILL_PROVIDERS.find(name => name === harnessName);
+  if (!provider) return { kind: 'inline', reason: 'the agent that runs this prompt may not load project skills' };
+  const dir = skillRelDir(provider, BOOTSTRAP_SKILL);
+  const state = classifySkill(path.join(root, dir), path.join(skeletonDir, dir), dir);
+  if (state === 'current') return { kind: 'installed', dir };
+  return { kind: 'inline', reason: `the installed copy at \`${dir}/\` ${INLINE_REASONS[state]}` };
+}
+
+export function describeSkillSource(source: SkillSource): string {
+  if (source.kind === 'installed') return `the installed skill at ${source.dir}/`;
+  return `the packaged skill text, inlined because ${source.reason}`;
+}
+
+function buildPrompt(root: string, skeletonDir: string, eligible: string[], curated: string[], source: SkillSource): string {
   const template = fs.readFileSync(path.join(skeletonDir, 'templates', 'bootstrap-docs-prompt.md'), 'utf-8');
-  const skill = fs.readFileSync(path.join(skeletonDir, '.claude', 'skills', 'update-arch-docs', 'SKILL.md'), 'utf-8');
+  let skillSource: string;
+  let skillText = '';
+  if (source.kind === 'installed') {
+    skillSource = `The skill is installed in this project at \`${source.dir}/\`: load it before you start, since it holds the rules for this work.`;
+  } else {
+    const skill = fs.readFileSync(path.join(skeletonDir, '.claude', 'skills', BOOTSTRAP_SKILL, 'SKILL.md'), 'utf-8');
+    skillSource = `Its full text is at the end of this prompt, because ${source.reason}; follow that text, not any installed copy.`;
+    skillText = `\n## The ${BOOTSTRAP_SKILL} skill\n\n${skill.trim()}\n`;
+  }
   return renderPrompt(template, {
     PROJECT_NAME: path.basename(root),
+    SKILL_SOURCE: skillSource,
     ELIGIBLE_FILES: fileList(eligible),
     CURATED_FILES: fileList(curated),
-    GIT_DIGEST: fenced(buildGitDigest(root)),
-    SKILL: skill.trim(),
+    SKILL_TEXT: skillText,
   });
 }
 
@@ -465,12 +465,6 @@ export function reviewConsultArgs(model: string): string[] {
 function fenceFor(content: string): string {
   const longest = Math.max(0, ...(content.match(/`+/g) ?? []).map(run => run.length));
   return '`'.repeat(Math.max(3, longest + 1));
-}
-
-/** `content` in a code block it cannot close (a commit subject may hold a fence of its own). */
-function fenced(content: string): string {
-  const fence = fenceFor(content);
-  return `${fence}\n${content}\n${fence}`;
 }
 
 function renderDrafts(root: string, names: string[]): string {
@@ -759,11 +753,18 @@ export async function runBootstrapDocs(
     if (!deps.isExecutableAvailable(executable)) unavailable = `"${executable}" was not found on PATH`;
   }
 
+  // The installed skill is named only for a session this command launches itself; a prompt
+  // saved for a manual run may go to an agent that does not load project skills.
+  let launchingHarness: string | undefined;
+  if (launcher.supported && !unavailable) launchingHarness = launcher.harnessName;
+  const skillSource = chooseSkillSource(root, deps.skeletonDir, launchingHarness);
+
   if (options.dryRun) {
     log('');
     if (launcher.supported && !unavailable) {
       const launch = launcher.buildLaunch('<bootstrap prompt>');
       log(`Would launch (${launcher.harnessName}): ${[launch.executable, ...launch.args.map(quoteArg)].join(' ')}`);
+      log(`The agent would follow ${describeSkillSource(skillSource)}.`);
     } else {
       log(`Would not launch an agent: ${unavailable}.`);
       log(`Would write the prompt to ${PROMPT_FILE} for you to run in your own agent.`);
@@ -772,7 +773,7 @@ export async function runBootstrapDocs(
     return { exitCode: 0, outcome: 'dry-run', files, launched: false };
   }
 
-  const prompt = buildPrompt(root, deps.skeletonDir, eligible.map(file => file.name), curated);
+  const prompt = buildPrompt(root, deps.skeletonDir, eligible.map(file => file.name), curated, skillSource);
   const promptPath = path.join(root, PROMPT_FILE);
   fs.mkdirSync(path.dirname(promptPath), { recursive: true });
   fs.writeFileSync(promptPath, prompt);
@@ -797,7 +798,8 @@ export async function runBootstrapDocs(
   log('');
   log(chalk.bold('About to launch an agent session to draft the governance docs:'));
   log(`  Command: ${command}`);
-  log('  It reads the codebase and the git log (a bounded digest is included in its prompt).');
+  log('  It reads the codebase and explores the git history with read-only git commands.');
+  log(`  It follows ${describeSkillSource(skillSource)}.`);
   log(`  It may write only: ${eligible.map(file => governancePath(file.name)).join(', ')}`);
   log('  It consumes model quota on your agent account.');
   log(`  ${describePermissions(launch, prompt)}`);

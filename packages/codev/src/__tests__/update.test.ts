@@ -120,6 +120,11 @@ describe('update command', () => {
       ).toBe(true);
       expect(result.newFiles).toContain('.codex/skills/afx/');
       expect(result.newFiles).not.toContain('.codex/skills/arch-init/');
+      // #1811: the edited skill is offered the package's version for the merge, not replaced.
+      expect(result.conflicts.map(c => c.file)).toContain('.codex/skills/arch-init/SKILL.md');
+      expect(
+        fs.existsSync(path.join(customized, 'SKILL.md.codev-new'))
+      ).toBe(true);
       // Spec 1307: existing projects get /arch-save via `codev update`, which is
       // the path every current adopter takes — init only covers new ones.
       expect(result.newFiles).toContain('.codex/skills/arch-save/');

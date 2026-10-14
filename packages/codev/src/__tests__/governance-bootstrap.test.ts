@@ -492,7 +492,7 @@ describe('hot guidance comment', () => {
 });
 
 describe('bootstrap prompt template and skill content', () => {
-  const PLACEHOLDERS = ['{{SKILL}}', '{{ELIGIBLE_FILES}}', '{{CURATED_FILES}}', '{{GIT_DIGEST}}', '{{PROJECT_NAME}}'];
+  const PLACEHOLDERS = ['{{SKILL_SOURCE}}', '{{SKILL_TEXT}}', '{{ELIGIBLE_FILES}}', '{{CURATED_FILES}}', '{{PROJECT_NAME}}'];
 
   it('ships the prompt template with every placeholder exactly once', () => {
     const template = fs.readFileSync(path.join(templatesDir, 'bootstrap-docs-prompt.md'), 'utf-8');

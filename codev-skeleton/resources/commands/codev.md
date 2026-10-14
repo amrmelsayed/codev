@@ -100,7 +100,7 @@ Writes a first draft of the four governance files (`codev/resources/arch.md`, `l
 **Flow:**
 
 1. Classify the four files and print each one's status.
-2. Write the prompt to `.consult/bootstrap-docs/prompt.md`, show the exact agent command, what it may write and that it consumes model quota, and ask before launching (always; there is no `-y`).
+2. Write the prompt to `.consult/bootstrap-docs/prompt.md`, show the exact agent command, what it may write and that it consumes model quota, and ask before launching (always; there is no `-y`). The agent follows the `update-arch-docs` skill's bootstrap mode: the project's installed copy when it is identical to the package's version, otherwise the packaged text included in the prompt (the launch statement says which). The agent explores the git history itself, read-only.
 3. Run the configured architect harness on the terminal. Exit the session when it says the drafts are done.
 4. Report what changed: drafts written, hot-tier cap and map violations, and any path outside the four files (change detection covers the git state and every path git does not ignore).
 5. When `consult` is available, run a three-way review of the drafts; reviews land in `.consult/bootstrap-docs/<model>.md`.
@@ -201,6 +201,8 @@ codev update [options]
 Updates framework files (protocols, roles, agents) from the installed `@cluesmith/codev` package. User data (specs, plans, reviews) is never modified.
 
 If you've customized a file locally, the update creates a `.codev-new` file with the new version so you can merge changes manually.
+
+Shipped Claude and Codex skills (`.claude/skills/`, `.codex/skills/`) are refreshed too. A missing skill is added. A skill you never edited, one whose content matches a version Codev shipped, is replaced with the package's version. An edited skill is kept, and each of its files that differs gets a `<file>.codev-new` copy of the new version for the merge, on every update while it differs. `--force` replaces edited skills as well. A symlinked skill directory is left alone.
 
 When a governance file is still a starter on a project with code, `codev update` prints one line pointing at `codev bootstrap-docs` (in `--agent` mode it is the `instructions.bootstrapDocs` string instead; never on `--dry-run`).
 
