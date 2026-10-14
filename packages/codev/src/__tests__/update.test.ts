@@ -252,6 +252,39 @@ describe('update command', () => {
       expect(console.log).not.toHaveBeenCalled();
     });
 
+    it('a dry run reports root-file conflicts but writes no .codev-new and leaves the files alone', async () => {
+      const projectDir = path.join(testBaseDir, 'root-dryrun');
+      fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });
+      fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), 'my claude\n');
+      fs.writeFileSync(path.join(projectDir, 'AGENTS.md'), 'my agents\n');
+      process.chdir(projectDir);
+
+      const { update } = await import('../commands/update.js');
+      const result = await update({ agent: true, dryRun: true });
+
+      expect(result.rootConflicts.map(c => c.file)).toEqual(['CLAUDE.md', 'AGENTS.md']);
+      expect(fs.readFileSync(path.join(projectDir, 'CLAUDE.md'), 'utf-8')).toBe('my claude\n');
+      expect(fs.readFileSync(path.join(projectDir, 'AGENTS.md'), 'utf-8')).toBe('my agents\n');
+      expect(fs.existsSync(path.join(projectDir, 'CLAUDE.md.codev-new'))).toBe(false);
+      expect(fs.existsSync(path.join(projectDir, 'AGENTS.md.codev-new'))).toBe(false);
+    });
+
+    it('a --dry-run --force reports root files but creates and overwrites nothing', async () => {
+      const projectDir = path.join(testBaseDir, 'root-dryrun-force');
+      fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });
+      fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), 'my claude\n');
+      process.chdir(projectDir);
+
+      const { update } = await import('../commands/update.js');
+      const result = await update({ agent: true, dryRun: true, force: true });
+
+      expect(result.updated).toContain('AGENTS.md');
+      expect(fs.readFileSync(path.join(projectDir, 'CLAUDE.md'), 'utf-8')).toBe('my claude\n');
+      expect(fs.existsSync(path.join(projectDir, 'AGENTS.md'))).toBe(false);
+      expect(fs.existsSync(path.join(projectDir, 'CLAUDE.md.codev-new'))).toBe(false);
+      expect(fs.existsSync(path.join(projectDir, 'AGENTS.md.codev-new'))).toBe(false);
+    });
+
     it('should return result with dryRun - no files modified', async () => {
       const projectDir = path.join(testBaseDir, 'agent-dryrun');
       fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });

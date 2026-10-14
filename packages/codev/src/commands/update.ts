@@ -231,15 +231,16 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
     // never edited, and offer an edited one's new version as `.codev-new` for the merge.
     // A dry run reports the same outcome and writes nothing.
     const skillsResult = refreshSkills(targetDir, templatesDir, { force, dryRun });
-    let skillVerb = '';
-    if (dryRun) skillVerb = 'would be ';
+    // "would be" wording for everything this refresh only previews under --dry-run.
+    let previewVerb = '';
+    if (dryRun) previewVerb = 'would be ';
     for (const skill of skillsResult.added) {
       result.newFiles.push(skill);
-      log(chalk.green(`  + (${skillVerb}new)`), skill);
+      log(chalk.green(`  + (${previewVerb}new)`), skill);
     }
     for (const skill of skillsResult.updated) {
       result.updated.push(skill);
-      log(chalk.blue(`  ~ (${skillVerb}updated)`), skill);
+      log(chalk.blue(`  ~ (${previewVerb}updated)`), skill);
     }
     for (const file of skillsResult.conflicts) {
       result.conflicts.push({
@@ -259,19 +260,20 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
       log(chalk.dim('  - (skipped, symlinked or not a directory)'), skill);
     }
 
-    // Update root files (CLAUDE.md, AGENTS.md)
+    // Update root files (CLAUDE.md, AGENTS.md). A dry run reports the same outcome and
+    // writes nothing.
     const projectName = path.basename(targetDir);
     if (force) {
-      const rootResult = copyRootFiles(targetDir, templatesDir, projectName);
+      const rootResult = copyRootFiles(targetDir, templatesDir, projectName, { dryRun });
       for (const file of rootResult.copied) {
         result.updated.push(file);
-        log(chalk.blue('  ~ (updated)'), file);
+        log(chalk.blue(`  ~ (${previewVerb}updated)`), file);
       }
     } else {
-      const rootResult = copyRootFiles(targetDir, templatesDir, projectName, { handleConflicts: true });
+      const rootResult = copyRootFiles(targetDir, templatesDir, projectName, { handleConflicts: true, dryRun });
       for (const file of rootResult.copied) {
         result.newFiles.push(file);
-        log(chalk.green('  + (new)'), file);
+        log(chalk.green(`  + (${previewVerb}new)`), file);
       }
       for (const file of rootResult.conflicts) {
         result.rootConflicts.push({
@@ -280,7 +282,11 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
           reason: 'Content differs from template',
         });
         log(chalk.yellow('  ! (conflict)'), file);
-        log(chalk.dim('    New version saved as:'), `${file}.codev-new`);
+        if (dryRun) {
+          log(chalk.dim('    New version would be saved as:'), `${file}.codev-new`);
+        } else {
+          log(chalk.dim('    New version saved as:'), `${file}.codev-new`);
+        }
       }
     }
 

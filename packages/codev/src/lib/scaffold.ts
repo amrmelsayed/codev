@@ -247,6 +247,8 @@ export function copyColdTierDefaults(
 
 interface CopyRootFilesOptions {
   handleConflicts?: boolean;
+  /** Report what would be copied or conflict, writing nothing. */
+  dryRun?: boolean;
 }
 
 interface CopyRootFilesResult {
@@ -263,7 +265,7 @@ export function copyRootFiles(
   projectName: string,
   options: CopyRootFilesOptions = {}
 ): CopyRootFilesResult {
-  const { handleConflicts = false } = options;
+  const { handleConflicts = false, dryRun = false } = options;
   const copied: string[] = [];
   const conflicts: string[] = [];
 
@@ -282,12 +284,12 @@ export function copyRootFiles(
     if (fs.existsSync(destPath)) {
       if (handleConflicts) {
         // Create .codev-new for merge
-        fs.writeFileSync(destPath + '.codev-new', content);
+        if (!dryRun) fs.writeFileSync(destPath + '.codev-new', content);
         conflicts.push(file);
       }
       // Skip if exists and not handling conflicts
     } else {
-      fs.writeFileSync(destPath, content);
+      if (!dryRun) fs.writeFileSync(destPath, content);
       copied.push(file);
     }
   }

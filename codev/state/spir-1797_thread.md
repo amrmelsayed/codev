@@ -81,3 +81,8 @@
 - `--force` keeps files the package does not ship.
 
 Also all five should-fix items: a cap-parity test, the inline source follows the provider, `.codev-new` cleanup on the edited path, a `generate-skill-hashes` script, and the local-build warning (worded as `.codev-new` copies plus `--force` overwriting, not a silent revert). Confirmed in the review that a file the package newly adds to an edited skill arrives only as `.codev-new`, on purpose. Raised separately with main: `update --dry-run` already writes CLAUDE.md/AGENTS.md `.codev-new` copies.
+
+**Integration review round 4 (main's ruling):** fixed the root-file dry-run writes in this PR.
+- Plain `--dry-run` wrote CLAUDE.md/AGENTS.md `.codev-new` copies.
+- `--dry-run --force` created a missing CLAUDE.md or AGENTS.md. It never overwrote an existing one: without `handleConflicts`, `copyRootFiles` skips existing files. Told main its note was wrong on this point.
+- Audited the rest of `update`: no other unguarded writes. Two existing wording/labelling oddities are recorded as follow-ups.
