@@ -225,9 +225,11 @@ export function refreshSkills(
     const skillsDir = path.join(targetDir, relativeSkillsDir);
     const srcDir = path.join(skeletonDir, relativeSkillsDir);
 
-    // A symlinked skills root may be shared beyond this project; nothing is written through it.
-    if (existsButNotDirectory(skillsDir)) {
-      result.notRegular.push(`${relativeSkillsDir}/`);
+    // A symlinked `.claude` / `.codex` or skills root may be shared beyond this project;
+    // nothing is written through either.
+    const linkedRoot = [`.${provider}`, relativeSkillsDir].find(rel => existsButNotDirectory(path.join(targetDir, rel)));
+    if (linkedRoot) {
+      result.notRegular.push(`${linkedRoot}/`);
       continue;
     }
     if (write && !fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });

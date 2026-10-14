@@ -309,6 +309,17 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Concern**: The PR body is out of date (digest, missing #1811, `--force` replacing edited skills, test count) → **Addressed**: rewritten
 - **Concern (minor)**: unused `directoriesCreated`; resolved `.codev-new` copies never cleaned; run-1 narrative reads as if the digest were current → **Addressed**: field removed; a `.codev-new` holding exactly the package's version is deleted once the skill has that version (a differing one is kept); runs 1 and 2 are marked as predating the digest's removal
 
+### PR Review (Round 4, on main's round-3 integration fixes, head ef3312731)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (APPROVE)
+- No concerns raised (APPROVE)
+#### Claude (APPROVE)
+- **Concern**: The symlink guard covered a symlinked skills root but not a symlinked `.claude` / `.codex` → **Addressed**: both are left alone, with a test; the command docs say so
+- **Concern**: #1811 acts on every adopter's tree on their next `codev update`, with no opt-out for a deliberately customised skill → **N/A here**: owner-directed and disclosed; main is raising the opt-out with the owner
+- **Concern**: the flaky `session-manager.test.ts` case is skipped without root cause → **N/A here**: tracked on #1800 (see Flaky Tests)
+- **Concern**: the team's duplication question is still unanswered on the PR → **Deferred to the owner**, who asked that nothing be posted yet
+
 ## Lessons Learned
 
 ### What Went Well

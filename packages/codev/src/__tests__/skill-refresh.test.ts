@@ -181,6 +181,14 @@ describe('refreshSkills: symlinks and pending copies', () => {
     expect(fs.readdirSync(path.join(base, 'shared-skills'))).toEqual([]);
   });
 
+  it('a symlinked provider directory (.claude) is left alone too', () => {
+    fs.mkdirSync(path.join(base, 'shared-claude'));
+    fs.symlinkSync(path.join(base, 'shared-claude'), path.join(project, '.claude'));
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result.notRegular).toEqual(['.claude/']);
+    expect(fs.readdirSync(path.join(base, 'shared-claude'))).toEqual([]);
+  });
+
   it('removes a .codev-new the skill has caught up with, on replace and when current', () => {
     write(project, '.claude/skills/demo/SKILL.md', OLD);
     write(project, '.claude/skills/demo/SKILL.md.codev-new', NEW);
