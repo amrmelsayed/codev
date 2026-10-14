@@ -75,3 +75,9 @@
 - Escalated to main: whether the approved spec needs an amendment for the owner-directed scope (#1811, digest removal).
 
 **Real-repo run 3 (older-adopter path):** passed end to end. `update` refreshed only `update-arch-docs`. Bootstrap ran the installed skill (the transcript shows `Skill("update-arch-docs")`) and explored history with the skill's git commands. Validation passed, exit 0, and the re-run was a no-op.
+
+**Integration review round 3 (main, 9dd499ad9):** fixed both must-fix items.
+- `update --dry-run` now previews skills, including under `--force`.
+- `--force` keeps files the package does not ship.
+
+Also all five should-fix items: a cap-parity test, the inline source follows the provider, `.codev-new` cleanup on the edited path, a `generate-skill-hashes` script, and the local-build warning (worded as `.codev-new` copies plus `--force` overwriting, not a silent revert). Confirmed in the review that a file the package newly adds to an edited skill arrives only as `.codev-new`, on purpose. Raised separately with main: `update --dry-run` already writes CLAUDE.md/AGENTS.md `.codev-new` copies.

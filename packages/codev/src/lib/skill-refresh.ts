@@ -142,7 +142,10 @@ function isSymlink(p: string): boolean {
 export interface RefreshSkillsResult {
   /** Skill directories added because the project had none (`.claude/skills/afx/`). */
   added: string[];
-  /** Unedited skill directories replaced with the package's version. */
+  /**
+   * Skill directories brought to the package's version: unedited ones replaced, and under
+   * `force` edited ones overwritten file by file (files the package does not ship are kept).
+   */
   updated: string[];
   /** Edited skill files that got a `.codev-new` copy of the package's version. */
   conflicts: string[];
@@ -151,8 +154,13 @@ export interface RefreshSkillsResult {
 }
 
 export interface RefreshSkillsOptions {
-  /** Replace edited skills too, as `codev update --force` does for CLAUDE.md. */
+  /**
+   * Overwrite an edited skill's packaged files too, as `codev update --force` does for
+   * CLAUDE.md. Files the package does not ship stay in place.
+   */
   force?: boolean;
+  /** Classify and report exactly as a real run would, writing nothing. */
+  dryRun?: boolean;
   /** Shipped versions per skill; tests substitute their own. */
   history?: Record<string, readonly string[]>;
 }
@@ -165,19 +173,26 @@ function replaceSkillDir(projectSkillDir: string, packageSkillDir: string): void
   fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true, force: true });
 }
 
+/** Write the package's files over the project's copy, leaving any other file in place. */
+function overwritePackagedFiles(projectSkillDir: string, packageSkillDir: string): void {
+  fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true, force: true });
+}
+
 /**
  * Delete a pending `.codev-new` that holds exactly the package's version of its file: the
  * skill now has that version, so the copy is resolved. A copy with other content is kept.
  */
-function removeResolvedCodevNew(projectSkillDir: string, packageSkillDir: string): void {
-  for (const file of readSkillFiles(packageSkillDir) ?? []) {
-    const pending = path.join(projectSkillDir, file.path + CODEV_NEW_SUFFIX);
-    try {
-      if (fs.lstatSync(pending).isFile() && fs.readFileSync(pending, 'utf-8') === file.content) fs.rmSync(pending);
-    } catch {
-      // No pending copy.
-    }
+function removeResolvedCodevNew(projectSkillDir: string, file: SkillFile): void {
+  const pending = path.join(projectSkillDir, file.path + CODEV_NEW_SUFFIX);
+  try {
+    if (fs.lstatSync(pending).isFile() && fs.readFileSync(pending, 'utf-8') === file.content) fs.rmSync(pending);
+  } catch {
+    // No pending copy.
   }
+}
+
+function removeAllResolvedCodevNew(projectSkillDir: string, packageSkillDir: string): void {
+  for (const file of readSkillFiles(packageSkillDir) ?? []) removeResolvedCodevNew(projectSkillDir, file);
 }
 
 /** True when something other than a real directory sits at `p` (a symlink, a file). */
@@ -192,7 +207,10 @@ function existsButNotDirectory(p: string): boolean {
 
 /**
  * Bring every shipped skill up to date: add missing ones, replace unedited ones, and write
- * `<file>.codev-new` beside each file of an edited skill that differs from the package.
+ * `<file>.codev-new` beside each file of an edited skill that differs from the package. A
+ * file the package adds to an edited skill arrives as `.codev-new` too: whether it belongs
+ * in the user's version of the skill is the merge's call. With `dryRun`, the same result
+ * is reported and nothing is written.
  */
 export function refreshSkills(
   targetDir: string,
@@ -200,6 +218,7 @@ export function refreshSkills(
   options: RefreshSkillsOptions = {},
 ): RefreshSkillsResult {
   const result: RefreshSkillsResult = { added: [], updated: [], conflicts: [], notRegular: [] };
+  const write = !options.dryRun;
 
   for (const provider of SKILL_PROVIDERS) {
     const relativeSkillsDir = `.${provider}/skills`;
@@ -211,7 +230,7 @@ export function refreshSkills(
       result.notRegular.push(`${relativeSkillsDir}/`);
       continue;
     }
-    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+    if (write && !fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
 
     // Older/corrupt skeletons may not provide every configured provider.
     if (!fs.existsSync(srcDir)) continue;
@@ -222,27 +241,40 @@ export function refreshSkills(
       const key = skillRelDir(provider, entry.name);
       const packageSkillDir = path.join(srcDir, entry.name);
       const projectSkillDir = path.join(skillsDir, entry.name);
-      let state = classifySkill(projectSkillDir, packageSkillDir, key, options.history);
-      if (state === 'edited' && options.force) state = 'shipped';
+      const state = classifySkill(projectSkillDir, packageSkillDir, key, options.history);
 
       if (state === 'missing') {
-        fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true });
+        if (write) fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true });
         result.added.push(`${key}/`);
       } else if (state === 'current') {
-        removeResolvedCodevNew(projectSkillDir, packageSkillDir);
+        if (write) removeAllResolvedCodevNew(projectSkillDir, packageSkillDir);
       } else if (state === 'shipped') {
-        replaceSkillDir(projectSkillDir, packageSkillDir);
-        removeResolvedCodevNew(projectSkillDir, packageSkillDir);
+        // Every file matched a shipped version, so none of them is the user's to keep.
+        if (write) {
+          replaceSkillDir(projectSkillDir, packageSkillDir);
+          removeAllResolvedCodevNew(projectSkillDir, packageSkillDir);
+        }
         result.updated.push(`${key}/`);
       } else if (state === 'not-regular') {
         result.notRegular.push(`${key}/`);
+      } else if (state === 'edited' && options.force) {
+        if (write) {
+          overwritePackagedFiles(projectSkillDir, packageSkillDir);
+          removeAllResolvedCodevNew(projectSkillDir, packageSkillDir);
+        }
+        result.updated.push(`${key}/`);
       } else if (state === 'edited') {
         const projectFiles = new Map((readSkillFiles(projectSkillDir) ?? []).map(file => [file.path, file.content]));
         for (const file of readSkillFiles(packageSkillDir) ?? []) {
-          if (projectFiles.get(file.path) === file.content) continue;
-          const target = path.join(projectSkillDir, file.path);
-          fs.mkdirSync(path.dirname(target), { recursive: true });
-          fs.writeFileSync(target + CODEV_NEW_SUFFIX, file.content);
+          if (projectFiles.get(file.path) === file.content) {
+            if (write) removeResolvedCodevNew(projectSkillDir, file);
+            continue;
+          }
+          if (write) {
+            const target = path.join(projectSkillDir, file.path);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target + CODEV_NEW_SUFFIX, file.content);
+          }
           result.conflicts.push(`${key}/${file.path}`);
         }
       }

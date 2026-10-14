@@ -202,7 +202,7 @@ Updates framework files (protocols, roles, agents) from the installed `@cluesmit
 
 If you've customized a file locally, the update creates a `.codev-new` file with the new version so you can merge changes manually.
 
-Shipped Claude and Codex skills (`.claude/skills/`, `.codex/skills/`) are refreshed too. A missing skill is added. A skill you never edited, one whose content matches a version Codev shipped, is replaced with the package's version. An edited skill is kept, and each of its files that differs gets a `<file>.codev-new` copy of the new version for the merge, on every update while it differs. `--force` replaces edited skills as well. A symlinked skill directory is left alone.
+Shipped Claude and Codex skills (`.claude/skills/`, `.codex/skills/`) are refreshed too. A missing skill is added. A skill you never edited, one whose content matches a version Codev shipped, is replaced with the package's version. An edited skill is kept, and each of its files that differs gets a `<file>.codev-new` copy of the new version for the merge, on every update while it differs. A file the package adds to an edited skill arrives as `.codev-new` too. `--force` overwrites an edited skill's packaged files as well, keeping any file the package does not ship. A symlinked skill directory, one holding a symlink, or a symlinked skills root is left alone. `--dry-run` reports all of this without writing.
 
 When a governance file is still a starter on a project with code, `codev update` prints one line pointing at `codev bootstrap-docs` (in `--agent` mode it is the `instructions.bootstrapDocs` string instead; never on `--dry-run`).
 

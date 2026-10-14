@@ -90,6 +90,10 @@ Tower is up; only the final restart causes downtime. **Do not stop Tower first**
 `packages/codev/skeleton`. **Tests read that copy**, so after editing anything under
 `codev-skeleton/` you must rebuild before the suite reflects your change.
 
+**Run `codev update` in this repository only with a package built from it.** An older installed
+package treats unpublished skill edits as local edits: it writes `.codev-new` copies holding
+the older text (a merge can fold that back in), and `--force` overwrites the edits outright.
+
 ### Where to run things
 
 - `pnpm install` — repository root (installs all workspace packages)

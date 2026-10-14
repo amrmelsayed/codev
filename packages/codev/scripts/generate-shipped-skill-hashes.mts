@@ -3,7 +3,7 @@
  * shipped skill, read from git history plus the working tree (issue #1811).
  *
  * Run from anywhere in the repository after changing a shipped skill:
- *   npx tsx packages/codev/scripts/generate-shipped-skill-hashes.mts
+ *   pnpm --filter @cluesmith/codev generate-skill-hashes
  */
 
 import { execFileSync } from 'node:child_process';
@@ -66,7 +66,7 @@ const lines = [
   ' * hash is listed here: the user never edited it.',
   ' *',
   ' * GENERATED: do not edit by hand. After changing a shipped skill, regenerate with',
-  ' *   npx tsx packages/codev/scripts/generate-shipped-skill-hashes.mts',
+  ' *   pnpm --filter @cluesmith/codev generate-skill-hashes',
   ' */',
   'export const SHIPPED_SKILL_HASHES: Record<string, readonly string[]> = {',
 ];

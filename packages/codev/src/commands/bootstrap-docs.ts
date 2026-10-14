@@ -56,7 +56,7 @@ import {
   type CustomHarnessConfig,
   type InteractiveTaskLauncher,
 } from '../agent-farm/utils/harness.js';
-import { classifySkill, skillRelDir, type SkillState } from '../lib/skill-refresh.js';
+import { classifySkill, skillRelDir, type SkillProvider, type SkillState } from '../lib/skill-refresh.js';
 import { SKILL_PROVIDERS } from '../lib/scaffold.js';
 
 export type { AgentExit, AgentLaunch };
@@ -201,7 +201,8 @@ const BOOTSTRAP_SKILL = 'update-arch-docs';
 /** Where the agent gets the bootstrap-mode rules from. */
 export type SkillSource =
   | { kind: 'installed'; dir: string }
-  | { kind: 'inline'; reason: string };
+  /** `provider` names the launching harness's copy to inline; a manual prompt has none. */
+  | { kind: 'inline'; reason: string; provider?: SkillProvider };
 
 const INLINE_REASONS: Record<Exclude<SkillState, 'current'>, string> = {
   missing: 'is missing',
@@ -221,7 +222,7 @@ export function chooseSkillSource(root: string, skeletonDir: string, harnessName
   const dir = skillRelDir(provider, BOOTSTRAP_SKILL);
   const state = classifySkill(path.join(root, dir), path.join(skeletonDir, dir), dir);
   if (state === 'current') return { kind: 'installed', dir };
-  return { kind: 'inline', reason: `the installed copy at \`${dir}/\` ${INLINE_REASONS[state]}` };
+  return { kind: 'inline', reason: `the installed copy at \`${dir}/\` ${INLINE_REASONS[state]}`, provider };
 }
 
 export function describeSkillSource(source: SkillSource): string {
@@ -236,7 +237,7 @@ function buildPrompt(root: string, skeletonDir: string, eligible: string[], cura
   if (source.kind === 'installed') {
     skillSource = `The skill is installed in this project at \`${source.dir}/\`: load it before you start, since it holds the rules for this work.`;
   } else {
-    const skill = fs.readFileSync(path.join(skeletonDir, '.claude', 'skills', BOOTSTRAP_SKILL, 'SKILL.md'), 'utf-8');
+    const skill = fs.readFileSync(path.join(skeletonDir, skillRelDir(source.provider ?? 'claude', BOOTSTRAP_SKILL), 'SKILL.md'), 'utf-8');
     skillSource = `Its full text is at the end of this prompt, because ${source.reason}; follow that text, not any installed copy.`;
     skillText = `\n## The ${BOOTSTRAP_SKILL} skill\n\n${skill.trim()}\n`;
   }

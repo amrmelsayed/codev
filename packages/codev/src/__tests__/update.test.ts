@@ -263,15 +263,14 @@ describe('update command', () => {
 
       expect(result).toBeDefined();
       expect(result.error).toBeUndefined();
-      // In dry-run mode, scaffold-only files are NOT reported (per spec limitation)
-      // Scaffold utilities (copyConsultTypes, copySkills) don't run in dry-run,
-      // so their files won't appear. Note: roles and protocol files appear through
-      // the hash-based template loop, which does preview in dry-run.
+      // Consult types are not previewed. Skills are (#1811): the preview names them, and
+      // nothing is written.
       for (const file of result.newFiles) {
         expect(file).not.toMatch(/^codev\/consult-types\//);
-        expect(file).not.toMatch(/^\.claude\/skills\//);
-        expect(file).not.toMatch(/^\.codex\/skills\//);
       }
+      expect(result.newFiles).toContain('.claude/skills/afx/');
+      expect(result.newFiles).toContain('.codex/skills/afx/');
+      expect(fs.existsSync(path.join(projectDir, '.claude', 'skills'))).toBe(false);
     });
 
     it('should return no conflicts with force mode', async () => {

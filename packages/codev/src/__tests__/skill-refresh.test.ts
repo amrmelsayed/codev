@@ -119,11 +119,32 @@ describe('refreshSkills', () => {
     expect(fs.existsSync(path.join(project, '.claude/skills/demo/helper.md.codev-new'))).toBe(false);
   });
 
-  it('--force replaces an edited skill', () => {
+  it('--force overwrites an edited skill\'s packaged files and keeps files the package does not ship', () => {
     write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    write(project, '.claude/skills/demo/my-notes.md', 'my own file\n');
     const result = refreshSkills(project, skeleton, { history: HISTORY, force: true });
     expect(result.updated).toEqual(['.claude/skills/demo/']);
     expect(read('.claude/skills/demo/SKILL.md')).toBe(NEW);
+    expect(read('.claude/skills/demo/my-notes.md')).toBe('my own file\n');
+  });
+
+  it('an edited skill drops a .codev-new once that file matches the package again', () => {
+    write(skeleton, '.claude/skills/demo/helper.md', 'helper\n');
+    write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    write(project, '.claude/skills/demo/helper.md', 'helper\n');
+    write(project, '.claude/skills/demo/helper.md.codev-new', 'helper\n');
+    refreshSkills(project, skeleton, { history: HISTORY });
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/helper.md.codev-new'))).toBe(false);
+    expect(read('.claude/skills/demo/SKILL.md.codev-new')).toBe(NEW);
+  });
+
+  it('a file the package adds to an edited skill arrives only as .codev-new', () => {
+    write(skeleton, '.claude/skills/demo/added.md', 'new helper\n');
+    write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result.conflicts).toContain('.claude/skills/demo/added.md');
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/added.md'))).toBe(false);
+    expect(read('.claude/skills/demo/added.md.codev-new')).toBe('new helper\n');
   });
 
   it('never writes through a symlinked skill directory', () => {
@@ -172,6 +193,55 @@ describe('refreshSkills: symlinks and pending copies', () => {
   });
 });
 
+describe('refreshSkills: dry run', () => {
+  function snapshot(): string[] {
+    const out: string[] = [];
+    const walk = (dir: string, rel: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        out.push(`${rel}${entry.name}`);
+        if (entry.isDirectory() && !entry.isSymbolicLink()) walk(full, `${rel}${entry.name}/`);
+      }
+    };
+    walk(project, '');
+    return out.sort();
+  }
+
+  it('reports missing, shipped, edited and not-regular skills exactly as a real run, writing nothing', () => {
+    write(skeleton, '.claude/skills/older/SKILL.md', NEW);
+    write(skeleton, '.claude/skills/mine/SKILL.md', NEW);
+    write(skeleton, '.claude/skills/linked/SKILL.md', NEW);
+    write(project, '.claude/skills/older/SKILL.md', OLD);
+    write(project, '.claude/skills/mine/SKILL.md', 'mine\n');
+    write(base, 'elsewhere/SKILL.md', OLD);
+    fs.symlinkSync(path.join(base, 'elsewhere'), path.join(project, '.claude/skills/linked'));
+    const history = { '.claude/skills/older': [OLD_HASH] };
+    const before = snapshot();
+
+    const preview = refreshSkills(project, skeleton, { history, dryRun: true });
+    expect(snapshot()).toEqual(before);
+    expect(preview).toEqual({
+      added: ['.claude/skills/demo/'],
+      updated: ['.claude/skills/older/'],
+      conflicts: ['.claude/skills/mine/SKILL.md'],
+      notRegular: ['.claude/skills/linked/'],
+    });
+    expect(refreshSkills(project, skeleton, { history })).toEqual(preview);
+  });
+
+  it('previews --force without writing', () => {
+    write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    const preview = refreshSkills(project, skeleton, { history: HISTORY, force: true, dryRun: true });
+    expect(preview.updated).toEqual(['.claude/skills/demo/']);
+    expect(read('.claude/skills/demo/SKILL.md')).toBe('mine\n');
+  });
+
+  it('does not create a missing skills root', () => {
+    refreshSkills(project, skeleton, { history: HISTORY, dryRun: true });
+    expect(fs.existsSync(path.join(project, '.claude'))).toBe(false);
+  });
+});
+
 describe('shipped skill history', () => {
   it('lists the current version of every shipped skill', () => {
     for (const provider of SKILL_PROVIDERS) {
@@ -181,7 +251,7 @@ describe('shipped skill history', () => {
         const hash = hashSkillDir(path.join(skillsDir, name));
         expect(
           SHIPPED_SKILL_HASHES[key] ?? [],
-          `${key} changed: regenerate the history with \`npx tsx packages/codev/scripts/generate-shipped-skill-hashes.mts\``,
+          `${key} changed: regenerate the history with \`pnpm --filter @cluesmith/codev generate-skill-hashes\``,
         ).toContain(hash);
       }
     }

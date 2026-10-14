@@ -25,6 +25,9 @@ import {
   guidanceCommentLines,
   isStarterMarker,
   nonCommentLineCount,
+  HOT_CAP_ENTRIES,
+  HOT_CAP_LINES,
+  HOT_CAP_MAP_TOPICS,
   type GovernanceFile,
 } from '../lib/governance-bootstrap.js';
 
@@ -499,6 +502,16 @@ describe('bootstrap prompt template and skill content', () => {
     for (const placeholder of PLACEHOLDERS) {
       expect(template.split(placeholder).length - 1, placeholder).toBe(1);
     }
+  });
+
+  it('states the validator\'s hot caps in the skill, so the two cannot drift apart', () => {
+    const skill = readRepo('codev-skeleton/.claude/skills/update-arch-docs/SKILL.md');
+    const step = skill.slice(skill.indexOf('**Write the hot files**'));
+    expect(step).toContain(`at most ${HOT_CAP_ENTRIES} one-line entries`);
+    expect(step).toContain(`at most ${HOT_CAP_MAP_TOPICS} entries in the form`);
+    expect(step).toContain(`${HOT_CAP_LINES} lines or fewer outside comments`);
+    expect(skill).toContain(`under the ${HOT_CAP_ENTRIES}-entry cap`);
+    expect(skill).toContain(`**at most ${HOT_CAP_MAP_TOPICS}** top-level \`## \` sections`);
   });
 
   it('carries bootstrap-mode and the sensitive-material rule in the update-arch-docs skill', () => {

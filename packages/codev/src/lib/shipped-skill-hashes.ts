@@ -4,7 +4,7 @@
  * hash is listed here: the user never edited it.
  *
  * GENERATED: do not edit by hand. After changing a shipped skill, regenerate with
- *   npx tsx packages/codev/scripts/generate-shipped-skill-hashes.mts
+ *   pnpm --filter @cluesmith/codev generate-skill-hashes
  */
 export const SHIPPED_SKILL_HASHES: Record<string, readonly string[]> = {
   '.claude/skills/af': [
@@ -67,6 +67,7 @@ export const SHIPPED_SKILL_HASHES: Record<string, readonly string[]> = {
     '4c4d4d24ee553adef89c2268e129ad5fc3be0cb8440ce9c89604f7d30929c30e',
     '60c64eb94401c1e89c3b48f7e7f809c269c0e7cda534177127c5db3d59f3487f',
     '696740d1171eef744642094a33751680cc3bb45adda4a3ffd0f0477decc07082',
+    '9039170e6dae4b3041ad573695dedbb0cad3aa55a2ff4086e5916bb6e7f88800',
     'ccc9e06b0524da29c71cff4c1b175bed02cce3525b5c544a6d4186d9b9612053',
     'e77f9ad767b7eb2f174839498851097950db72c467490b23d0bfadb0bb64a57a',
     'eaaa1e9342d76df19841ece0e093631b13b7b817d78377130a4728efe67627db',
@@ -146,6 +147,7 @@ export const SHIPPED_SKILL_HASHES: Record<string, readonly string[]> = {
   '.codex/skills/codev': [
     '177bd31ba5df1fea19761061ff1a0684d1792f5aaf29a24c158b94212b0a83b2',
     '60c64eb94401c1e89c3b48f7e7f809c269c0e7cda534177127c5db3d59f3487f',
+    '9039170e6dae4b3041ad573695dedbb0cad3aa55a2ff4086e5916bb6e7f88800',
     'ccc9e06b0524da29c71cff4c1b175bed02cce3525b5c544a6d4186d9b9612053',
     'e77f9ad767b7eb2f174839498851097950db72c467490b23d0bfadb0bb64a57a',
   ],

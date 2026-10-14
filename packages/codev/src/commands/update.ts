@@ -229,29 +229,34 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
 
     // Refresh provider-native skills (#1811): add missing ones, replace the ones the user
     // never edited, and offer an edited one's new version as `.codev-new` for the merge.
-    if (!dryRun) {
-      const skillsResult = refreshSkills(targetDir, templatesDir, { force });
-      for (const skill of skillsResult.added) {
-        result.newFiles.push(skill);
-        log(chalk.green('  + (new)'), skill);
-      }
-      for (const skill of skillsResult.updated) {
-        result.updated.push(skill);
-        log(chalk.blue('  ~ (updated)'), skill);
-      }
-      for (const file of skillsResult.conflicts) {
-        result.conflicts.push({
-          file,
-          codevNew: `${file}${CODEV_NEW_SUFFIX}`,
-          reason: 'Skill edited locally; new version differs',
-        });
-        log(chalk.yellow('  ! (conflict)'), file);
+    // A dry run reports the same outcome and writes nothing.
+    const skillsResult = refreshSkills(targetDir, templatesDir, { force, dryRun });
+    let skillVerb = '';
+    if (dryRun) skillVerb = 'would be ';
+    for (const skill of skillsResult.added) {
+      result.newFiles.push(skill);
+      log(chalk.green(`  + (${skillVerb}new)`), skill);
+    }
+    for (const skill of skillsResult.updated) {
+      result.updated.push(skill);
+      log(chalk.blue(`  ~ (${skillVerb}updated)`), skill);
+    }
+    for (const file of skillsResult.conflicts) {
+      result.conflicts.push({
+        file,
+        codevNew: `${file}${CODEV_NEW_SUFFIX}`,
+        reason: 'Skill edited locally; new version differs',
+      });
+      log(chalk.yellow('  ! (conflict)'), file);
+      if (dryRun) {
+        log(chalk.dim('    New version would be saved as:'), `${file}${CODEV_NEW_SUFFIX}`);
+      } else {
         log(chalk.dim('    New version saved as:'), `${file}${CODEV_NEW_SUFFIX}`);
       }
-      for (const skill of skillsResult.notRegular) {
-        result.skipped.push(skill);
-        log(chalk.dim('  - (skipped, symlinked or not a directory)'), skill);
-      }
+    }
+    for (const skill of skillsResult.notRegular) {
+      result.skipped.push(skill);
+      log(chalk.dim('  - (skipped, symlinked or not a directory)'), skill);
     }
 
     // Update root files (CLAUDE.md, AGENTS.md)

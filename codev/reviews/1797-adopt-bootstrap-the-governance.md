@@ -80,6 +80,16 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
   - The prompt's session rules that restated the skill (write only listed files, no git writes, no secrets, guidance comment, map form, seeded lessons, finish clearly) are gone. The prompt now carries only the file lists, a one-paragraph session note and the skill source.
   - #1811, delivered here: `codev update` refreshes shipped skills (`lib/skill-refresh.ts`). A skill whose content hash matches a shipped version is replaced; an edited skill keeps its content and gets `<file>.codev-new` copies that join update's merge session on every update while it differs (owner ruling: the CLAUDE.md behaviour, no lock file). `--force` replaces edited skills; a symlinked skill directory is left alone. The shipped history is generated from git (`scripts/generate-shipped-skill-hashes.mts`, 124 versions of 21 skills) and pinned by a test.
   - `bootstrap-docs` then names the installed skill when the launching harness's copy (`.claude/` or `.codex/`) is identical to the package's version, and inlines the packaged text otherwise, saying why (missing, older, edited, not a directory, or a prompt saved for a manual run). The launch statement and `--dry-run` name the source.
+- **Review phase, integration review round 3 (main, head 9dd499ad9):**
+  - `codev update --dry-run` now previews skills: `refreshSkills` takes `dryRun`, classifies exactly as a real run and writes nothing. Added, updated, conflict and skipped are all reported, including under `--force`.
+  - `--force` on an edited skill overwrites the package's files and keeps any file the package does not ship. It used to delete them; before this PR `--force` never touched skills. A skill that matches a shipped version is still replaced as a whole, since every file in it is shipped content.
+  - The edited path now drops a `.codev-new` once its file matches the package again.
+  - Other changes:
+    - A test ties the skill's cap numbers to `HOT_CAP_ENTRIES` / `HOT_CAP_MAP_TOPICS` / `HOT_CAP_LINES`.
+    - The inline fallback reads the launching harness's copy of the skill (`.claude/` when there is none).
+    - The hash generator is `pnpm --filter @cluesmith/codev generate-skill-hashes`.
+    - The codev skill's local-build section warns that `codev update` in this repository with an older installed package treats unpublished skill edits as local edits. It writes `.codev-new` copies of the older text, and `--force` overwrites the edits. Main's wording was "reverts"; it does that only under `--force`.
+  - **Deliberate:** a file the package newly adds to an **edited** skill arrives only as `<file>.codev-new`, never as the file itself. Edited means the user owns the skill's shape, and a new file can change what the skill does (another reference loaded, another step). Whether it belongs is the merge's call, the same as a changed file. An unedited skill gets new files directly, because it is replaced as a whole. Tested.
 - **Process:** porch force-advanced phase_4 at its iteration-3 ceiling, so commit `b87516dcd` (symlinks hashed by target) had no CMAP round of its own. The architect asked to review it explicitly at PR integration review.
 
 ## Consultation Feedback
@@ -350,4 +360,6 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - `cli.ts`'s `update --agent` JSON builder is duplicated in `update.test.ts`. Extracting it would let `instructions.bootstrapDocs` be unit-tested.
 - Observed, pre-existing: running `codev update` right after a fresh `adopt` produces `CLAUDE.md` / `AGENTS.md` `.codev-new` files and launches update's own (unawaited) merge session.
 - `adopt`'s Next steps still lists `consult plan  # Review the plan with an architect`, which reads oddly right after adoption (pre-existing).
+- An opt-out for a skill the user customised on purpose, which otherwise gets `.codev-new` copies on every update (owner ruling). Main is raising it with the owner as a filing candidate.
+- Pre-existing, found while adding the skill dry-run: `codev update --dry-run` still writes `CLAUDE.md.codev-new` / `AGENTS.md.codev-new`, because the root-file block has no dry-run guard. Raised with main; not changed here.
 - #1810: split the built-in harness providers out of `harness.ts`, one file per harness. As a first step on this PR, the interactive-launch blocker lists (`CLAUDE_SUBCOMMANDS`, `CLAUDE_INTERACTIVE_BLOCKING_FLAGS`, `CODEX_SUBCOMMANDS`) are no longer exported and sit beside the provider that uses them; tests go through the provider's blocker.
