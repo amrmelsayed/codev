@@ -248,9 +248,9 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
         log(chalk.yellow('  ! (conflict)'), file);
         log(chalk.dim('    New version saved as:'), `${file}${CODEV_NEW_SUFFIX}`);
       }
-      for (const skill of skillsResult.notDirectories) {
+      for (const skill of skillsResult.notRegular) {
         result.skipped.push(skill);
-        log(chalk.dim('  - (skipped, not a directory)'), skill);
+        log(chalk.dim('  - (skipped, symlinked or not a directory)'), skill);
       }
     }
 

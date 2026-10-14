@@ -68,3 +68,10 @@
 - #1811 in this PR: `codev update` refreshes unedited shipped skills (hash history generated from git). An edited skill gets `.codev-new` copies on every update; the owner chose this over a lock file. `bootstrap-docs` now runs the installed skill by name when it matches the package, and inlines the packaged skill otherwise.
 - Suite 6397 passed, tsc clean.
 - Real-repo run 3 (an old adopter's clone: pre-branch skill, then `update`, then bootstrap) is in progress.
+
+**CMAP round 3 (bc6331a12):** Gemini APPROVE; Codex and Claude REQUEST_CHANGES.
+- Codex found a real defect: an edited skill holding a symlinked subdirectory let the `.codev-new` write escape the project. Reproduced against bc6331a12 and fixed: a skill holding a symlink, or a symlinked skills root, is left alone. Regression tests added.
+- Also fixed: a `.codev-new` the skill has caught up with is now deleted, the unused result field is gone, and the PR body is rewritten.
+- Escalated to main: whether the approved spec needs an amendment for the owner-directed scope (#1811, digest removal).
+
+**Real-repo run 3 (older-adopter path):** passed end to end. `update` refreshed only `update-arch-docs`. Bootstrap ran the installed skill (the transcript shows `Skill("update-arch-docs")`) and explored history with the skill's git commands. Validation passed, exit 0, and the re-run was a no-op.

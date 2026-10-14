@@ -22,6 +22,8 @@ export interface SkillFile {
   /** Path relative to the skill directory, with `/` separators. */
   path: string;
   content: string;
+  /** A symlink, recorded by its target and never followed. */
+  link?: boolean;
 }
 
 /**
@@ -74,7 +76,7 @@ export function readSkillFiles(dir: string): SkillFile[] | null {
       if (entry.isDirectory()) {
         walk(full, `${rel}/`);
       } else if (entry.isSymbolicLink()) {
-        files.push({ path: rel, content: `<link:${fs.readlinkSync(full)}>` });
+        files.push({ path: rel, content: `<link:${fs.readlinkSync(full)}>`, link: true });
       } else if (entry.isFile()) {
         files.push({ path: rel, content: fs.readFileSync(full, 'utf-8') });
       }
@@ -104,8 +106,11 @@ export type SkillState =
   | 'shipped'
   /** Differs from every shipped version: the user's own content. */
   | 'edited'
-  /** A symlink or a file where the skill directory should be; left alone. */
-  | 'not-a-directory';
+  /**
+   * A symlink or a file where the skill directory should be, or a directory holding a
+   * symlink. Left alone: a write could land outside the project.
+   */
+  | 'not-regular';
 
 /**
  * Where a project's copy of a skill stands against the package's version. `key` is the
@@ -118,8 +123,9 @@ export function classifySkill(
   history: Record<string, readonly string[]> = SHIPPED_SKILL_HASHES,
 ): SkillState {
   if (!fs.existsSync(projectSkillDir) && !isSymlink(projectSkillDir)) return 'missing';
-  const projectHash = hashSkillDir(projectSkillDir);
-  if (projectHash === null) return 'not-a-directory';
+  const files = readSkillFiles(projectSkillDir);
+  if (files === null || files.some(file => file.link)) return 'not-regular';
+  const projectHash = hashSkillFiles(files);
   if (projectHash === hashSkillDir(packageSkillDir)) return 'current';
   if ((history[key] ?? []).includes(projectHash)) return 'shipped';
   return 'edited';
@@ -140,10 +146,8 @@ export interface RefreshSkillsResult {
   updated: string[];
   /** Edited skill files that got a `.codev-new` copy of the package's version. */
   conflicts: string[];
-  /** Skill paths left alone because they are not real directories. */
-  notDirectories: string[];
-  /** Provider skill roots that were created. */
-  directoriesCreated: string[];
+  /** Skill paths left alone: symlinked, holding a symlink, or not a directory. */
+  notRegular: string[];
 }
 
 export interface RefreshSkillsOptions {
@@ -154,11 +158,36 @@ export interface RefreshSkillsOptions {
 }
 
 function replaceSkillDir(projectSkillDir: string, packageSkillDir: string): void {
-  // Remove only the files the skill is made of; a pending .codev-new or .DS_Store is the user's.
+  // Remove only the files the skill is made of; a .DS_Store is the user's.
   for (const file of readSkillFiles(projectSkillDir) ?? []) {
     fs.rmSync(path.join(projectSkillDir, file.path), { force: true });
   }
   fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true, force: true });
+}
+
+/**
+ * Delete a pending `.codev-new` that holds exactly the package's version of its file: the
+ * skill now has that version, so the copy is resolved. A copy with other content is kept.
+ */
+function removeResolvedCodevNew(projectSkillDir: string, packageSkillDir: string): void {
+  for (const file of readSkillFiles(packageSkillDir) ?? []) {
+    const pending = path.join(projectSkillDir, file.path + CODEV_NEW_SUFFIX);
+    try {
+      if (fs.lstatSync(pending).isFile() && fs.readFileSync(pending, 'utf-8') === file.content) fs.rmSync(pending);
+    } catch {
+      // No pending copy.
+    }
+  }
+}
+
+/** True when something other than a real directory sits at `p` (a symlink, a file). */
+function existsButNotDirectory(p: string): boolean {
+  try {
+    const stat = fs.lstatSync(p);
+    return !stat.isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -170,17 +199,19 @@ export function refreshSkills(
   skeletonDir: string,
   options: RefreshSkillsOptions = {},
 ): RefreshSkillsResult {
-  const result: RefreshSkillsResult = { added: [], updated: [], conflicts: [], notDirectories: [], directoriesCreated: [] };
+  const result: RefreshSkillsResult = { added: [], updated: [], conflicts: [], notRegular: [] };
 
   for (const provider of SKILL_PROVIDERS) {
     const relativeSkillsDir = `.${provider}/skills`;
     const skillsDir = path.join(targetDir, relativeSkillsDir);
     const srcDir = path.join(skeletonDir, relativeSkillsDir);
 
-    if (!fs.existsSync(skillsDir)) {
-      fs.mkdirSync(skillsDir, { recursive: true });
-      result.directoriesCreated.push(`${relativeSkillsDir}/`);
+    // A symlinked skills root may be shared beyond this project; nothing is written through it.
+    if (existsButNotDirectory(skillsDir)) {
+      result.notRegular.push(`${relativeSkillsDir}/`);
+      continue;
     }
+    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
 
     // Older/corrupt skeletons may not provide every configured provider.
     if (!fs.existsSync(srcDir)) continue;
@@ -197,11 +228,14 @@ export function refreshSkills(
       if (state === 'missing') {
         fs.cpSync(packageSkillDir, projectSkillDir, { recursive: true });
         result.added.push(`${key}/`);
+      } else if (state === 'current') {
+        removeResolvedCodevNew(projectSkillDir, packageSkillDir);
       } else if (state === 'shipped') {
         replaceSkillDir(projectSkillDir, packageSkillDir);
+        removeResolvedCodevNew(projectSkillDir, packageSkillDir);
         result.updated.push(`${key}/`);
-      } else if (state === 'not-a-directory') {
-        result.notDirectories.push(`${key}/`);
+      } else if (state === 'not-regular') {
+        result.notRegular.push(`${key}/`);
       } else if (state === 'edited') {
         const projectFiles = new Map((readSkillFiles(projectSkillDir) ?? []).map(file => [file.path, file.content]));
         for (const file of readSkillFiles(packageSkillDir) ?? []) {

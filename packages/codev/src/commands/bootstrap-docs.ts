@@ -207,7 +207,7 @@ const INLINE_REASONS: Record<Exclude<SkillState, 'current'>, string> = {
   missing: 'is missing',
   shipped: 'is an older version (`codev update` refreshes it)',
   edited: 'has local edits',
-  'not-a-directory': 'is not a regular directory',
+  'not-regular': 'is a symlink, holds one, or is not a directory',
 };
 
 /**

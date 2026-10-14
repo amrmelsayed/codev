@@ -33,12 +33,22 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Finding, fixed in this phase:** both hot drafts dropped the starter's cap/displacement guidance comment entirely. The skill says to keep it (minus the `STARTER:` sentence), the spec's "hot-file shape" requires it, and neither reviewer noticed. The validator now reports `missing-guidance` when a draft lacks any line of the starter's comment other than the `STARTER:` sentence, and the session prompt states the rule next to "leave no starter text", which is what the agent appears to have over-applied. Re-validating the real execa drafts with the new check flags both hot files.
 - **Not verified:** a real human-driven interactive session. The interactive Yes/No path is unit-tested only, and so is the `adopt` offer with a merge session.
 
-**Run 2, on the final code (after integration review round 1).** Fresh clone of `sindresorhus/execa`, built at d42fc36b3 (the round-1 fixes; the later merge from `main` touched no file this feature uses). Same pty and headless driver as run 1.
+Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
+
+**Run 2, on the code after integration review round 1.** Fresh clone of `sindresorhus/execa`, built at d42fc36b3 (the round-1 fixes; the later merge from `main` touched no file this feature uses). Same pty and headless driver as run 1.
 
 - **Result:** all four files written, validation passed under the stricter checks (`missing-guidance` included), and "No changes outside the eligible files"; exit 0 (the post-review re-snapshot found nothing). This time both hot files kept the starter's guidance comment, with only the `STARTER:` sentence removed: arch-critical.md and lessons-critical.md are 32 lines each. `arch.md` and `lessons-learned.md` hold 12 sections each. The three seeded lessons were kept.
 - **Draft review:** Codex and Claude reviewed, and Gemini was named as skipped. Both again found claims to tighten before commit: IPC `serialization: 'json'` limits, Windows `.com` handling and escaping, and sync `timeout`. Both found the drafts clean of sensitive material.
 - **Re-run:** "Nothing needs bootstrapping", exit 0, no agent launched, all four files byte-identical (shasum).
 - **Not verified, unchanged:** a human-driven interactive session. Main is asking the owner for one interactive launch from the branch build.
+
+**Run 3, on the team-review code (skill refresh and the installed skill, no digest).** Fresh clone of `sindresorhus/execa` (891 commits), branch build of bc6331a12 plus the round-3 symlink fix (which touches no code this path runs). It was played as an older adopter: after `codev adopt -y`, `.claude/skills/update-arch-docs/SKILL.md` was replaced with `main`'s pre-branch version, which has no bootstrap mode. Same pty and headless driver as runs 1 and 2.
+
+- **Before update:** `bootstrap-docs --dry-run` said it would inline the packaged skill "because the installed copy at `.claude/skills/update-arch-docs/` is an older version (`codev update` refreshes it)".
+- **`codev update --agent`:** `updated: [".claude/skills/update-arch-docs/"]`, and no other skill touched. The CLAUDE.md/AGENTS.md `.codev-new` copies are the existing follow-up.
+- **Bootstrap:** the launch statement said "It follows the installed skill at .claude/skills/update-arch-docs/", and the prompt named the skill instead of inlining it. The agent's transcript shows it called `Skill("update-arch-docs")`, then explored history with the skill's commands (`git log -n 100`, a scar-tissue grep that it widened with its own words, the churn hot-spot pipeline, `git show` on specific commits), then wrote the four files. All four passed validation, there were "No changes outside the eligible files", and the exit code was 0. `lessons-learned.md` holds 9 sections traced to fix commits, and both hot files kept the guidance comment (31 and 28 lines).
+- **Draft review:** Codex and Claude reviewed, and Gemini was named as skipped. As before, they found claims to correct before commit (the method-factory description, an over-absolute PID rule, the sync `all` path). Claude checked for sensitive material first and found the drafts clean.
+- **Re-run:** "Nothing needs bootstrapping", exit 0, all four files byte-identical.
 
 ## Deviations from Plan
 
@@ -275,6 +285,19 @@ Run on 2026-10-13 against `sindresorhus/execa` (a real, pre-existing repo with 8
 - **Concern**: The approved spec and plan lack `approved` / `validated` frontmatter → **Addressed**: added (both approved 2026-10-12 at their porch gates)
 #### Claude (APPROVE)
 - Verified all four round-1 items fixed with non-vacuous tests. Non-blocking: commit subjects in the digest are untrusted, instruction-shaped text (bounded by detect-and-report, eligible-only writes and human review); `.consult/` is a blanket detection exemption; a human-driven launch is still unexercised (owner-assigned) → **N/A**: recorded; the first two are listed under Follow-up Items
+
+### PR Review (Round 3, on the team-review changes, head bc6331a12)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: An edited skill holding a symlinked subdirectory lets the `.codev-new` write land outside the project → **Addressed**: a skill directory that holds a symlink is classified `not-regular` and left alone, as is a symlinked skills root. Reproduced against bc6331a12 (the copy landed outside the project) and confirmed fixed; regression tests added
+- **Concern**: #1811 and the digest removal are outside the approved spec and plan → **Escalated**: both are the owner's direct instruction on this PR, recorded under Deviations; whether the spec gets an amendment is main's and the owner's call
+- **Concern**: Validation predates the head → **Addressed**: full suite on the final code (315 files, 6400 passed, `tsc` clean) and real-repo run 3, recorded above
+#### Claude (REQUEST_CHANGES)
+- **Concern**: The team-review commit had no CMAP round → **Addressed**: this round
+- **Concern**: Real-repo verification only at d42fc36b3 → **Addressed**: run 3, recorded above
+- **Concern**: The PR body is out of date (digest, missing #1811, `--force` replacing edited skills, test count) → **Addressed**: rewritten
+- **Concern (minor)**: unused `directoriesCreated`; resolved `.codev-new` copies never cleaned; run-1 narrative reads as if the digest were current → **Addressed**: field removed; a `.codev-new` holding exactly the package's version is deleted once the skill has that version (a differing one is kept); runs 1 and 2 are marked as predating the digest's removal
 
 ## Lessons Learned
 

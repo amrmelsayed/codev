@@ -64,7 +64,7 @@ describe('skill hashing', () => {
     fs.mkdirSync(path.join(project, '.claude/skills'), { recursive: true });
     fs.symlinkSync(path.join(base, 'elsewhere'), path.join(project, '.claude/skills/demo'));
     expect(classifySkill(path.join(project, '.claude/skills/demo'), path.join(skeleton, '.claude/skills/demo'), '.claude/skills/demo'))
-      .toBe('not-a-directory');
+      .toBe('not-regular');
   });
 });
 
@@ -131,9 +131,44 @@ describe('refreshSkills', () => {
     fs.mkdirSync(path.join(project, '.claude/skills'), { recursive: true });
     fs.symlinkSync(path.join(base, 'elsewhere'), path.join(project, '.claude/skills/demo'));
     const result = refreshSkills(project, skeleton, { history: HISTORY });
-    expect(result.notDirectories).toEqual(['.claude/skills/demo/']);
+    expect(result.notRegular).toEqual(['.claude/skills/demo/']);
     expect(fs.readFileSync(path.join(base, 'elsewhere/SKILL.md'), 'utf-8')).toBe(OLD);
     expect(fs.readdirSync(path.join(base, 'elsewhere'))).toEqual(['SKILL.md']);
+  });
+});
+
+describe('refreshSkills: symlinks and pending copies', () => {
+  it('an edited skill holding a symlinked subdirectory is left alone, nothing written through it', () => {
+    write(skeleton, '.claude/skills/demo/sub/ref.md', 'packaged\n');
+    write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    fs.mkdirSync(path.join(base, 'outside'));
+    fs.symlinkSync(path.join(base, 'outside'), path.join(project, '.claude/skills/demo/sub'));
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result.notRegular).toEqual(['.claude/skills/demo/']);
+    expect(result.conflicts).toEqual([]);
+    expect(fs.readdirSync(path.join(base, 'outside'))).toEqual([]);
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/SKILL.md.codev-new'))).toBe(false);
+  });
+
+  it('a symlinked skills root is left alone, even for missing skills', () => {
+    fs.mkdirSync(path.join(base, 'shared-skills'));
+    fs.mkdirSync(path.join(project, '.claude'));
+    fs.symlinkSync(path.join(base, 'shared-skills'), path.join(project, '.claude/skills'));
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result.notRegular).toEqual(['.claude/skills/']);
+    expect(result.added).toEqual([]);
+    expect(fs.readdirSync(path.join(base, 'shared-skills'))).toEqual([]);
+  });
+
+  it('removes a .codev-new the skill has caught up with, on replace and when current', () => {
+    write(project, '.claude/skills/demo/SKILL.md', OLD);
+    write(project, '.claude/skills/demo/SKILL.md.codev-new', NEW);
+    refreshSkills(project, skeleton, { history: HISTORY });
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/SKILL.md.codev-new'))).toBe(false);
+
+    write(project, '.claude/skills/demo/SKILL.md.codev-new', NEW);
+    refreshSkills(project, skeleton, { history: HISTORY });
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/SKILL.md.codev-new'))).toBe(false);
   });
 });
 
