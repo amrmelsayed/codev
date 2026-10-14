@@ -321,6 +321,21 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Concern**: the flaky `session-manager.test.ts` case is skipped without root cause → **N/A here**: tracked on #1800 (see Flaky Tests)
 - **Concern**: the team's duplication question is still unanswered on the PR → **Deferred to the owner**, who asked that nothing be posted yet
 
+### PR Review (Round 5, on the dry-run fix, head bc8bfb8f9)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `validateHotFile` counted bullets under any `## Critical…` / `## Map…` heading, so an empty required section plus bullets under a similarly named one could pass → **Addressed**: counting is scoped to the exact required headings (`Critical facts` / `Critical lessons`, `Map of <cold doc>`), with a regression test that failed on the old code. Defaults are unchanged for `hot-tier.test.ts`
+- **Concern**: The skill history records every commit, not released versions, so unpublished intermediate content could authorise a replace → **Rebutted**: a project's skill copy arrives from an installed package, which is either a release or a build from this repository. Content that exactly matches any commit's version of a skill is Codev's text, not the user's: an edit changes the hash. Limiting the history to release tags would misclassify a copy installed from a local or pre-release build as edited, and would make the generator depend on tags being present in the checkout. No user-written content can match, so nothing destructive follows from the wider set
+- **Concern**: The full suite predates the final commits → **Addressed**: run on bc8bfb8f9 (315 files, 6409 passed, `tsc` clean) and on the final code with the round-5 fixes (315 files, 6410 passed, `tsc` clean)
+- Codex also judged the bootstrap prompt not to be problematic duplication: it carries eligibility and the skill source, and the skill stays the content authority
+#### Claude (APPROVE)
+- **Concern (follow-up)**: hot cap numbers duplicated between the validator and the skill with no test → **N/A**: that test landed in ef3312731 ("states the validator's hot caps in the skill")
+- **Concern (nit)**: an orphaned `defaultDeps` JSDoc above `runConsultProcess` → **Addressed**: moved onto `defaultDeps`
+- **Concern (note)**: `.codev-new` files under `.claude/skills/` are not gitignored, so an edited skill leaves recurring untracked files → **N/A**: the same holds for CLAUDE.md today; listed under Follow-up Items
+- **Concern (note)**: `.consult/` is exempt from change detection → **Addressed**: the command docs now say so
+- **Concern (note)**: no human-driven interactive launch yet → **N/A**: owner-side, disclosed above
+
 ## Lessons Learned
 
 ### What Went Well
@@ -375,4 +390,5 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - An opt-out for a skill the user customised on purpose, which otherwise gets `.codev-new` copies on every update (owner ruling). Main is raising it with the owner as a filing candidate.
 - `codev update --dry-run`'s migration step is correctly guarded, but its log lines still say "(cleaned)" / "(removed)" rather than "would" (pre-existing, wording only).
 - `codev update --force` reports a newly created CLAUDE.md / AGENTS.md as "updated" and never overwrites an existing one (`copyRootFiles` without `handleConflicts` skips existing files), so for root files `--force` only fills in missing ones (pre-existing).
+- `.codev-new` copies (root files and now skills) are not gitignored, so a customised file or skill leaves untracked copies after every update until merged. A gitignore entry, or the opt-out above, would quiet it.
 - #1810: split the built-in harness providers out of `harness.ts`, one file per harness. As a first step on this PR, the interactive-launch blocker lists (`CLAUDE_SUBCOMMANDS`, `CLAUDE_INTERACTIVE_BLOCKING_FLAGS`, `CODEX_SUBCOMMANDS`) are no longer exported and sit beside the provider that uses them; tests go through the provider's blocker.

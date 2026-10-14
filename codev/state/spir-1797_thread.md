@@ -86,3 +86,9 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - Plain `--dry-run` wrote CLAUDE.md/AGENTS.md `.codev-new` copies.
 - `--dry-run --force` created a missing CLAUDE.md or AGENTS.md. It never overwrote an existing one: without `handleConflicts`, `copyRootFiles` skips existing files. Told main its note was wrong on this point.
 - Audited the rest of `update`: no other unguarded writes. Two existing wording/labelling oddities are recorded as follow-ups.
+
+**CMAP round 5 (bc8bfb8f9):** Gemini and Claude APPROVE; Codex REQUEST_CHANGES. The fixes:
+- `validateHotFile` now counts only the exact required sections, so a similarly named section can't fill an empty one or dodge a cap. Regression test added.
+- The orphaned JSDoc is moved, and the `.consult/` exemption is now in the command docs.
+- Rebutted: limiting skill history to release tags. Commit-level content can't match a user's own edit, and tags would misclassify local or pre-release builds as edited.
+- Full suite on the final code: 315 files, 6410 passed; tsc clean.

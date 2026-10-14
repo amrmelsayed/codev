@@ -288,7 +288,6 @@ function isExecutableOnPath(executable: string): boolean {
   return false;
 }
 
-/** Defaults for every seam but `skeletonDir`, which is resolved only when not overridden. */
 /**
  * Run one `consult` process. Its progress output is discarded (three in parallel would
  * interleave on the terminal); the last stderr line is kept as the reason when it fails.
@@ -312,6 +311,7 @@ function runConsultProcess(args: string[], cwd: string): Promise<AgentExit> {
   });
 }
 
+/** Defaults for every seam but `skeletonDir`, which is resolved only when not overridden. */
 function defaultDeps(): Omit<BootstrapDocsDeps, 'skeletonDir'> {
   return {
     runConsult: runConsultProcess,

@@ -314,8 +314,8 @@ export function topLevelHeadings(content: string): string[] {
 const MAP_SEPARATORS = [' — ', ' – ', ' - '];
 
 /** The topic each map entry points at: its text before the `consult when…` guidance. */
-export function mapTopics(content: string): string[] {
-  return bulletsUnder(content, 'Map').map(line => {
+export function mapTopics(content: string, headingPrefix = 'Map'): string[] {
+  return bulletsUnder(content, headingPrefix).map(line => {
     const entry = line.slice(2);
     const cuts = MAP_SEPARATORS.map(sep => entry.indexOf(sep)).filter(index => index >= 0);
     if (cuts.length === 0) return entry.trim();
@@ -430,8 +430,10 @@ export function validateHotFile(
   if (!hasEntries) violations.push({ kind: 'missing-section', message: `missing "## ${heading}" section` });
   if (!hasMap) violations.push({ kind: 'missing-section', message: `missing "## Map of ${file.coldDoc}" section` });
 
-  const entries = bulletsUnder(content, 'Critical').length;
-  const topics = mapTopics(content);
+  // Count only the required sections, so a similarly named extra section ("## Critical
+  // notes", "## Mapping") can neither fill an empty one nor dodge the caps.
+  const entries = bulletsUnder(content, heading).length;
+  const topics = mapTopics(content, `Map of ${file.coldDoc}`);
   // A heading with nothing under it is a draft that was never filled in, not a pass.
   if (hasEntries && entries === 0) {
     violations.push({ kind: 'empty-section', message: `"## ${heading}" has no entries` });

@@ -452,6 +452,29 @@ describe('empty hot sections', () => {
       '"## Map of arch.md" has no entries',
     ]);
   });
+
+  it('a similarly named extra section neither fills an empty required one nor counts toward its cap', () => {
+    const hot = [
+      '# arch-critical.md',
+      '',
+      '## Critical facts (consult before deciding)',
+      '',
+      '## Critical notes',
+      ...Array.from({ length: 11 }, (_, i) => `- note ${i}`),
+      '',
+      '## Map of arch.md (consult when…)',
+      '',
+      '## Mapping',
+      '- Architecture — always.',
+      '',
+    ].join('\n');
+    const violations = validateHotFile(hot, '# Architecture\n', ARCH_CRITICAL).violations;
+    expect(violations.filter(v => v.kind === 'empty-section').map(v => v.message)).toEqual([
+      '"## Critical facts" has no entries',
+      '"## Map of arch.md" has no entries',
+    ]);
+    expect(violations.map(v => v.kind)).not.toContain('too-many-entries');
+  });
 });
 
 describe('hot guidance comment', () => {

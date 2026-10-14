@@ -102,7 +102,7 @@ Writes a first draft of the four governance files (`codev/resources/arch.md`, `l
 1. Classify the four files and print each one's status.
 2. Write the prompt to `.consult/bootstrap-docs/prompt.md`, show the exact agent command, what it may write and that it consumes model quota, and ask before launching (always; there is no `-y`). The agent follows the `update-arch-docs` skill's bootstrap mode: the project's installed copy when it is identical to the package's version, otherwise the packaged text included in the prompt (the launch statement says which). The agent explores the git history itself, read-only.
 3. Run the configured architect harness on the terminal. Exit the session when it says the drafts are done.
-4. Report what changed: drafts written, hot-tier cap and map violations, and any path outside the four files (change detection covers the git state and every path git does not ignore).
+4. Report what changed: drafts written, hot-tier cap and map violations, and any path outside the four files (change detection covers the git state and every path git does not ignore, except `.consult/`, where consult writes its own output).
 5. When `consult` is available, run a three-way review of the drafts; reviews land in `.consult/bootstrap-docs/<model>.md`.
 
 Nothing is committed: review the drafts, edit, then commit them yourself.
