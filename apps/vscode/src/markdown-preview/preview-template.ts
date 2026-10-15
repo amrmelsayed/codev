@@ -100,6 +100,14 @@ ${userTokens}
       color: var(--codev-canvas-foreground);
       background: var(--codev-canvas-background);
     }
+    /* Dark themes (#1802 dev-gate feedback): light text at the package's light-tuned strengths
+     * reads too faint on a dark background, so the line band and paragraph tint are stronger
+     * there. VS Code stamps the theme kind as a class on the webview body. */
+    body.vscode-dark .codev-artifact-canvas,
+    body.vscode-high-contrast:not(.vscode-high-contrast-light) .codev-artifact-canvas {
+      --codev-canvas-hover-line-background: color-mix(in srgb, var(--codev-canvas-foreground) 12%, transparent);
+      --codev-canvas-hover-paragraph-background: color-mix(in srgb, var(--codev-canvas-foreground) 6%, transparent);
+    }
   </style>
   <title>Codev Markdown Preview</title>
 </head>

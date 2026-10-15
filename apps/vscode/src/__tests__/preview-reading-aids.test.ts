@@ -83,6 +83,14 @@ describe('reading aids bootstrap attributes', () => {
     expect(tag).toBe('<div id="root">');
   });
 
+  it('strengthens the line band and paragraph tint in dark themes only', () => {
+    const html = renderMarkdownPreviewHtml(base);
+    const dark = html.slice(html.indexOf('body.vscode-dark'));
+    expect(dark).toContain('--codev-canvas-hover-line-background: color-mix(in srgb, var(--codev-canvas-foreground) 12%');
+    expect(dark).toContain('--codev-canvas-hover-paragraph-background: color-mix(in srgb, var(--codev-canvas-foreground) 6%');
+    expect(html).not.toContain('vscode-light .codev-artifact-canvas');
+  });
+
   it('maps the word pill token to the theme hover color', () => {
     expect(renderMarkdownPreviewHtml(base)).toContain(
       '--codev-canvas-hover-word-background: var(--vscode-toolbar-hoverBackground);',
