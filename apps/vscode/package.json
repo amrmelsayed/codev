@@ -118,6 +118,10 @@
         "title": "Codev: Reset Markdown Preview Font Size"
       },
       {
+        "command": "codev.markdownPreview.readingAids",
+        "title": "Codev: Markdown Preview Reading Aids…"
+      },
+      {
         "command": "codev.forwardSelectionToBuilder",
         "title": "Codev: Forward Selection to Builder"
       },
@@ -526,6 +530,11 @@
           "group": "1_run"
         },
         {
+          "command": "codev.markdownPreview.readingAids",
+          "when": "activeCustomEditorId == codev.markdownPreview",
+          "group": "1_run"
+        },
+        {
           "command": "codev.diffCodelensUseForward",
           "when": "codev.activeEditorIsBuilderFile && codev.diffCodelensMode == 'comment'",
           "group": "navigation"
@@ -563,6 +572,10 @@
         },
         {
           "command": "codev.markdownPreview.resetFontSize",
+          "when": "activeCustomEditorId == codev.markdownPreview"
+        },
+        {
+          "command": "codev.markdownPreview.readingAids",
           "when": "activeCustomEditorId == codev.markdownPreview"
         },
         {
@@ -1324,6 +1337,38 @@
           "default": 0,
           "minimum": 0,
           "description": "Prose line-height (unitless multiplier) for the Codev Markdown Preview. 0 uses the built-in default (1.5, the github-markdown-css baseline)."
+        },
+        "codev.markdownPreview.hoverHighlight": {
+          "type": "string",
+          "enum": [
+            "none",
+            "word",
+            "wordLine",
+            "wordLineParagraph"
+          ],
+          "enumDescriptions": [
+            "No highlight.",
+            "A soft pill behind the word under the pointer.",
+            "The word plus a fainter band along its line.",
+            "The word, its line, and a faint tint behind the whole paragraph."
+          ],
+          "default": "wordLine",
+          "description": "Reading aid for the Codev Markdown Preview: what to highlight under the pointer. Also available from the preview's title-bar menu (Reading Aids…)."
+        },
+        "codev.markdownPreview.readingCursor": {
+          "type": "string",
+          "enum": [
+            "arrow",
+            "iBeam",
+            "hand"
+          ],
+          "enumDescriptions": [
+            "The standard arrow.",
+            "The text (I-beam) cursor.",
+            "The pointing hand."
+          ],
+          "default": "arrow",
+          "description": "Mouse pointer shape over prose in the Codev Markdown Preview. Code, comment cards and buttons keep their own pointers. Also available from the preview's title-bar menu (Reading Aids…)."
         }
       }
     },
