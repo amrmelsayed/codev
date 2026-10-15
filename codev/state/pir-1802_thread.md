@@ -30,3 +30,6 @@
 - Owner added two styles, `line` and `lineParagraph` (no word pill), and made `lineParagraph` the default. Highlight list: None, Word, Word and line, Word line and paragraph, Line, Line and paragraph.
 - Owner: cursor flipped back to the arrow over inline code chips. Fix: only fenced code, cards, composer and "+" keep the arrow; inline code takes the prose cursor. Same root cause for the highlight: inline code now keeps the line band and paragraph tint (only the word pill is skipped, the chip's background would hide it). Supersedes plan decision 5 for inline code.
 - Owner: dark mode too faint. VS Code template now sets line 12% / paragraph 6% under body.vscode-dark (and dark high contrast); light keeps the package's 6% / 3.5%.
+
+## 2026-10-16 review
+- PR #1812 (Refs #1802). 3-way: gemini APPROVE, codex COMMENT, claude APPROVE. Comments fixed in 3ba554fd9 (scroll test now requires a moved shape under the pointer; redraw anchors on the pointer's fragment; default pinned across canvas/host/package.json; README + plan notes). At pr gate, Amr's.
