@@ -343,6 +343,19 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Concern (note)**: `.consult/` is exempt from change detection → **Addressed**: the command docs now say so
 - **Concern (note)**: no human-driven interactive launch yet → **N/A**: owner-side, disclosed above
 
+### PR Review (Round 6, on the history-guidance change, head c979579f6)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `.codev-new` paths were excluded from the skill's symlink check, so an existing symlinked `<file>.codev-new` was written through → **Addressed**: a skill holding a pending copy that is not a regular file is `not-regular` and left alone, and a pending copy is now written with `wx` after removing a regular one. The same defect existed at the root-file site, where a symlinked `CLAUDE.md.codev-new` / `AGENTS.md.codev-new` was written through and a dangling root-file symlink was followed to create a file. `copyRootFiles` now skips either and reports it as skipped. A root file that is itself a symlink (`CLAUDE.md -> AGENTS.md`) still gets its regular `.codev-new` beside it. Tests cover each case
+- **Concern**: required hot sections still matched by prefix, so `## Critical facts appendix` counted → **Addressed**: `isSectionHeading` accepts the exact name or the name followed by a parenthetical, for presence and for counting. Regression test added; `hot-tier.test.ts` keeps its prefix defaults
+- **Concern**: final-head evidence → **Addressed**: full suite on the final code below, and real-repo run 4 on the history guidance
+#### Claude (APPROVE)
+- **Concern**: the history-guidance commit had no CMAP round or real-repo run → **Addressed**: this round, and run 4
+- **Concern**: no opt-out and no gitignore for skill `.codev-new` copies → **N/A here**: both are under Follow-up Items, and main is raising the opt-out with the owner
+- **Concern**: the duplication question is still unanswered on the PR → **Deferred to the owner**: a reply is drafted and waiting for the owner's go-ahead
+- **Concern**: three or four rebuttal docs untracked → **Addressed**: committed
+
 ## Lessons Learned
 
 ### What Went Well
@@ -398,4 +411,5 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - `codev update --dry-run`'s migration step is correctly guarded, but its log lines still say "(cleaned)" / "(removed)" rather than "would" (pre-existing, wording only).
 - `codev update --force` reports a newly created CLAUDE.md / AGENTS.md as "updated" and never overwrites an existing one (`copyRootFiles` without `handleConflicts` skips existing files), so for root files `--force` only fills in missing ones (pre-existing).
 - `.codev-new` copies (root files and now skills) are not gitignored, so a customised file or skill leaves untracked copies after every update until merged. A gitignore entry, or the opt-out above, would quiet it.
+- Pre-existing, noticed in round 6: `syncHotContextBlock` writes the managed block through a CLAUDE.md / AGENTS.md symlink, wherever it points. When the user linked the file on purpose, writing to it may be what they want; it is not changed here.
 - #1810: split the built-in harness providers out of `harness.ts`, one file per harness. As a first step on this PR, the interactive-launch blocker lists (`CLAUDE_SUBCOMMANDS`, `CLAUDE_INTERACTIVE_BLOCKING_FLAGS`, `CODEX_SUBCOMMANDS`) are no longer exported and sit beside the provider that uses them; tests go through the provider's blocker.

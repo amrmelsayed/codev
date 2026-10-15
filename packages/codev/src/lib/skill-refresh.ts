@@ -86,6 +86,19 @@ export function readSkillFiles(dir: string): SkillFile[] | null {
   return files;
 }
 
+/**
+ * Whether a skill directory holds a pending `.codev-new` that is not a regular file. A
+ * symlinked pending path would carry the next `.codev-new` write outside the project.
+ */
+function hasIrregularPending(dir: string): boolean {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.name.endsWith(CODEV_NEW_SUFFIX) && !entry.isFile()) return true;
+    if (entry.isDirectory() && hasIrregularPending(full)) return true;
+  }
+  return false;
+}
+
 export function hashSkillDir(dir: string): string | null {
   const files = readSkillFiles(dir);
   if (files === null) return null;
@@ -124,7 +137,7 @@ export function classifySkill(
 ): SkillState {
   if (!fs.existsSync(projectSkillDir) && !isSymlink(projectSkillDir)) return 'missing';
   const files = readSkillFiles(projectSkillDir);
-  if (files === null || files.some(file => file.link)) return 'not-regular';
+  if (files === null || files.some(file => file.link) || hasIrregularPending(projectSkillDir)) return 'not-regular';
   const projectHash = hashSkillFiles(files);
   if (projectHash === hashSkillDir(packageSkillDir)) return 'current';
   if ((history[key] ?? []).includes(projectHash)) return 'shipped';
@@ -275,7 +288,9 @@ export function refreshSkills(
           if (write) {
             const target = path.join(projectSkillDir, file.path);
             fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.writeFileSync(target + CODEV_NEW_SUFFIX, file.content);
+            // `wx` after removing a regular pending copy: never follow a path swapped in since.
+            fs.rmSync(target + CODEV_NEW_SUFFIX, { force: true });
+            fs.writeFileSync(target + CODEV_NEW_SUFFIX, file.content, { flag: 'wx' });
           }
           result.conflicts.push(`${key}/${file.path}`);
         }

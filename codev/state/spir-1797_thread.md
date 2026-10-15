@@ -97,3 +97,10 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - The last 100 raw commits cover about 9 days here, which was too shallow.
 - The skill's bootstrap-mode history step now also covers: the project's own record (CHANGELOG, ADRs, tags); one line per PR via `--first-parent`, with merge-commit PR titles from the bodies (execa squash-merges, so `--merges` alone fails there); sampling older eras; and removed areas.
 - Changed in all four copies, hash history regenerated. Real-repo run 4 to follow.
+
+**CMAP round 6 (c979579f6):** Gemini and Claude APPROVE; Codex REQUEST_CHANGES. The fixes:
+- A symlinked `.codev-new` was written through, for skills and for root files.
+- A dangling root-file symlink was followed to create a file.
+- Required hot sections matched by prefix.
+- Committed the untracked rebuttal docs.
+- Full suite: 315 files, 6414 passed; tsc clean.

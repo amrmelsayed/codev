@@ -269,6 +269,44 @@ describe('update command', () => {
       expect(fs.existsSync(path.join(projectDir, 'AGENTS.md.codev-new'))).toBe(false);
     });
 
+    it('never writes a root file through a symlink, but still offers .codev-new beside a symlinked CLAUDE.md', async () => {
+      const projectDir = path.join(testBaseDir, 'root-symlinks');
+      const outside = path.join(testBaseDir, 'outside');
+      fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });
+      fs.mkdirSync(outside, { recursive: true });
+      // CLAUDE.md -> AGENTS.md is a common setup; its .codev-new is a regular file beside it.
+      fs.writeFileSync(path.join(projectDir, 'AGENTS.md'), 'my agents\n');
+      fs.symlinkSync('AGENTS.md', path.join(projectDir, 'CLAUDE.md'));
+      // A symlinked pending copy must not be written through.
+      fs.writeFileSync(path.join(outside, 'target.md'), 'outside\n');
+      fs.symlinkSync(path.join(outside, 'target.md'), path.join(projectDir, 'AGENTS.md.codev-new'));
+      process.chdir(projectDir);
+
+      const { update } = await import('../commands/update.js');
+      const result = await update({ agent: true });
+
+      expect(result.rootConflicts.map(c => c.file)).toEqual(['CLAUDE.md']);
+      expect(fs.lstatSync(path.join(projectDir, 'CLAUDE.md.codev-new')).isFile()).toBe(true);
+      expect(result.skipped).toContain('AGENTS.md');
+      expect(fs.readFileSync(path.join(outside, 'target.md'), 'utf-8')).toBe('outside\n');
+      expect(fs.readFileSync(path.join(projectDir, 'AGENTS.md'), 'utf-8')).toContain('my agents');
+    });
+
+    it('a dangling root-file symlink is not followed to create a file', async () => {
+      const projectDir = path.join(testBaseDir, 'root-dangling');
+      const outside = path.join(testBaseDir, 'outside-dangling');
+      fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });
+      fs.mkdirSync(outside, { recursive: true });
+      fs.symlinkSync(path.join(outside, 'CLAUDE.md'), path.join(projectDir, 'CLAUDE.md'));
+      process.chdir(projectDir);
+
+      const { update } = await import('../commands/update.js');
+      const result = await update({ agent: true });
+
+      expect(result.skipped).toContain('CLAUDE.md');
+      expect(fs.existsSync(path.join(outside, 'CLAUDE.md'))).toBe(false);
+    });
+
     it('a --dry-run --force reports root files but creates and overwrites nothing', async () => {
       const projectDir = path.join(testBaseDir, 'root-dryrun-force');
       fs.mkdirSync(path.join(projectDir, 'codev'), { recursive: true });

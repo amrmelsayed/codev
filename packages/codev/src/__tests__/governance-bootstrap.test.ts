@@ -475,6 +475,23 @@ describe('empty hot sections', () => {
     ]);
     expect(violations.map(v => v.kind)).not.toContain('too-many-entries');
   });
+
+  it('a heading that only starts with the required name does not count as the section', () => {
+    const hot = [
+      '# arch-critical.md',
+      '',
+      '## Critical facts appendix',
+      '- A fact in the wrong place.',
+      '',
+      '## Map of arch.md appendix',
+      '- Architecture — always.',
+      '',
+    ].join('\n');
+    const messages = validateHotFile(hot, '# Architecture\n', ARCH_CRITICAL).violations
+      .filter(v => v.kind === 'missing-section')
+      .map(v => v.message);
+    expect(messages).toEqual(['missing "## Critical facts" section', 'missing "## Map of arch.md" section']);
+  });
 });
 
 describe('hot guidance comment', () => {

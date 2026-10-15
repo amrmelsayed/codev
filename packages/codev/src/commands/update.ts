@@ -263,14 +263,22 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
     // Update root files (CLAUDE.md, AGENTS.md). A dry run reports the same outcome and
     // writes nothing.
     const projectName = path.basename(targetDir);
+    const reportIrregularRootFiles = (files: string[]): void => {
+      for (const file of files) {
+        result.skipped.push(file);
+        log(chalk.dim('  - (skipped, symlinked or not a regular file)'), file);
+      }
+    };
     if (force) {
       const rootResult = copyRootFiles(targetDir, templatesDir, projectName, { dryRun });
+      reportIrregularRootFiles(rootResult.notRegular);
       for (const file of rootResult.copied) {
         result.updated.push(file);
         log(chalk.blue(`  ~ (${previewVerb}updated)`), file);
       }
     } else {
       const rootResult = copyRootFiles(targetDir, templatesDir, projectName, { handleConflicts: true, dryRun });
+      reportIrregularRootFiles(rootResult.notRegular);
       for (const file of rootResult.copied) {
         result.newFiles.push(file);
         log(chalk.green(`  + (${previewVerb}new)`), file);

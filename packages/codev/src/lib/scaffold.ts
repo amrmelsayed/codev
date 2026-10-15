@@ -254,6 +254,17 @@ interface CopyRootFilesOptions {
 interface CopyRootFilesResult {
   copied: string[];
   conflicts: string[];
+  /** Root files left alone because the path to write is a symlink or otherwise irregular. */
+  notRegular: string[];
+}
+
+/** Something other than a regular file sits at `p` (a symlink, dangling or not; a directory). */
+function isIrregularPath(p: string): boolean {
+  try {
+    return !fs.lstatSync(p).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -268,6 +279,7 @@ export function copyRootFiles(
   const { handleConflicts = false, dryRun = false } = options;
   const copied: string[] = [];
   const conflicts: string[] = [];
+  const notRegular: string[] = [];
 
   const rootFiles = ['CLAUDE.md', 'AGENTS.md'];
   for (const file of rootFiles) {
@@ -280,6 +292,17 @@ export function copyRootFiles(
 
     const content = fs.readFileSync(srcPath, 'utf-8')
       .replace(/\{\{PROJECT_NAME\}\}/g, projectName);
+
+    // Never write through a symlink, which may point outside the project: not the
+    // `.codev-new` copy, and not a dangling link where a missing file would be created. A
+    // root file that is itself a symlink (CLAUDE.md -> AGENTS.md) is fine: only its
+    // `.codev-new` sibling is written.
+    const pendingIrregular = handleConflicts && isIrregularPath(destPath + '.codev-new');
+    const danglingDest = !fs.existsSync(destPath) && isIrregularPath(destPath);
+    if (pendingIrregular || danglingDest) {
+      notRegular.push(file);
+      continue;
+    }
 
     if (fs.existsSync(destPath)) {
       if (handleConflicts) {
@@ -294,7 +317,7 @@ export function copyRootFiles(
     }
   }
 
-  return { copied, conflicts };
+  return { copied, conflicts, notRegular };
 }
 
 interface CreateProjectsDirOptions {

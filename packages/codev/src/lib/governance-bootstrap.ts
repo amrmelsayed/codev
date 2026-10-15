@@ -290,12 +290,29 @@ export const HOT_CAP_ENTRIES = 10;
 export const HOT_CAP_MAP_TOPICS = 12;
 
 /** `- ` entries under the `## <headingPrefix>…` section, up to the next `## `. */
-export function bulletsUnder(content: string, headingPrefix: string): string[] {
+/**
+ * Whether a `## ` heading text is the section `name` itself: exactly `name`, or `name`
+ * followed by a parenthetical (`Critical facts (consult before deciding)`). Unlike a
+ * prefix test, `Critical facts appendix` is not `Critical facts`.
+ */
+export function isSectionHeading(heading: string, name: string): boolean {
+  return heading === name || heading.startsWith(`${name} (`);
+}
+
+/**
+ * Bullets under every `## ` heading starting with `headingPrefix`, or with `exact`, under
+ * the section `headingPrefix` names exactly (`isSectionHeading`).
+ */
+export function bulletsUnder(content: string, headingPrefix: string, exact = false): string[] {
   let inSection = false;
   const bullets: string[] = [];
   for (const line of toLines(content)) {
     if (line.startsWith('## ')) {
-      inSection = line.startsWith(`## ${headingPrefix}`);
+      if (exact) {
+        inSection = isSectionHeading(line.slice(3).trim(), headingPrefix);
+      } else {
+        inSection = line.startsWith(`## ${headingPrefix}`);
+      }
     } else if (inSection && line.startsWith('- ')) {
       bullets.push(line);
     }
@@ -314,8 +331,8 @@ export function topLevelHeadings(content: string): string[] {
 const MAP_SEPARATORS = [' — ', ' – ', ' - '];
 
 /** The topic each map entry points at: its text before the `consult when…` guidance. */
-export function mapTopics(content: string, headingPrefix = 'Map'): string[] {
-  return bulletsUnder(content, headingPrefix).map(line => {
+export function mapTopics(content: string, headingPrefix = 'Map', exact = false): string[] {
+  return bulletsUnder(content, headingPrefix, exact).map(line => {
     const entry = line.slice(2);
     const cuts = MAP_SEPARATORS.map(sep => entry.indexOf(sep)).filter(index => index >= 0);
     if (cuts.length === 0) return entry.trim();
@@ -425,15 +442,16 @@ export function validateHotFile(
   }
 
   const heading = entriesHeading(file);
-  const hasEntries = topLevelHeadings(content).some(h => h.startsWith(heading));
-  const hasMap = topLevelHeadings(content).some(h => h.startsWith(`Map of ${file.coldDoc}`));
+  const mapHeading = `Map of ${file.coldDoc}`;
+  const hasEntries = topLevelHeadings(content).some(h => isSectionHeading(h, heading));
+  const hasMap = topLevelHeadings(content).some(h => isSectionHeading(h, mapHeading));
   if (!hasEntries) violations.push({ kind: 'missing-section', message: `missing "## ${heading}" section` });
   if (!hasMap) violations.push({ kind: 'missing-section', message: `missing "## Map of ${file.coldDoc}" section` });
 
   // Count only the required sections, so a similarly named extra section ("## Critical
   // notes", "## Mapping") can neither fill an empty one nor dodge the caps.
-  const entries = bulletsUnder(content, heading).length;
-  const topics = mapTopics(content, `Map of ${file.coldDoc}`);
+  const entries = bulletsUnder(content, heading, true).length;
+  const topics = mapTopics(content, mapHeading, true);
   // A heading with nothing under it is a draft that was never filled in, not a pass.
   if (hasEntries && entries === 0) {
     violations.push({ kind: 'empty-section', message: `"## ${heading}" has no entries` });

@@ -181,6 +181,15 @@ describe('refreshSkills: symlinks and pending copies', () => {
     expect(fs.readdirSync(path.join(base, 'shared-skills'))).toEqual([]);
   });
 
+  it('an edited skill whose pending .codev-new is a symlink is left alone, nothing written through it', () => {
+    write(project, '.claude/skills/demo/SKILL.md', 'mine\n');
+    write(base, 'outside.md', 'outside\n');
+    fs.symlinkSync(path.join(base, 'outside.md'), path.join(project, '.claude/skills/demo/SKILL.md.codev-new'));
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result.notRegular).toEqual(['.claude/skills/demo/']);
+    expect(fs.readFileSync(path.join(base, 'outside.md'), 'utf-8')).toBe('outside\n');
+  });
+
   it('a symlinked provider directory (.claude) is left alone too', () => {
     fs.mkdirSync(path.join(base, 'shared-claude'));
     fs.symlinkSync(path.join(base, 'shared-claude'), path.join(project, '.claude'));
