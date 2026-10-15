@@ -14,3 +14,13 @@
 - Owner ruled: `None` is the first Highlight item in the picker (setting value renamed `off` → `none` to match the label).
 - vscode architect: setting renamed `codev.markdownPreview.cursor` → `codev.markdownPreview.readingCursor` (bare 'cursor' reads as the caret). Owner: cursor choice is its own section of the Reading Aids picker.
 - Owner: add I-beam as a third cursor option (value `iBeam`, `cursor: text`); picker Cursor section is Arrow / I-beam / Hand, default arrow.
+
+## 2026-10-16 implement
+- Plan approved by Amr (relayed by vscode architect, 2026-10-15T23:11:19Z, head b189e6194); ran porch approve.
+- Canvas: `hover-word.ts` (pure helpers) + `useHoverWordHighlight.ts` (controller, fixed layer at z-index -1 under `isolation: isolate`, pooled shapes, native listeners). Props `hoverHighlight` / `readingCursor`, three foreground-derived tokens, `data-reading-cursor` root attribute.
+- Deviation, small: the line band spans the TEXT on the word's line (clipped to its column), not the block's full width. Matches what the owner approved in the lab and avoids a band running past a short last line.
+- Bugs caught by the browser suite: sticky-gap rule used a stale line box after scroll (shape stayed on the old word); regex fallback treated `--` as a word. Both fixed with tests.
+- Architect polish taken: both parsers match case-insensitively (`ibeam` → `iBeam`).
+- VS Code: two enum settings, "Reading Aids…" QuickPick in editor/title `1_run`, attributes on `#root`, word pill mapped to `--vscode-toolbar-hoverBackground`.
+- Verified the real webview bundle in Chromium with dark and light VS Code colors over this plan doc: pill behind the word, band, paragraph tint, none, cursors.
+- Worktree has no `worktree.devCommand` (shared config); dev gate runs via `.vscode/launch.json` "Run Codev Extension".
