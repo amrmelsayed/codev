@@ -50,6 +50,13 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Draft review:** Codex and Claude reviewed, and Gemini was named as skipped. As before, they found claims to correct before commit (the method-factory description, an over-absolute PID rule, the sync `all` path). Claude checked for sensitive material first and found the drafts clean.
 - **Re-run:** "Nothing needs bootstrapping", exit 0, all four files byte-identical.
 
+**Run 4, on the deeper history guidance (c979579f6).** Fresh clone of `sindresorhus/execa`, branch build with the new survey step, `adopt -y` then `bootstrap-docs`, same pty and headless driver.
+
+- **The agent followed the new guidance.** It loaded the installed skill, read the release tags, counted commits per year, sampled the 2024 and 2019 eras along the first-parent line, ran a scar-tissue grep with its own words (hang, leak, crash, unhandled, flaky, harden), searched for removals and renames, and used `git show` on the commits behind specific lessons (prototype pollution, cross-spawn). execa has no CHANGELOG, so there was none to read.
+- **Result:** all four files passed validation, there were "No changes outside the eligible files", and the exit code was 0. `arch.md` has 12 sections and `lessons-learned.md` has 11. The hot files are 32 and 31 lines, with the guidance comment kept.
+- **Draft review:** all three reviewers ran this time, Gemini included.
+- **Re-run:** "Nothing needs bootstrapping", exit 0, all four files byte-identical.
+
 ## Deviations from Plan
 
 - **Phase 1:** none of substance. `hot-tier.test.ts` now imports the shared cap/map helpers instead of keeping its own copies.

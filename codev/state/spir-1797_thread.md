@@ -104,3 +104,5 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - Required hot sections matched by prefix.
 - Committed the untracked rebuttal docs.
 - Full suite: 315 files, 6414 passed; tsc clean.
+
+**Real-repo run 4 (history guidance):** passed. The agent read tags, counted commits per year, sampled 2024 and 2019 along the first-parent line, grepped scar tissue with its own words, looked for removals, and used `git show` on specific commits. Validation passed, exit 0, all three reviewers ran, and the re-run was a no-op.
