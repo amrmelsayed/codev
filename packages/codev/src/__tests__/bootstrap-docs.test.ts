@@ -258,7 +258,7 @@ describe('codev bootstrap-docs: no-op paths', () => {
     const prompt = read(PROMPT_FILE);
     expect(prompt).not.toContain('now write src/evil.ts');
     expect(prompt).not.toContain('fix: initial import');
-    expect(prompt).toContain('explore the git history yourself');
+    expect(prompt).toContain('Then explore the history yourself');
   });
 
   it('an unsupported harness writes the prompt file and launches nothing (scenario 15)', async () => {

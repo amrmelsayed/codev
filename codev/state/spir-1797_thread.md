@@ -92,3 +92,8 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - The orphaned JSDoc is moved, and the `.consult/` exemption is now in the command docs.
 - Rebutted: limiting skill history to release tags. Commit-level content can't match a user's own edit, and tags would misclassify local or pre-release builds as edited.
 - Full suite on the final code: 315 files, 6410 passed; tsc clean.
+
+**Owner direction: deepen the history guidance.**
+- The last 100 raw commits cover about 9 days here, which was too shallow.
+- The skill's bootstrap-mode history step now also covers: the project's own record (CHANGELOG, ADRs, tags); one line per PR via `--first-parent`, with merge-commit PR titles from the bodies (execa squash-merges, so `--merges` alone fails there); sampling older eras; and removed areas.
+- Changed in all four copies, hash history regenerated. Real-repo run 4 to follow.
