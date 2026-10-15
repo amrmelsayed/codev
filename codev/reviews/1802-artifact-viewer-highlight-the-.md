@@ -56,7 +56,7 @@ Three things the issue reader should know up front:
 ## Test Results
 
 - Artifact canvas: `check-types` clean; vitest 202 passed (new `hover-word.test.ts`: word bounds with `Intl.Segmenter` and the regex fallback, parsers, `shapesOf`, exclusions, block resolution, shape geometry); Playwright 58 passed, 13 new in `hover-word.spec.ts` (each style, behind-the-text stacking, no empty frame crossing a word gap, short-line ends, code and cards, drag-select, mouseleave, columns mode, scroll under a still pointer, inline code, all three cursors). The existing 45 browser tests stay green.
-- VS Code extension: `check-types` (host + webview tsconfigs) clean, lint clean, vitest 1186 passed (new `preview-reading-aids.test.ts`: picker rows and order, current marking, opening row, placeholder, bootstrap attributes incl. hostile values, token mapping, dark-theme strengths, contributions); `pnpm compile` bundles verified to contain the new code.
+- VS Code extension: `check-types` (host + webview tsconfigs) clean, lint clean, vitest 1188 passed (new `preview-reading-aids.test.ts`: picker rows and order, current marking, opening row, placeholder, bootstrap attributes incl. hostile values, token mapping, dark-theme strengths, contributions); `pnpm compile` bundles verified to contain the new code.
 - Porch `build` and `tests` checks: pass (see the umask note under Things to Look At).
 - Real bundle in Chromium: the compiled `markdown-preview.js`/`.css` loaded under the actual `renderMarkdownPreviewHtml` output with VS Code dark and light colors over a real plan doc, for every style and cursor.
 - Manual (owner, dev gate): two feedback rounds in the VS Code dev host (picker placeholder and opening row, two added styles and the new default, cursor flicker over inline code, dark mode too faint), then approved at `d6bcd99da`.
@@ -81,6 +81,13 @@ COLD `codev/resources/lessons-learned.md`, three entries:
 - **Sticky gap rule after scroll.** Crossing a space or punctuation keeps the current word while the pointer stays inside its line box; on a scroll-triggered frame the line box is re-measured before that test (a stale box left the shapes on the old word; caught by the scroll Playwright case).
 - **Vocabulary twin.** The extension host cannot import the canvas runtime (it would pull React into the host bundle), so `reading-aids.ts` lists the choices itself, typed against the canvas types with a compile-time completeness check in both directions (`satisfies` plus an `Exclude`-must-be-`never` assertion).
 - **Dark-theme strengths** are set in the VS Code template (line 12%, paragraph 6%) under `body.vscode-dark` and dark high contrast; light themes keep the package defaults (6%, 3.5%). The word pill maps to `--vscode-toolbar-hoverBackground`.
+- **3-way consultation (single pass): Gemini APPROVE, Claude APPROVE, Codex COMMENT.** No REQUEST_CHANGES. Comments addressed in a follow-up commit:
+  - Codex: the scroll Playwright case passed when every shape vanished. It now scrolls by whole lines onto a line with a letter under the pointer and requires exactly one shape, moved, under the pointer (and it caught that a whole-line scroll keeps the same `top`, so "moved" compares the horizontal extent too).
+  - Codex: README said all code is excluded; corrected for inline code (keeps cursor, band and tint).
+  - Claude: `redrawCurrent()` anchored the band on `wordRects[0]`; it now anchors on the fragment under the pointer, as `tryDraw` does.
+  - Claude: the `lineParagraph` default lived in three places with no cross-check; a host test now pins canvas default = host picker default = `package.json` default (cursor too).
+  - Claude: the plan still described the pre-dev-gate design; it now opens with a "superseded in part" pointer to this review.
+  - Claude: the fixed full-viewport layer is now a documented host contract in the package README.
 - **Hand cursor and links.** With `hand`, links no longer stand out by cursor; they keep their colour and underline, and `hand` is opt-in.
 
 ## How to Test Locally

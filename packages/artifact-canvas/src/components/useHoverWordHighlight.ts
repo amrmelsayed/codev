@@ -237,7 +237,17 @@ class HoverWordController {
       this.clear();
       return;
     }
-    this.draw(cur.node, cur.start, cur.end, wordRects, wordRects[0], textMetricsOf(cur.node.parentElement));
+    // Anchor on the fragment under the pointer (a word wrapped across lines or columns has two),
+    // like `tryDraw` does, so a forced redraw never bands the other fragment.
+    const m = textMetricsOf(cur.node.parentElement);
+    let anchor = wordRects[0];
+    const p = this.pointer;
+    if (p) {
+      const padX = m.fontSize * 0.22;
+      const padY = m.fontSize * 0.12;
+      anchor = wordRects.find((r) => containsPoint(r, p.x, p.y, padX, padY)) ?? anchor;
+    }
+    this.draw(cur.node, cur.start, cur.end, wordRects, anchor, m);
   }
 
   private draw(node: Text, start: number, end: number, wordRects: Box[], anchor: Box, m: TextMetrics): void {

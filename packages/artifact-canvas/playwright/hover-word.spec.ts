@@ -276,20 +276,40 @@ test('scrolling under a still pointer moves the shapes to the word now under it'
   const r = await hoverWord(page, '.codev-artifact-canvas-body p', 'reviewer');
   await expect.poll(async () => (await shapes(page, 'word')).length).toBe(1);
   const before = (await shapes(page, 'word'))[0];
-  await page.mouse.wheel(0, 37);
+  const c = centre(r);
+  // Scroll by whole lines to a line whose text at the pointer's x is a letter, so a word (not a
+  // space) is guaranteed to end up under the still pointer.
+  const delta = await page.evaluate(({ x, y }) => {
+    const p = document.querySelector('.codev-artifact-canvas-body p')!;
+    const lh = parseFloat(getComputedStyle(p).lineHeight);
+    for (let k = 1; k <= 6; k += 1) {
+      const range = document.caretRangeFromPoint(x, y + k * lh);
+      const node = range?.startContainer;
+      if (node && node.nodeType === Node.TEXT_NODE && /\p{L}/u.test((node as Text).data[range!.startOffset] ?? '')) {
+        return k * lh;
+      }
+    }
+    return 0;
+  }, c);
+  expect(delta).toBeGreaterThan(0);
+  await page.mouse.wheel(0, delta);
+  // A shape must exist, must have moved, and must sit under the pointer: an empty layer fails.
   await expect
     .poll(async () => {
       const now = await shapes(page, 'word');
-      if (now.length === 0) return 'none';
-      return Math.abs(now[0].top - before.top) < 0.5 && Math.abs(now[0].left - before.left) < 0.5 ? 'same' : 'moved';
+      if (now.length !== 1) return `count ${now.length}`;
+      const s = now[0];
+      // Whole-line scrolling brings the next line to the same y, so a new word shows as a new
+      // horizontal extent (or a new top when the line spacing differs).
+      const moved =
+        Math.abs(s.left - before.left) >= 0.5 ||
+        Math.abs(s.width - before.width) >= 0.5 ||
+        Math.abs(s.top - before.top) >= 0.5;
+      const underPointer = s.top <= c.y && s.top + s.height >= c.y && s.left <= c.x && s.left + s.width >= c.x;
+      if (moved && underPointer) return 'ok';
+      return 'stale';
     })
-    .not.toBe('same');
-  // Whatever is lit now sits under the pointer.
-  const now = await shapes(page, 'word');
-  for (const s of now) {
-    expect(s.top).toBeLessThanOrEqual(r.top + r.height / 2 + 1);
-    expect(s.top + s.height).toBeGreaterThanOrEqual(r.top + r.height / 2 - 1);
-  }
+    .toBe('ok');
 });
 
 test('cursor: arrow by default, I-beam and hand opt-in, cards keep the arrow', async ({ page }) => {

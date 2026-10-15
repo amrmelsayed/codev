@@ -14,6 +14,8 @@ import {
   readingAidItems,
 } from '../markdown-preview/reading-aids.js';
 import { renderMarkdownPreviewHtml } from '../markdown-preview/preview-template.js';
+import { parseHighlightStyle, parseReadingCursor } from '@cluesmith/codev-artifact-canvas';
+import { DEFAULT_HOVER_HIGHLIGHT, DEFAULT_READING_CURSOR } from '../markdown-preview/reading-aids.js';
 
 const base = { cspSource: 'vscode-resource:', scriptUri: 's.js', styleUri: 's.css' };
 const rootTag = (html: string): string => html.match(/<div id="root"[^>]*>/)![0];
@@ -114,6 +116,14 @@ describe('reading aids contributions', () => {
     expect(props['codev.markdownPreview.hoverHighlight'].default).toBe('lineParagraph');
     expect(props['codev.markdownPreview.readingCursor'].enum).toEqual(['arrow', 'iBeam', 'hand']);
     expect(props['codev.markdownPreview.readingCursor'].default).toBe('arrow');
+  });
+
+  it('keeps the default in one agreement: canvas, host picker and settings schema', () => {
+    // The vocabulary twin is compile-checked; the default is pinned here (three places).
+    expect(DEFAULT_HOVER_HIGHLIGHT).toBe(parseHighlightStyle(undefined));
+    expect(props['codev.markdownPreview.hoverHighlight'].default).toBe(DEFAULT_HOVER_HIGHLIGHT);
+    expect(DEFAULT_READING_CURSOR).toBe(parseReadingCursor(undefined));
+    expect(props['codev.markdownPreview.readingCursor'].default).toBe(DEFAULT_READING_CURSOR);
   });
 
   it('puts Reading Aids… in the preview title-bar overflow beside Reset Font Size', () => {

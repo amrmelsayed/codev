@@ -1,5 +1,9 @@
 # PIR Plan: Hover-word highlight in the artifact viewer
 
+> **Superseded in part at the dev gate.** The owner added `line` and `lineParagraph`, moved the
+> default to `lineParagraph` (no word pill), and inline code now keeps the cursor and the line
+> band (decision 5 narrowed to fenced code). See `codev/reviews/1802-artifact-viewer-highlight-the-.md`.
+
 ## Understanding
 
 The markdown preview (`packages/artifact-canvas`, hosted by `apps/vscode/src/markdown-preview`)
