@@ -45,7 +45,8 @@ Constraints that shape the design, verified in source:
    cannot produce the requested look.
 2. **Highlight styles (owner ruling):** `none`, `word`, `wordLine`, `wordLineParagraph`,
    **default `wordLine`**. `none` turns the highlight off entirely.
-3. **Pointer (owner ruling):** `arrow` (default, keeps today's `cursor: default` from #1232) or
+3. **Cursor (owner ruling, its own section in the Reading Aids picker):** `arrow` (default,
+   keeps today's `cursor: default` from #1232) or
    `hand` (the system pointing hand, `cursor: pointer`), applied over prose only.
 4. **Where the choices live (owner ruling):** two user settings, plus one **"Reading Aids…"**
    item in the preview's title-bar `…` menu, next to Reset Font Size. No new button on the page.
@@ -127,7 +128,7 @@ Cost per frame: one caret lookup, one segmenter pass over a single text node, on
 measure, and at most one `getClientRects()` on the block. No layout writes inside the body, no
 reflow of the prose.
 
-### 3. Pointer
+### 3. Cursor
 
 - The canvas root gets `data-reading-cursor="hand"` when the cursor prop is `hand`. One CSS rule
   sets `cursor: pointer` on the body's prose under that attribute, excluding the same regions as
@@ -170,15 +171,16 @@ reflow of the prose.
 - `package.json` `contributes.configuration` (next to fontSize/lineHeight, ~line 1327):
   - `codev.markdownPreview.hoverHighlight`: string enum `none | word | wordLine | wordLineParagraph`,
     default `wordLine`, with `enumDescriptions`.
-  - `codev.markdownPreview.cursor`: string enum `arrow | hand`, default `arrow`, with
-    `enumDescriptions`.
+  - `codev.markdownPreview.readingCursor`: string enum `arrow | hand`, default `arrow`, with
+    `enumDescriptions`. Named `readingCursor` (vscode architect) so it does not read as the
+    text caret in the Settings list, and so host and canvas prop share one word.
 - `package.json` `commands`: `codev.markdownPreview.readingAids`, title
   "Codev: Markdown Preview Reading Aids…". `menus.editor/title`: same `when` as the font-size
   items (`activeCustomEditorId == codev.markdownPreview`), group `1_run` so it sits in the `…`
   overflow beside Reset Font Size. `commandPalette`: same `when`.
 - `apps/vscode/src/markdown-preview/reading-aids.ts` (new, no `vscode` import, like
   `font-size-control.ts`): the picker item list (Highlight section: None / Word / Word and line /
-  Word, line and paragraph; Pointer section: Arrow / Hand), which item is current, and the
+  Word, line and paragraph; Cursor section: Arrow / Hand), which item is current, and the
   (setting, value) pair an item writes.
 - `extension.ts`: register the command next to the font-size commands. It shows one QuickPick
   with two separator-labelled sections, the current choice of each marked with a check; picking an
@@ -271,7 +273,7 @@ reflow of the prose.
   absence for unknown ones; `pnpm check-types` for both tsconfigs.
 - **Manual (dev gate, the owner):** open a long plan in the Codev Markdown Preview from this
   worktree's extension build; use `…` → "Reading Aids…" to try None and all three styles and both
-  pointers, confirming each applies immediately; dark and light themes; both reading modes; a
+  cursors, confirming each applies immediately; dark and light themes; both reading modes; a
   couple of font sizes via the zoom buttons; drag-select across lines (no shapes, selection
   intact); hover a block with comment cards, use "+", type in the composer (no shapes while it has
   focus); pick Highlight → None and confirm the highlight disappears from the open

@@ -12,3 +12,4 @@
 - Placement: two settings (`codev.markdownPreview.hoverHighlight`, `codev.markdownPreview.cursor`) + one "Reading Aids…" QuickPick in the title-bar `…` menu beside Reset Font Size. No new on-page button (columns toggle is per-document; these are set-once like zoom).
 - Open: whether `off` appears in the picker or settings only (proposed settings-only).
 - Owner ruled: `None` is the first Highlight item in the picker (setting value renamed `off` → `none` to match the label).
+- vscode architect: setting renamed `codev.markdownPreview.cursor` → `codev.markdownPreview.readingCursor` (bare 'cursor' reads as the caret). Owner: cursor choice is its own section of the Reading Aids picker.
