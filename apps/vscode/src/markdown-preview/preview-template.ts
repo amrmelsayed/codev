@@ -33,7 +33,7 @@ export interface MarkdownPreviewHtmlOptions {
   /**
    * Reading aids (#1802) from `codev.markdownPreview.hoverHighlight` / `readingCursor`. Emitted
    * as `#root` data attributes only when they name a known value; anything else is omitted and
-   * the canvas uses its defaults (word and line, arrow).
+   * the canvas uses its defaults (line and paragraph, arrow).
    */
   hoverHighlight?: string;
   readingCursor?: string;

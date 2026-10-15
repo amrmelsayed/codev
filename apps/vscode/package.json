@@ -1344,15 +1344,19 @@
             "none",
             "word",
             "wordLine",
-            "wordLineParagraph"
+            "wordLineParagraph",
+            "line",
+            "lineParagraph"
           ],
           "enumDescriptions": [
             "No highlight.",
             "A soft pill behind the word under the pointer.",
             "The word plus a fainter band along its line.",
-            "The word, its line, and a faint tint behind the whole paragraph."
+            "The word, its line, and a faint tint behind the whole paragraph.",
+            "A faint band along the line under the pointer, no word pill.",
+            "The line band plus a faint tint behind the whole paragraph, no word pill."
           ],
-          "default": "wordLine",
+          "default": "lineParagraph",
           "description": "Reading aid for the Codev Markdown Preview: what to highlight under the pointer. Also available from the preview's title-bar menu (Reading Aids…)."
         },
         "codev.markdownPreview.readingCursor": {

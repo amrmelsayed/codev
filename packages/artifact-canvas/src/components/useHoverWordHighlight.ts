@@ -22,8 +22,10 @@ import {
   containsPoint,
   fragmentContainingX,
   isExcluded,
+  isInlineCode,
   lineBand,
   paragraphBlocks,
+  shapesOf,
   textMetricsOf,
   wordBoundsAt,
   wordPills,
@@ -252,11 +254,15 @@ class HoverWordController {
     const band = lineBand(anchor, lineRects, column, m);
     this.current = { node, start, end, lineBox: band };
 
-    const shapes: Record<ShapeKind, Box[]> = { paragraph: [], line: [], word: wordPills(wordRects, m) };
-    if (this.style === 'wordLine' || this.style === 'wordLineParagraph') {
+    const drawn = shapesOf(this.style);
+    const shapes: Record<ShapeKind, Box[]> = { paragraph: [], line: [], word: [] };
+    if (drawn.word && !isInlineCode(node)) {
+      shapes.word = wordPills(wordRects, m);
+    }
+    if (drawn.line) {
       shapes.line = [band];
     }
-    if (this.style === 'wordLineParagraph' && block) {
+    if (drawn.paragraph && block) {
       const cs = getComputedStyle(block);
       const insets = {
         left: parseFloat(cs.paddingLeft) || 0,

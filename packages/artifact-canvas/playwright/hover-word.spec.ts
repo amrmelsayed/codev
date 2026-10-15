@@ -117,8 +117,8 @@ test('word: moving within a word keeps the same pill; the next word moves it wit
   expect(contains(last, b)).toBe(true);
 });
 
-test('wordLine (default): a line band spanning the line, containing the word', async ({ page }) => {
-  await ready(page, '/');
+test('wordLine: a line band spanning the line, containing the word', async ({ page }) => {
+  await ready(page, '/?highlight=wordLine');
   const r = await hoverWord(page, '.codev-artifact-canvas-body p', 'realistic');
   await expect.poll(async () => (await shapes(page, 'line')).length).toBe(1);
   const [band] = await shapes(page, 'line');
@@ -148,6 +148,44 @@ test('wordLineParagraph: paragraph tint covers the paragraph text', async ({ pag
   expect(await shapes(page, 'word')).toHaveLength(1);
 });
 
+test('line: the band alone, no word pill', async ({ page }) => {
+  await ready(page, '/?highlight=line');
+  const r = await hoverWord(page, '.codev-artifact-canvas-body p', 'realistic');
+  await expect.poll(async () => (await shapes(page, 'line')).length).toBe(1);
+  expect(contains((await shapes(page, 'line'))[0], r)).toBe(true);
+  expect(await shapes(page, 'word')).toHaveLength(0);
+  expect(await shapes(page, 'paragraph')).toHaveLength(0);
+});
+
+test('lineParagraph (default): band and paragraph tint, no word pill', async ({ page }) => {
+  await ready(page, '/');
+  const r = await hoverWord(page, '.codev-artifact-canvas-body p', 'realistic');
+  await expect.poll(async () => (await shapes(page, 'line')).length).toBe(1);
+  expect(contains((await shapes(page, 'line'))[0], r)).toBe(true);
+  expect((await shapes(page, 'paragraph')).length).toBeGreaterThan(0);
+  expect(await shapes(page, 'word')).toHaveLength(0);
+  // Moving to the next line moves the band with it.
+  const before = (await shapes(page, 'line'))[0];
+  const next = await wordRect(page, '.codev-artifact-canvas-body li', 'markers', 2);
+  await page.mouse.move(next.left + next.width / 2, next.top + next.height / 2);
+  await expect.poll(async () => (await shapes(page, 'line'))[0]?.top).not.toBe(before.top);
+});
+
+test('inline code: the line band stays (no flicker), the word pill is skipped', async ({ page }) => {
+  await ready(page, '/?highlight=wordLineParagraph');
+  await page.evaluate(() => {
+    const p = document.querySelector('.codev-artifact-canvas-body p')!;
+    const code = document.createElement('code');
+    code.textContent = 'password_hash';
+    p.prepend(code, ' ');
+  });
+  const r = await hoverWord(page, '.codev-artifact-canvas-body p code', 'password_hash');
+  await expect.poll(async () => (await shapes(page, 'line')).length).toBe(1);
+  expect(contains((await shapes(page, 'line'))[0], r)).toBe(true);
+  expect((await shapes(page, 'paragraph')).length).toBeGreaterThan(0);
+  expect(await shapes(page, 'word')).toHaveLength(0);
+});
+
 test('none: no layer at all', async ({ page }) => {
   await ready(page, '/?highlight=none');
   await hoverWord(page, '.codev-artifact-canvas-body p', 'realistic');
@@ -156,13 +194,14 @@ test('none: no layer at all', async ({ page }) => {
 });
 
 test('no shapes past a short line end, over code, or over a comment card', async ({ page }) => {
-  await ready(page, '/');
+  await ready(page, '/?highlight=wordLineParagraph');
   // Past the end of a short list item.
   // nth 1: the marker card is also an `li`, and comes first.
   const item = await wordRect(page, '.codev-artifact-canvas-body li', 'safely', 1);
   await page.mouse.move(item.left + item.width + 120, item.top + item.height / 2);
   await page.waitForTimeout(50);
   expect(await shapes(page, 'word')).toHaveLength(0);
+  expect(await shapes(page, 'line')).toHaveLength(0);
   // Over fenced code.
   await hoverWord(page, '.codev-artifact-canvas-body pre', 'example');
   await page.waitForTimeout(50);
@@ -174,7 +213,7 @@ test('no shapes past a short line end, over code, or over a comment card', async
 });
 
 test('drag-select shows no shapes and selects the dragged text; leaving clears', async ({ page }) => {
-  await ready(page, '/');
+  await ready(page, '/?highlight=wordLineParagraph');
   const a = await wordRect(page, '.codev-artifact-canvas-body p', 'describes');
   const b = await wordRect(page, '.codev-artifact-canvas-body p', 'feature');
   await page.mouse.move(a.left + 1, a.top + a.height / 2);
@@ -194,7 +233,7 @@ test('drag-select shows no shapes and selects the dragged text; leaving clears',
 });
 
 test('horizontal mode: the line band stays inside the hovered word column', async ({ page }) => {
-  await page.goto('/?fixture=columns&mode=horizontal');
+  await page.goto('/?fixture=columns&mode=horizontal&highlight=wordLine');
   await expect(page.locator('.codev-artifact-canvas-body h1')).toHaveText('Columns fixture');
   // LONGPROSE fragments across columns; pick a word occurrence in the second column.
   const target = await page.evaluate(() => {
@@ -232,7 +271,7 @@ test('horizontal mode: the line band stays inside the hovered word column', asyn
 });
 
 test('scrolling under a still pointer moves the shapes to the word now under it', async ({ page }) => {
-  await page.goto('/?fixture=columns');
+  await page.goto('/?fixture=columns&highlight=word');
   await expect(page.locator('.codev-artifact-canvas-body h1')).toHaveText('Columns fixture');
   const r = await hoverWord(page, '.codev-artifact-canvas-body p', 'reviewer');
   await expect.poll(async () => (await shapes(page, 'word')).length).toBe(1);
@@ -265,4 +304,18 @@ test('cursor: arrow by default, I-beam and hand opt-in, cards keep the arrow', a
   await ready(page, '/?cursor=hand');
   expect(await cursorAt('.codev-artifact-canvas-body p')).toBe('pointer');
   expect(await cursorAt('.codev-canvas-marker-card')).toBe('default');
+  expect(await cursorAt('.codev-artifact-canvas-body pre code')).toBe('default');
+});
+
+test('cursor: inline code inside prose keeps the chosen cursor (no flicker along code-dense lines)', async ({ page }) => {
+  await ready(page, '/?cursor=hand');
+  // The sample has no inline code; add a chip to a paragraph to read its computed cursor.
+  const cursor = await page.evaluate(() => {
+    const p = document.querySelector('.codev-artifact-canvas-body p')!;
+    const code = document.createElement('code');
+    code.textContent = 'password_hash';
+    p.append(code);
+    return getComputedStyle(code).cursor;
+  });
+  expect(cursor).toBe('pointer');
 });

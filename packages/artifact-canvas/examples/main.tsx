@@ -11,7 +11,7 @@
  *   ?fixture=columns          load the columns fixture document instead of the sample
  *   ?mode=horizontal          seed `initialReadingMode` (any other value exercises coercion)
  *   ?height=unbounded         omit the bounded-height container (self-bounding assertion)
- *   ?highlight=<style>        seed the hover reading aid (#1802): none | word | wordLine | wordLineParagraph
+ *   ?highlight=<style>        seed the hover reading aid (#1802): none | word | wordLine | wordLineParagraph | line | lineParagraph
  *   ?cursor=<cursor>          seed the prose cursor (#1802): arrow | iBeam | hand
  * Default (no params) is the classic hands-on page, unchanged.
  *
@@ -174,6 +174,8 @@ function Example(): React.ReactElement {
             React.createElement('option', { value: 'word' }, 'Word'),
             React.createElement('option', { value: 'wordLine' }, 'Word and line'),
             React.createElement('option', { value: 'wordLineParagraph' }, 'Word, line and paragraph'),
+            React.createElement('option', { value: 'line' }, 'Line'),
+            React.createElement('option', { value: 'lineParagraph' }, 'Line and paragraph'),
           ),
         ),
         ' ',

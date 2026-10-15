@@ -24,3 +24,8 @@
 - VS Code: two enum settings, "Reading Aids…" QuickPick in editor/title `1_run`, attributes on `#root`, word pill mapped to `--vscode-toolbar-hoverBackground`.
 - Verified the real webview bundle in Chromium with dark and light VS Code colors over this plan doc: pill behind the word, band, paragraph tint, none, cursors.
 - Worktree has no `worktree.devCommand` (shared config); dev gate runs via `.vscode/launch.json` "Run Codev Extension".
+
+## 2026-10-16 dev-gate feedback round 1 (Amr)
+- Picker: the filter box is VS Code's own QuickPick input (cannot be hidden). Added a placeholder and the picker now opens on the current highlight style (it opened on None, where Enter would switch the aid off). Moved to createQuickPick for activeItems.
+- Owner added two styles, `line` and `lineParagraph` (no word pill), and made `lineParagraph` the default. Highlight list: None, Word, Word and line, Word line and paragraph, Line, Line and paragraph.
+- Owner: cursor flipped back to the arrow over inline code chips. Fix: only fenced code, cards, composer and "+" keep the arrow; inline code takes the prose cursor. Same root cause for the highlight: inline code now keeps the line band and paragraph tint (only the word pill is skipped, the chip's background would hide it). Supersedes plan decision 5 for inline code.

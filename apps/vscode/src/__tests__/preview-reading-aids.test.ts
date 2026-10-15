@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
+  READING_AIDS_PLACEHOLDER,
+  initialActiveRow,
   knownCursor,
   knownHighlight,
   readingAidItems,
@@ -17,13 +19,15 @@ const base = { cspSource: 'vscode-resource:', scriptUri: 's.js', styleUri: 's.cs
 const rootTag = (html: string): string => html.match(/<div id="root"[^>]*>/)![0];
 
 describe('reading aids picker model', () => {
-  it('lists None first, then the three styles, then the three cursors', () => {
+  it('lists None first, then the five styles, then the three cursors', () => {
     const rows = readingAidItems(undefined, undefined);
     expect(rows.map((r) => `${r.section}:${r.label}`)).toEqual([
       'Highlight:None',
       'Highlight:Word',
       'Highlight:Word and line',
       'Highlight:Word, line and paragraph',
+      'Highlight:Line',
+      'Highlight:Line and paragraph',
       'Cursor:Arrow',
       'Cursor:I-beam',
       'Cursor:Hand',
@@ -32,7 +36,7 @@ describe('reading aids picker model', () => {
 
   it('marks the defaults current when nothing is stored', () => {
     const current = readingAidItems(undefined, undefined).filter((r) => r.current).map((r) => r.value);
-    expect(current).toEqual(['wordLine', 'arrow']);
+    expect(current).toEqual(['lineParagraph', 'arrow']);
   });
 
   it('marks the stored values current, matching case-insensitively', () => {
@@ -46,6 +50,15 @@ describe('reading aids picker model', () => {
     expect([hand.setting, hand.value]).toEqual(['readingCursor', 'hand']);
     const none = rows.find((r) => r.label === 'None')!;
     expect([none.setting, none.value]).toEqual(['hoverHighlight', 'none']);
+  });
+
+  it('opens on the current highlight style, not on None', () => {
+    expect(initialActiveRow(readingAidItems(undefined, undefined))?.value).toBe('lineParagraph');
+    expect(initialActiveRow(readingAidItems('word', 'hand'))?.value).toBe('word');
+  });
+
+  it('labels the filter box', () => {
+    expect(READING_AIDS_PLACEHOLDER).toMatch(/type to filter/);
   });
 
   it('rejects unknown values', () => {
@@ -82,8 +95,15 @@ describe('reading aids contributions', () => {
   const props = pkg.contributes.configuration.properties ?? pkg.contributes.configuration[0]?.properties;
 
   it('declares both settings with the picker vocabulary and defaults', () => {
-    expect(props['codev.markdownPreview.hoverHighlight'].enum).toEqual(['none', 'word', 'wordLine', 'wordLineParagraph']);
-    expect(props['codev.markdownPreview.hoverHighlight'].default).toBe('wordLine');
+    expect(props['codev.markdownPreview.hoverHighlight'].enum).toEqual([
+      'none',
+      'word',
+      'wordLine',
+      'wordLineParagraph',
+      'line',
+      'lineParagraph',
+    ]);
+    expect(props['codev.markdownPreview.hoverHighlight'].default).toBe('lineParagraph');
     expect(props['codev.markdownPreview.readingCursor'].enum).toEqual(['arrow', 'iBeam', 'hand']);
     expect(props['codev.markdownPreview.readingCursor'].default).toBe('arrow');
   });

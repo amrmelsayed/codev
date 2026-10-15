@@ -51,7 +51,12 @@ import {
   type FontSizeDirection,
   type ConfigScope,
 } from './markdown-preview/font-size-control.js';
-import { readingAidItems, type ReadingAidItem } from './markdown-preview/reading-aids.js';
+import {
+	READING_AIDS_PLACEHOLDER,
+	initialActiveRow,
+	readingAidItems,
+	type ReadingAidItem,
+} from './markdown-preview/reading-aids.js';
 import { BuilderSpawnHandler } from './builder-spawn-handler.js';
 import { BuilderTerminalLinkProvider, ReconnectTerminalLinkProvider, IssueRefTerminalLinkProvider } from './terminal-link-provider.js';
 import { computeBuildersToClose, roleIdsFromBuilders } from './prune-builder-terminals.js';
@@ -208,7 +213,27 @@ async function pickMarkdownPreviewReadingAid(): Promise<void> {
 		}
 		picks.push({ label: row.label, iconPath: new vscode.ThemeIcon(icon), row });
 	}
-	const chosen = await vscode.window.showQuickPick(picks, { title: 'Markdown Preview Reading Aids' });
+	// createQuickPick (not showQuickPick) so the list can open on the current style.
+	const quickPick = vscode.window.createQuickPick<Pick>();
+	quickPick.title = 'Markdown Preview Reading Aids';
+	quickPick.placeholder = READING_AIDS_PLACEHOLDER;
+	quickPick.items = picks;
+	const start = initialActiveRow(rows);
+	const startPick = picks.find((p) => p.row !== undefined && p.row === start);
+	if (startPick) {
+		quickPick.activeItems = [startPick];
+	}
+	const chosen = await new Promise<Pick | undefined>((resolve) => {
+		quickPick.onDidAccept(() => {
+			resolve(quickPick.selectedItems[0]);
+			quickPick.hide();
+		});
+		quickPick.onDidHide(() => {
+			resolve(undefined);
+			quickPick.dispose();
+		});
+		quickPick.show();
+	});
 	if (!chosen?.row || chosen.row.current) {
 		return;
 	}

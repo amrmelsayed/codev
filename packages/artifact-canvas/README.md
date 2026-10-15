@@ -52,7 +52,7 @@ the host performs the input and calls its own `MarkerAdapter.add` (spec D6).
 | `refreshKey?` | `number \| string` | For hosts **without** a watcher: pass a new value whenever the underlying data changes to force a re-read + re-list. Hosts with a watcher omit it. |
 | `initialReadingMode?` | `string` | Seed for the reading mode (spec 1380). Typed `string` because it round-trips through host persistence and arrives untrusted; anything other than `'horizontal'` is coerced to `'vertical'`. |
 | `onReadingModeChange?` | `(mode: ReadingMode) => void` | Toggle intent: the host persists it per-user (VS Code `globalState`, browser `localStorage`, …) or ignores it — the canvas works without persistence, defaulting to vertical each mount. |
-| `hoverHighlight?` | `HoverHighlightStyle` | Hover reading aid (#1802): `'none'`, `'word'`, `'wordLine'` (default) or `'wordLineParagraph'`. Soft shapes drawn behind the text under the pointer; code, comment cards, the composer and the "+" are never lit. |
+| `hoverHighlight?` | `HoverHighlightStyle` | Hover reading aid (#1802): `'none'`, `'word'`, `'wordLine'`, `'wordLineParagraph'`, `'line'` or `'lineParagraph'` (default). The name lists the shapes drawn: word pill, line band, paragraph tint. Soft shapes drawn behind the text under the pointer; code, comment cards, the composer and the "+" are never lit. |
 | `readingCursor?` | `ReadingCursor` | Prose cursor (#1802): `'arrow'` (default, `cursor: default`), `'iBeam'` or `'hand'`. Code, cards, the composer and the "+" keep their own cursors. |
 
 ### Reading modes (spec 1380)

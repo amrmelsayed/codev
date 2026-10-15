@@ -38,10 +38,17 @@ export type ReadingMode = 'vertical' | 'horizontal';
 
 /**
  * Hover reading aid (#1802): what lights up under the pointer. `word` is a soft pill behind the
- * word; `wordLine` adds a fainter band along the word's line; `wordLineParagraph` adds a faintest
- * tint behind the whole paragraph; `none` turns the aid off.
+ * word; `line` is a fainter band along the word's line; `paragraph` styles add a faintest tint
+ * behind the whole paragraph. The names list the shapes drawn (`wordLine` = word pill + line
+ * band, `lineParagraph` = line band + paragraph tint, and so on); `none` turns the aid off.
  */
-export type HoverHighlightStyle = 'none' | 'word' | 'wordLine' | 'wordLineParagraph';
+export type HoverHighlightStyle =
+  | 'none'
+  | 'word'
+  | 'wordLine'
+  | 'wordLineParagraph'
+  | 'line'
+  | 'lineParagraph';
 
 /**
  * Pointer shape over prose (#1802). `arrow` keeps #1232's `cursor: default`; `iBeam` is the
@@ -139,7 +146,7 @@ export interface ArtifactCanvasProps {
   commandAdapter?: CommandAdapter;
   /**
    * Hover reading aid style (contract amendment #1802). Optional and additive: omitted means
-   * `wordLine`. Unrecognized values from an untyped host are coerced to the default.
+   * `lineParagraph`. Unrecognized values from an untyped host are coerced to the default.
    */
   hoverHighlight?: HoverHighlightStyle;
   /**

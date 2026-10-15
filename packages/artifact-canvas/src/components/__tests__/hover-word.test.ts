@@ -3,10 +3,12 @@ import {
   blockOf,
   fragmentContainingX,
   isExcluded,
+  isInlineCode,
   lineBand,
   paragraphBlocks,
   parseHighlightStyle,
   parseReadingCursor,
+  shapesOf,
   wordBoundsAt,
   wordPills,
   type Box,
@@ -57,14 +59,16 @@ describe('parseHighlightStyle / parseReadingCursor', () => {
     expect(parseHighlightStyle('wordline')).toBe('wordLine');
     expect(parseHighlightStyle('WordLineParagraph')).toBe('wordLineParagraph');
     expect(parseHighlightStyle('none')).toBe('none');
+    expect(parseHighlightStyle('line')).toBe('line');
+    expect(parseHighlightStyle('LINEPARAGRAPH')).toBe('lineParagraph');
     expect(parseReadingCursor('ibeam')).toBe('iBeam');
     expect(parseReadingCursor('hand')).toBe('hand');
   });
 
   it('falls back to the defaults for unknown or missing values', () => {
-    expect(parseHighlightStyle(undefined)).toBe('wordLine');
-    expect(parseHighlightStyle('sparkle')).toBe('wordLine');
-    expect(parseHighlightStyle(3)).toBe('wordLine');
+    expect(parseHighlightStyle(undefined)).toBe('lineParagraph');
+    expect(parseHighlightStyle('sparkle')).toBe('lineParagraph');
+    expect(parseHighlightStyle(3)).toBe('lineParagraph');
     expect(parseReadingCursor(undefined)).toBe('arrow');
     expect(parseReadingCursor('finger')).toBe('arrow');
   });
@@ -78,8 +82,19 @@ function bodyWith(html: string): HTMLElement {
   return body;
 }
 
+describe('shapesOf', () => {
+  it('draws exactly the shapes each style names', () => {
+    expect(shapesOf('none')).toEqual({ word: false, line: false, paragraph: false });
+    expect(shapesOf('word')).toEqual({ word: true, line: false, paragraph: false });
+    expect(shapesOf('wordLine')).toEqual({ word: true, line: true, paragraph: false });
+    expect(shapesOf('wordLineParagraph')).toEqual({ word: true, line: true, paragraph: true });
+    expect(shapesOf('line')).toEqual({ word: false, line: true, paragraph: false });
+    expect(shapesOf('lineParagraph')).toEqual({ word: false, line: true, paragraph: true });
+  });
+});
+
 describe('isExcluded / blockOf', () => {
-  it('excludes code, cards, the composer host and the affordance, but not prose', () => {
+  it('excludes fenced code, cards, the composer host and the affordance, but not prose or inline code', () => {
     const body = bodyWith(`
       <p id="prose">plain <a href="#">link</a> <code id="inline">x</code></p>
       <pre id="fence"><code>let a = 1;</code></pre>
@@ -90,7 +105,9 @@ describe('isExcluded / blockOf', () => {
     const text = (id: string): Node => body.querySelector(`#${id}`)!.firstChild!;
     expect(isExcluded(text('prose'), body)).toBe(false);
     expect(isExcluded(body.querySelector('a')!.firstChild!, body)).toBe(false);
-    expect(isExcluded(text('inline'), body)).toBe(true);
+    expect(isExcluded(text('inline'), body)).toBe(false);
+    expect(isInlineCode(text('inline'))).toBe(true);
+    expect(isInlineCode(text('prose'))).toBe(false);
     expect(isExcluded(body.querySelector('#fence code')!.firstChild!, body)).toBe(true);
     expect(isExcluded(text('card'), body)).toBe(true);
     expect(isExcluded(text('composer'), body)).toBe(true);

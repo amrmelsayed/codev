@@ -24,11 +24,27 @@ export interface WordBounds {
   end: number;
 }
 
-const HIGHLIGHT_STYLES: readonly HoverHighlightStyle[] = ['none', 'word', 'wordLine', 'wordLineParagraph'];
+const HIGHLIGHT_STYLES: readonly HoverHighlightStyle[] = [
+  'none',
+  'word',
+  'wordLine',
+  'wordLineParagraph',
+  'line',
+  'lineParagraph',
+];
 const READING_CURSORS: readonly ReadingCursor[] = ['arrow', 'iBeam', 'hand'];
 
-/** Default highlight style (owner ruling, #1802): word plus its line. */
-export const DEFAULT_HIGHLIGHT_STYLE: HoverHighlightStyle = 'wordLine';
+/** Default highlight style (owner ruling at the dev gate, #1802): line band plus paragraph tint. */
+export const DEFAULT_HIGHLIGHT_STYLE: HoverHighlightStyle = 'lineParagraph';
+
+/** Which shapes a style draws. */
+export function shapesOf(style: HoverHighlightStyle): { word: boolean; line: boolean; paragraph: boolean } {
+  return {
+    word: style === 'word' || style === 'wordLine' || style === 'wordLineParagraph',
+    line: style === 'wordLine' || style === 'wordLineParagraph' || style === 'line' || style === 'lineParagraph',
+    paragraph: style === 'wordLineParagraph' || style === 'lineParagraph',
+  };
+}
 /** Default cursor: the arrow, keeping #1232's `cursor: default`. */
 export const DEFAULT_READING_CURSOR: ReadingCursor = 'arrow';
 
@@ -153,11 +169,23 @@ export function caretAt(doc: Document, x: number, y: number): Caret | null {
 }
 
 /**
- * Regions the reading aid never lights: code (fenced and inline), injected comment cards, the
- * inline composer, and the in-row "+" affordance.
+ * Regions the reading aid never lights: fenced code, injected comment cards, the inline composer,
+ * and the in-row "+" affordance. Inline code is NOT excluded: it is part of the sentence, and
+ * dropping the line band over every chip made it flicker along code-dense lines (dev-gate
+ * feedback). It only skips the word pill (see `isInlineCode`).
  */
 export const EXCLUDED_SELECTOR =
-  'pre, code, .codev-canvas-marker-cards, .codev-canvas-comment-composer-host, .codev-canvas-row-affordance';
+  'pre, .codev-canvas-marker-cards, .codev-canvas-comment-composer-host, .codev-canvas-row-affordance';
+
+/**
+ * True for text inside an inline code chip. The chip paints its own opaque background, which
+ * would hide a pill behind it, so the word pill is skipped there; line and paragraph still draw.
+ */
+export function isInlineCode(node: Node): boolean {
+  const el = node.parentElement;
+  if (!el) return false;
+  return el.closest('code') !== null;
+}
 
 /** True when `node` is outside `body` or inside a region the reading aid skips. */
 export function isExcluded(node: Node, body: Element): boolean {

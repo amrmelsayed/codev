@@ -13,7 +13,7 @@ import type { HoverHighlightStyle, ReadingCursor } from '@cluesmith/codev-artifa
 export const HOVER_HIGHLIGHT_SETTING = 'hoverHighlight';
 export const READING_CURSOR_SETTING = 'readingCursor';
 
-export const DEFAULT_HOVER_HIGHLIGHT: HoverHighlightStyle = 'wordLine';
+export const DEFAULT_HOVER_HIGHLIGHT: HoverHighlightStyle = 'lineParagraph';
 export const DEFAULT_READING_CURSOR: ReadingCursor = 'arrow';
 
 /** Picker order is display order: None first (owner ruling). */
@@ -22,6 +22,8 @@ export const HIGHLIGHT_CHOICES = [
   { value: 'word', label: 'Word' },
   { value: 'wordLine', label: 'Word and line' },
   { value: 'wordLineParagraph', label: 'Word, line and paragraph' },
+  { value: 'line', label: 'Line' },
+  { value: 'lineParagraph', label: 'Line and paragraph' },
 ] as const satisfies readonly { value: HoverHighlightStyle; label: string }[];
 
 export const CURSOR_CHOICES = [
@@ -62,6 +64,9 @@ export function knownCursor(value: unknown): ReadingCursor | undefined {
 
 export type ReadingAidSection = 'Highlight' | 'Cursor';
 
+/** Placeholder for the picker's filter box, so the always-present VS Code input reads as intended. */
+export const READING_AIDS_PLACEHOLDER = 'Pick a highlight style or cursor (type to filter)';
+
 /** One selectable row of the picker: the setting it writes and whether it is the current value. */
 export interface ReadingAidItem {
   section: ReadingAidSection;
@@ -95,4 +100,12 @@ export function readingAidItems(storedHighlight: unknown, storedCursor: unknown)
     });
   }
   return items;
+}
+
+/**
+ * The row the picker opens on: the current highlight style. VS Code otherwise starts on the first
+ * row (None), where an immediate Enter would switch the highlight off.
+ */
+export function initialActiveRow(rows: readonly ReadingAidItem[]): ReadingAidItem | undefined {
+  return rows.find((r) => r.section === 'Highlight' && r.current);
 }
