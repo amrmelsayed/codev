@@ -43,9 +43,8 @@ Constraints that shape the design, verified in source:
 1. **Rendering: overlay rects (fix-shape option 1).** The mock is a rounded, padded pill; the
    CSS Custom Highlight API (`::highlight`) can paint neither rounded corners nor padding, so it
    cannot produce the requested look.
-2. **Highlight styles (owner ruling):** `word`, `wordLine`, `wordLineParagraph`, **default
-   `wordLine`**. A fourth value `off` exists for anyone who finds any highlight distracting
-   (see decision 6 for where it is exposed).
+2. **Highlight styles (owner ruling):** `none`, `word`, `wordLine`, `wordLineParagraph`,
+   **default `wordLine`**. `none` turns the highlight off entirely.
 3. **Pointer (owner ruling):** `arrow` (default, keeps today's `cursor: default` from #1232) or
    `hand` (the system pointing hand, `cursor: pointer`), applied over prose only.
 4. **Where the choices live (owner ruling):** two user settings, plus one **"Reading Aids…"**
@@ -53,9 +52,8 @@ Constraints that shape the design, verified in source:
 5. **Code: skipped.** No highlight inside `pre` or inline `code`. Code is rarely read word by word,
    and inline code carries its own opaque background which would cover a behind-the-text pill.
    **Headings and link text: included.** They are prose.
-6. **`off` in the picker:** proposed as settings-only (the picker lists the three styles; `off` is
-   set from the Settings editor). Owner to confirm at plan approval; listing it in the picker too
-   is a one-line change.
+6. **`None` in the picker (owner ruling):** listed as the first Highlight item, so turning the
+   highlight off never requires the Settings editor.
 
 Also excluded (per the issue): comment cards, the composer, the "+" affordance wrapper, and all
 fixed overlays (minimap, reading-mode toggle, keyboard help, progress readout).
@@ -115,7 +113,7 @@ props) so it never touches `activateFromPointer` or the affordance logic:
      paragraph shape per `blockOf(...).getClientRects()` fragment. All in client coordinates,
      expanded by the padding.
 - **Clearing.** `mouseleave` on the body, `mousedown` with the primary button (a drag starts),
-  `focusin` inside the composer, and the style turning `off` (the hook removes the layer and all
+  `focusin` inside the composer, and the style turning `none` (the hook removes the layer and all
   listeners).
 - **Scroll.** A capture-phase `scroll` listener on `document` (catches window scroll in vertical
   mode, body scroll in horizontal mode, and inner scrollers) re-runs the same rAF pipeline at the
@@ -156,7 +154,7 @@ reflow of the prose.
 
 ### 5. Canvas props (`packages/artifact-canvas/src/types.ts`, `ArtifactCanvas.tsx`)
 
-- `hoverHighlight?: 'off' | 'word' | 'wordLine' | 'wordLineParagraph'` (default `wordLine`) and
+- `hoverHighlight?: 'none' | 'word' | 'wordLine' | 'wordLineParagraph'` (default `wordLine`) and
   `readingCursor?: 'arrow' | 'hand'` (default `arrow`) on `ArtifactCanvasProps`, doc-commented as
   a contract amendment (#1802). Additive and optional: existing hosts (including
   `examples/main.tsx`) get the default highlight with no code change. Exported type aliases
@@ -170,7 +168,7 @@ reflow of the prose.
 ### 6. VS Code host (`apps/vscode`)
 
 - `package.json` `contributes.configuration` (next to fontSize/lineHeight, ~line 1327):
-  - `codev.markdownPreview.hoverHighlight`: string enum `off | word | wordLine | wordLineParagraph`,
+  - `codev.markdownPreview.hoverHighlight`: string enum `none | word | wordLine | wordLineParagraph`,
     default `wordLine`, with `enumDescriptions`.
   - `codev.markdownPreview.cursor`: string enum `arrow | hand`, default `arrow`, with
     `enumDescriptions`.
@@ -179,7 +177,7 @@ reflow of the prose.
   items (`activeCustomEditorId == codev.markdownPreview`), group `1_run` so it sits in the `…`
   overflow beside Reset Font Size. `commandPalette`: same `when`.
 - `apps/vscode/src/markdown-preview/reading-aids.ts` (new, no `vscode` import, like
-  `font-size-control.ts`): the picker item list (Highlight section: Word / Word and line /
+  `font-size-control.ts`): the picker item list (Highlight section: None / Word / Word and line /
   Word, line and paragraph; Pointer section: Arrow / Hand), which item is current, and the
   (setting, value) pair an item writes.
 - `extension.ts`: register the command next to the font-size commands. It shows one QuickPick
@@ -261,7 +259,7 @@ reflow of the prose.
   - `wordLine`: a line band whose vertical extent contains the word rect and whose horizontal
     extent matches the block; in columns mode the band stays inside the word's column.
   - `wordLineParagraph`: paragraph shape(s) covering the block's client rects.
-  - `off`: no layer.
+  - `none`: no layer.
   - Pointer past a short line's end → no shapes; inside `pre`, inline `code`, a marker card → no
     shapes; primary-button drag across lines → no shapes, and the selection text equals the
     dragged text; `mouseleave` → no shapes; wheel-scroll under a still pointer → shapes follow.
@@ -272,10 +270,10 @@ reflow of the prose.
 - **VS Code host:** template test asserting the two root attributes for known values and their
   absence for unknown ones; `pnpm check-types` for both tsconfigs.
 - **Manual (dev gate, the owner):** open a long plan in the Codev Markdown Preview from this
-  worktree's extension build; use `…` → "Reading Aids…" to try all three styles and both
+  worktree's extension build; use `…` → "Reading Aids…" to try None and all three styles and both
   pointers, confirming each applies immediately; dark and light themes; both reading modes; a
   couple of font sizes via the zoom buttons; drag-select across lines (no shapes, selection
   intact); hover a block with comment cards, use "+", type in the composer (no shapes while it has
-  focus); set `codev.markdownPreview.hoverHighlight` to `off` in Settings and confirm the
-  highlight disappears. For a quick look without VS Code:
+  focus); pick Highlight → None and confirm the highlight disappears from the open
+  preview. For a quick look without VS Code:
   `pnpm --filter @cluesmith/codev-artifact-canvas dev:example`.
