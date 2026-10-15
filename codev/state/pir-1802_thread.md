@@ -13,3 +13,4 @@
 - Open: whether `off` appears in the picker or settings only (proposed settings-only).
 - Owner ruled: `None` is the first Highlight item in the picker (setting value renamed `off` → `none` to match the label).
 - vscode architect: setting renamed `codev.markdownPreview.cursor` → `codev.markdownPreview.readingCursor` (bare 'cursor' reads as the caret). Owner: cursor choice is its own section of the Reading Aids picker.
+- Owner: add I-beam as a third cursor option (value `iBeam`, `cursor: text`); picker Cursor section is Arrow / I-beam / Hand, default arrow.

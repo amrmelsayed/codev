@@ -10,7 +10,7 @@ the glyphs, roughly line-box tall, sitting *behind* the text so the glyphs stay 
 
 After reviewing a side-by-side lab of eight variants rendered over a real spec, the owner widened
 the ask to three highlight styles (word; word + line; word + line + paragraph) and a choice of
-pointer (arrow or hand), both chosen from the preview's title-bar menu.
+cursor (arrow, I-beam or hand), both chosen from the preview's title-bar menu.
 
 Constraints that shape the design, verified in source:
 
@@ -46,7 +46,7 @@ Constraints that shape the design, verified in source:
 2. **Highlight styles (owner ruling):** `none`, `word`, `wordLine`, `wordLineParagraph`,
    **default `wordLine`**. `none` turns the highlight off entirely.
 3. **Cursor (owner ruling, its own section in the Reading Aids picker):** `arrow` (default,
-   keeps today's `cursor: default` from #1232) or
+   keeps today's `cursor: default` from #1232), `iBeam` (the text cursor, `cursor: text`) or
    `hand` (the system pointing hand, `cursor: pointer`), applied over prose only.
 4. **Where the choices live (owner ruling):** two user settings, plus one **"Reading Aids…"**
    item in the preview's title-bar `…` menu, next to Reset Font Size. No new button on the page.
@@ -130,10 +130,11 @@ reflow of the prose.
 
 ### 3. Cursor
 
-- The canvas root gets `data-reading-cursor="hand"` when the cursor prop is `hand`. One CSS rule
-  sets `cursor: pointer` on the body's prose under that attribute, excluding the same regions as
-  the highlight (cards, composer, affordance, `pre`, `code` keep their own cursors). With
-  `arrow` nothing changes: the body keeps `cursor: default` (#1232).
+- The canvas root gets `data-reading-cursor="iBeam"` or `"hand"` when the cursor prop is not
+  `arrow`. Two CSS rules set `cursor: text` / `cursor: pointer` on the body's prose under that
+  attribute, excluding the same regions as the highlight (cards, composer, affordance, `pre`,
+  `code` keep their own cursors). With `arrow` nothing changes: the body keeps
+  `cursor: default` (#1232).
 
 ### 4. Styling and tokens (`packages/artifact-canvas/src/styles/default-theme.css`)
 
@@ -149,14 +150,14 @@ reflow of the prose.
 - Layer and shape rules: fixed layer, `pointer-events: none`, word pill `border-radius: 0.3em`,
   line band and paragraph `border-radius: 0.4em`. Padding (≈0.2em horizontal, line-box tall) is
   applied in JS from the computed font size so it scales with the font-size / line-height settings.
-- The hand-cursor rule from section 3.
+- The I-beam and hand cursor rules from section 3.
 - Update the token snapshot in `src/__tests__/default-theme.test.ts` and the color-token table
   in the package README.
 
 ### 5. Canvas props (`packages/artifact-canvas/src/types.ts`, `ArtifactCanvas.tsx`)
 
 - `hoverHighlight?: 'none' | 'word' | 'wordLine' | 'wordLineParagraph'` (default `wordLine`) and
-  `readingCursor?: 'arrow' | 'hand'` (default `arrow`) on `ArtifactCanvasProps`, doc-commented as
+  `readingCursor?: 'arrow' | 'iBeam' | 'hand'` (default `arrow`) on `ArtifactCanvasProps`, doc-commented as
   a contract amendment (#1802). Additive and optional: existing hosts (including
   `examples/main.tsx`) get the default highlight with no code change. Exported type aliases
   `HoverHighlightStyle` and `ReadingCursor`.
@@ -171,7 +172,7 @@ reflow of the prose.
 - `package.json` `contributes.configuration` (next to fontSize/lineHeight, ~line 1327):
   - `codev.markdownPreview.hoverHighlight`: string enum `none | word | wordLine | wordLineParagraph`,
     default `wordLine`, with `enumDescriptions`.
-  - `codev.markdownPreview.readingCursor`: string enum `arrow | hand`, default `arrow`, with
+  - `codev.markdownPreview.readingCursor`: string enum `arrow | iBeam | hand`, default `arrow`, with
     `enumDescriptions`. Named `readingCursor` (vscode architect) so it does not read as the
     text caret in the Settings list, and so host and canvas prop share one word.
 - `package.json` `commands`: `codev.markdownPreview.readingAids`, title
@@ -180,7 +181,7 @@ reflow of the prose.
   overflow beside Reset Font Size. `commandPalette`: same `when`.
 - `apps/vscode/src/markdown-preview/reading-aids.ts` (new, no `vscode` import, like
   `font-size-control.ts`): the picker item list (Highlight section: None / Word / Word and line /
-  Word, line and paragraph; Cursor section: Arrow / Hand), which item is current, and the
+  Word, line and paragraph; Cursor section: Arrow / I-beam / Hand), which item is current, and the
   (setting, value) pair an item writes.
 - `extension.ts`: register the command next to the font-size commands. It shows one QuickPick
   with two separator-labelled sections, the current choice of each marked with a check; picking an
@@ -202,7 +203,7 @@ reflow of the prose.
 - `packages/artifact-canvas/src/components/ArtifactCanvas.tsx:~1350`: hook call, props, root attribute
 - `packages/artifact-canvas/src/types.ts:~125`: the two props and type aliases
 - `packages/artifact-canvas/src/index.ts`: export the type aliases and parsers
-- `packages/artifact-canvas/src/styles/default-theme.css:~42, ~100`: tokens, `isolation`, layer, shapes, hand cursor
+- `packages/artifact-canvas/src/styles/default-theme.css:~42, ~100`: tokens, `isolation`, layer, shapes, cursor rules
 - `packages/artifact-canvas/src/__tests__/default-theme.test.ts`: token snapshot
 - `packages/artifact-canvas/README.md`: token table + props
 - `packages/artifact-canvas/examples/main.tsx`: style and cursor selects
@@ -265,8 +266,8 @@ reflow of the prose.
   - Pointer past a short line's end → no shapes; inside `pre`, inline `code`, a marker card → no
     shapes; primary-button drag across lines → no shapes, and the selection text equals the
     dragged text; `mouseleave` → no shapes; wheel-scroll under a still pointer → shapes follow.
-  - Cursor: computed `cursor` on a prose paragraph is `default` with `arrow` and `pointer` with
-    `hand`; on a marker card it is unchanged in both.
+  - Cursor: computed `cursor` on a prose paragraph is `default` with `arrow`, `text` with
+    `iBeam` and `pointer` with `hand`; on a marker card it is unchanged in all three.
   - The existing Playwright suite and `pnpm --filter @cluesmith/codev-artifact-canvas test` stay
     green (data-line, cards, "+", composer untouched).
 - **VS Code host:** template test asserting the two root attributes for known values and their
