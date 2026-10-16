@@ -1,7 +1,7 @@
 id: '1809'
 title: never-activate-codev-inside-a-
 protocol: pir
-phase: plan
+phase: implement
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -17,4 +17,4 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-13T00:41:01.995Z'
-updated_at: '2026-10-16T00:18:32.202Z'
+updated_at: '2026-10-16T00:18:34.161Z'
