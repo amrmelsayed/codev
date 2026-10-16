@@ -47,6 +47,14 @@ The contextual panel's Code Review body is wired to the builder's review queue (
 
 Opening an untrusted folder no longer leaves the Codev sidebar inert until you trust the workspace (#1727, PR #1728). The extension activates immediately in Restricted Mode, and only four workspace-scoped settings that could redirect Tower or launch a process (Tower host and port, workspace path, auto-start) are held back until the folder is trusted. Your user-level values for those settings still apply.
 
+## Reading aids in the Markdown Preview
+
+The preview can now put a soft shape behind whatever your eye is on, so a long spec is easier to track line by line (#1802, PR #1812). Six styles are available: the word under the pointer as a rounded pill, its line as a band, its paragraph as a faint tint, and the combinations of those, plus None. The default lights the line and its paragraph. The prose cursor is yours to pick too: the arrow it has always used, an I-beam, or the pointing hand.
+
+Both choices live in a new "Reading Aids..." item in the preview's title-bar `...` menu, next to Reset Font Size, and in two settings (`codev.markdownPreview.hoverHighlight` and `codev.markdownPreview.readingCursor`) if you would rather set them once and forget them. A change applies to every open preview straight away.
+
+The shapes are painted behind the text, never over it, so nothing is dimmed and selecting or copying works exactly as before. Fenced code, comment cards, the composer and the "+" button are never lit and keep the arrow cursor; inline code keeps the band and the cursor you chose, because it reads as part of the sentence. Dark themes get slightly stronger shading than light ones, and the shapes scale with the preview's font size and follow the columns layout.
+
 ## Polish
 
 <!-- Small vscode items as bullets:
