@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ConnectionManager } from './connection-manager.js';
 import { wireCommandProvider } from './command-relay.js';
-import { fireActivity, setActivityHooks } from './activity-hooks.js';
+import { fireActivity, setActivityHooks, setActivityHooksSuppressed } from './activity-hooks.js';
 import { loadActivityHooks } from './load-activity-hooks.js';
 import { TerminalManager } from './terminal-manager.js';
 import { openResolvedArchitect } from './open-architect.js';
@@ -89,7 +89,7 @@ import { persistAreaGroupExpansion } from './views/area-group-expansion.js';
 import { buildArchitectReferenceInjection } from './architect-reference-injection.js';
 import { runPreflight, recheckCli, isCliReady, showPreflightFeedback, probeTowerVersion, openWalkthrough, maybeOpenWalkthrough } from './preflight/preflight.js';
 import { detectIdeMode, decideActivationTier, activationPolicy, IDE_SIMULATION_ENV_VAR } from './ide-mode.js';
-import { detectWorkspacePath } from './workspace-detector.js';
+import { detectWorkspacePath, detectIsBuilderWorktree } from './workspace-detector.js';
 import { loadWorktreeConfig, hasRunnableDevCommand } from './load-worktree-config.js';
 
 let connectionManager: ConnectionManager | null = null;
@@ -273,10 +273,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	// opening a folder from an empty window restarts the extension host
 	// anyway.
 	vscode.commands.executeCommand('setContext', 'codev.ideMode', ideMode);
-	const syncHasWorkspaceContext = () =>
+	// `codev.isBuilderWorktree` (#1809): the window is rooted at a
+	// `<root>/.builders/<id>` worktree. Codev never activates a worktree; the
+	// window attaches read-only to the parent, the Agents view is gated off
+	// (absent, not empty) and activity hooks are suppressed.
+	const syncHasWorkspaceContext = () => {
+		const isBuilderWorktree = detectIsBuilderWorktree();
+		setActivityHooksSuppressed(isBuilderWorktree);
 		vscode.commands.executeCommand(
+			'setContext', 'codev.isBuilderWorktree', isBuilderWorktree);
+		return vscode.commands.executeCommand(
 			'setContext', 'codev.hasWorkspace',
 			detectWorkspacePath() !== null);
+	};
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeWorkspaceFolders(syncHasWorkspaceContext));
 	syncHasWorkspaceContext(); // seed initial state

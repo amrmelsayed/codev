@@ -1151,7 +1151,7 @@
     "views": {
       "codev": [
         { "id": "codev.workspace", "name": "Workspace", "when": "codev.hasWorkspace" },
-        { "id": "codev.agents", "name": "Agents" },
+        { "id": "codev.agents", "name": "Agents", "when": "!codev.isBuilderWorktree" },
         { "id": "codev.backlog", "name": "Backlog", "when": "codev.hasWorkspace" },
         { "id": "codev.pullRequests", "name": "Pull Requests", "when": "codev.hasWorkspace", "visibility": "collapsed" },
         { "id": "codev.recentlyClosed", "name": "Recently Closed", "when": "codev.hasWorkspace", "visibility": "collapsed" },
