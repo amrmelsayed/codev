@@ -194,6 +194,19 @@ describe('pruneBuilderWorktreeWorkspaces', () => {
     expect(countRows('terminal_sessions', worktree)).toBe(0);
   });
 
+  it('prunes a lone known_workspaces row whose worktree is gone from disk (no architect row)', () => {
+    // The field shape after `afx cleanup` + worktree removal: cleanup took the
+    // architect row, the known_workspaces row survived pointing at a deleted path.
+    // Candidates come from each table independently, and liveness is the only
+    // test, so neither an accompanying architect row nor the path existing matters.
+    const worktree = path.join(tmpRoot, '.builders', 'removed-lane');
+    insertKnown(worktree);
+    expect(fs.existsSync(worktree)).toBe(false);
+
+    expect(pruneBuilderWorktreeWorkspaces()).toEqual({ pruned: 1, rowsDeleted: 1, live: [] });
+    expect(countRows('known_workspaces', worktree)).toBe(0);
+  });
+
   it('keeps and reports a worktree with a live shellper, never touching it', () => {
     const worktree = path.join(tmpRoot, '.builders', 'live');
     insertKnown(worktree);
