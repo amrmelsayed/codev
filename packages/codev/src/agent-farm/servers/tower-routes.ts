@@ -91,6 +91,7 @@ import { submitToSession, OPERATOR_SUBMIT_WAIT_CEILING_MS } from './session-subm
 import { scheduleDelayedSend, validateDelaySeconds } from './delayed-send.js';
 import {
   getKnownWorkspacePaths,
+  getAllKnownWorkspacePaths,
   getInstances,
   getDirectorySuggestions,
   launchInstance,
@@ -755,7 +756,9 @@ async function handleWorkspaceAction(
 
   // POST /api/workspaces/:path/deactivate
   if (req.method === 'POST' && action === 'deactivate') {
-    const knownPaths = getKnownWorkspacePaths();
+    // Unfiltered on purpose (#1809): a stray architect left running in a builder
+    // worktree is excluded from the listing but must still be stoppable.
+    const knownPaths = getAllKnownWorkspacePaths();
     const resolvedPath = fs.existsSync(workspacePath) ? fs.realpathSync(workspacePath) : workspacePath;
     const isKnown = knownPaths.some(
       (p) => p === workspacePath || p === resolvedPath

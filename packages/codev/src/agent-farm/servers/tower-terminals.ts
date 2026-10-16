@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AGENT_FARM_DIR, encodeWorkspacePath } from '../lib/tower-client.js';
 import type { TerminalType } from '@cluesmith/codev-sdk/tower-client';
+import { isBuilderWorktreePath } from '@cluesmith/codev-sdk/builder-worktree';
 import { loadConfig } from '../../lib/config.js';
 import { sanitizeAgentEnv } from '../../lib/agent-env.js';
 import { getGlobalDb } from '../db/index.js';
@@ -972,6 +973,117 @@ async function _reconcileTerminalSessionsInner(): Promise<void> {
   } else {
     _deps.log('INFO', 'No terminal sessions to reconcile');
   }
+}
+
+// ============================================================================
+// Builder-worktree row prune (#1809)
+// ============================================================================
+
+/** Counts from one prune pass, returned for tests and logged as one INFO line. */
+export interface BuilderWorktreePruneResult {
+  /** Worktree paths whose rows were deleted. */
+  pruned: number;
+  /** known_workspaces + architect + terminal_sessions rows deleted. */
+  rowsDeleted: number;
+  /** Worktree paths kept because a live session is attached; reported, never killed. */
+  live: string[];
+}
+
+/**
+ * Delete global.db rows that recorded a builder worktree as a workspace (#1809).
+ *
+ * Before #1809 Tower activated a worktree like any folder, leaving known_workspaces
+ * and architect rows (and their stray `main` architects) under `.builders/`.
+ * Activation now refuses worktrees; this pass removes what was left behind.
+ *
+ * Runs once per boot, AFTER reconcile (so the in-memory map holds every reattached
+ * session) and BEFORE the #341 orphan sweep, so liveness is decided before anything
+ * is killed. It never signals a process: a path with a live session keeps its rows
+ * and is reported at WARN every boot until it is stopped; the next boot after that
+ * prunes it. Idempotent.
+ */
+export function pruneBuilderWorktreeWorkspaces(): BuilderWorktreePruneResult {
+  const result: BuilderWorktreePruneResult = { pruned: 0, rowsDeleted: 0, live: [] };
+  const log = _deps?.log ?? (() => {});
+  let db: ReturnType<typeof getGlobalDb>;
+  try {
+    db = getGlobalDb();
+  } catch {
+    return result;
+  }
+
+  const candidates = new Set<string>();
+  for (const table of ['known_workspaces', 'architect', 'terminal_sessions']) {
+    try {
+      const rows = db.prepare(`SELECT DISTINCT workspace_path FROM ${table} WHERE workspace_path LIKE '%.builders%'`)
+        .all() as { workspace_path: string }[];
+      for (const row of rows) {
+        if (isBuilderWorktreePath(row.workspace_path)) {
+          candidates.add(row.workspace_path);
+        }
+      }
+    } catch {
+      // Table may not exist yet (pre-migration)
+    }
+  }
+
+  const deleteRows = db.transaction((workspacePath: string): number => {
+    let deleted = 0;
+    for (const table of ['known_workspaces', 'architect', 'terminal_sessions']) {
+      try {
+        deleted += db.prepare(`DELETE FROM ${table} WHERE workspace_path = ?`).run(workspacePath).changes;
+      } catch {
+        // Table may not exist yet (pre-migration)
+      }
+    }
+    return deleted;
+  });
+
+  for (const workspacePath of candidates) {
+    const liveTerminals = liveTerminalIdsForWorkspace(db, workspacePath);
+    if (liveTerminals.length > 0) {
+      result.live.push(workspacePath);
+      log('WARN', `Stray architect in a builder worktree: ${workspacePath} (terminals: ${liveTerminals.join(', ')}). `
+        + 'Left running and its rows kept; stop it with `afx workspace stop` from that worktree.');
+      continue;
+    }
+    result.rowsDeleted += deleteRows(workspacePath);
+    result.pruned++;
+  }
+
+  log('INFO', `Builder-worktree prune: ${result.pruned} paths pruned, ${result.rowsDeleted} rows deleted, ${result.live.length} live kept`);
+  return result;
+}
+
+/**
+ * Terminal ids still alive for a workspace path: anything reconcile reattached into
+ * the in-memory map, plus any terminal_sessions row whose shellper pid or process
+ * pid is up (the bugfix #1686 rule: a live pid is proof of life).
+ */
+function liveTerminalIdsForWorkspace(db: ReturnType<typeof getGlobalDb>, workspacePath: string): string[] {
+  const ids = new Set<string>();
+  const entry = workspaceTerminals.get(workspacePath);
+  if (entry) {
+    for (const map of [entry.architects, entry.builders, entry.shells]) {
+      for (const terminalId of map.values()) {
+        ids.add(terminalId);
+      }
+    }
+  }
+  try {
+    const rows = db.prepare('SELECT id, pid, shellper_pid FROM terminal_sessions WHERE workspace_path = ?')
+      .all(workspacePath) as { id: string; pid: number | null; shellper_pid: number | null }[];
+    for (const row of rows) {
+      const shellperAlive = row.shellper_pid != null && processExists(row.shellper_pid);
+      const processAlive = row.pid != null && processExists(row.pid);
+      if (shellperAlive || processAlive) {
+        ids.add(row.id);
+      }
+    }
+  } catch {
+    // Table may not exist yet (pre-migration)
+  }
+  return Array.from(ids);
 }
 
 // ============================================================================
