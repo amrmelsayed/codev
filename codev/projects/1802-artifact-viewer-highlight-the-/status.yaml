@@ -1,7 +1,7 @@
 id: '1802'
 title: artifact-viewer-highlight-the-
 protocol: pir
-phase: review
+phase: verified
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -21,7 +21,7 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-12T22:27:12.269Z'
-updated_at: '2026-10-16T00:04:59.906Z'
+updated_at: '2026-10-16T00:05:02.505Z'
 pr_history:
   - phase: review
     pr_number: 1812
