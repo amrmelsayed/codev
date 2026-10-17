@@ -35,6 +35,17 @@ other architects (receive the relayed rulings; unaffected directly).
   (a regex over the text after `**Your word:**`), relays `RULING <id>: <word>` to the
   originating architect, moves the item to `## Ruled` as a one-line record, and later appends
   the architect's `DONE <id>: …` to that record. Only `main` and the owner write the file.
+- **Questions** (owner's protocol addition, 2026-10-17). Instead of a word, the owner may type a
+  question under `**Your word:**`. `main` relays it to the owning architect and pastes the answer
+  into the item, above the `**Your word:**` line, as two labelled list lines, clearing the
+  question from under the line; the item stays open and the owner rules after reading:
+
+  ```markdown
+  - **You asked (6:07 am):** "why a new tool? Don't we have existing tools?"
+  - **Onboarding's answer (6:09 am):** The Daybreak composer does not get the chat tool set. …
+  ```
+
+  A second question appends a second pair. Nothing else in the format changes.
 - **The file format** (verbatim from the issue):
 
   ```markdown
@@ -88,17 +99,20 @@ has the decisions file at its configured path. Opening it shows:
 2. **The options from the `**Your word:**` line as radio buttons**, each with its description
    (the text after `=`), the first option visibly marked *Recommended*.
 3. **One free-text comment box** per card, for anything the owner wants to say instead of, or
-   in addition to, a word.
+   in addition to, a word — including a **question** the owner wants answered before ruling.
 4. **A Submit action** per card. It writes into the file, under that item, directly after the
    `**Your word:**` line, what the owner would have typed by hand: the chosen word on its own
    line, then the comment as a paragraph. Nothing else in the file changes.
 5. **The current ruling.** Any text already present after the item's `**Your word:**` line
    (typed by hand or written by an earlier submit) is shown on the card as the current ruling,
    and that card is then read-only.
-6. **`## Ruled`** below the cards: a read-only list, collapsed by default.
-7. **Live.** When the file changes on disk the tab re-renders from the new content. A
+6. **A question-and-answer thread.** `- **You asked (time):**` / `- **<Name>'s answer (time):**`
+   list-line pairs that `main` pastes into the item body show as a small thread on the card,
+   newest at the bottom, so the owner reads the answer without opening the raw file.
+7. **`## Ruled`** below the cards: a read-only list, collapsed by default.
+8. **Live.** When the file changes on disk the tab re-renders from the new content. A
    half-written comment or a selected-but-unsubmitted option survives the re-render.
-8. **Failures are loud.** A submit that cannot be applied cleanly is refused with a message on
+9. **Failures are loud.** A submit that cannot be applied cleanly is refused with a message on
    that card, and the owner's comment stays in the box.
 
 For `main`, nothing changes in kind: a tab-written ruling is plain text on the lines directly
@@ -133,8 +147,19 @@ grammar, a subset of CommonMark:
   backticked word contributes one option: the word, plus the description after `=` if present.
   The first option is the recommended one. The file's preamble allows "a letter or one word";
   the tab offers and writes the word (letters are a hand-typing shorthand, not separate options).
-- **Body** = the item's lines between the heading and the Your-word line.
-  **Current ruling** = the item's text after the Your-word line, trimmed; empty means unruled.
+- **Body** = the item's lines between the heading and the Your-word line, less any
+  question-and-answer entries (below), which render as the thread instead.
+- **Current ruling** = the item's text after the Your-word line, trimmed; empty means unruled.
+  It is shown verbatim as plain text, not rendered, so everything `main`'s scan would read is
+  visible — including an annotator `<!-- REVIEW -->` comment, which a markdown render would hide.
+- **Question-and-answer thread** = the body's list entries whose line begins (after up to three
+  leading spaces) `- **You asked (<time>):**` or `- **<Name>'s answer (<time>):**` (straight or
+  curly apostrophe; `<Name>` is any text). An entry is that line plus its indented continuation
+  lines. Entries are shown in file order — `main` appends each new pair below the last, so the
+  newest is at the bottom — each labelled *You asked* or *<Name>'s answer* with its time and its
+  text rendered as markdown. A question with no answer after it yet shows as awaiting an answer;
+  an answer with no question before it is still shown. The `(<time>)` stamps carry no date or
+  zone, so they are displayed exactly as written and never converted or assigned a zone.
 - **Fingerprint** = a digest of the item's full text, used by the write checks below.
 - **`## Ruled`** = the section's content, shown as markdown, read-only.
 - **Malformed input is reported, not guessed at.** A file with no `## Open` section shows an
@@ -143,11 +168,24 @@ grammar, a subset of CommonMark:
   id are all shown, flagged as duplicates, and are entirely read-only (no option buttons, no
   comment box, no draft).
 
-**Already-ruled items are read-only.** An item whose current ruling is non-empty — typed by hand,
-or written by an earlier submit from this or another browser — shows that ruling and offers no
-option buttons or comment box; a note says it is already ruled and that a change of mind goes
-through `main` or a hand edit of the file. So the file never carries two tab-written rulings for
-one item, and of two near-simultaneous submits the second is refused rather than stacked.
+**Items with text after the Your-word line are read-only.** An item whose current ruling is
+non-empty — typed by hand, or written by an earlier submit from this or another browser — shows
+that text and offers no option buttons or comment box. The note is neutral, because the tab
+cannot tell a ruling from a question: it says the owner has written under this item and `main`
+will act on it, and that a change of mind goes through `main` or a hand edit of the file. So the
+file never carries two tab-written rulings for one item, and of two near-simultaneous submits the
+second is refused rather than stacked.
+
+**Asking a question.** A question is typed in the comment box and submitted like any comment —
+no new write shape; with no word chosen it lands on the line after the Your-word line. `main`
+reads it as the ruling text, recognises it as a question, relays it, and pastes the
+*You asked* / *answer* pair into the item body above the Your-word line. **When it pastes the
+pair, `main` removes the question text (and any `<!-- REVIEW -->` comment) from under the
+Your-word line**, so nothing follows that line and the item is writable again on the tab's next
+read; the owner then rules — or asks again — as usual. A second question produces a second pair
+below the first. While a question is waiting for its answer, the item is read-only and shows the
+question as its current ruling. The round-trip depends on that hub behaviour (see Assumptions):
+the tab adds no rule of its own for questions.
 
 **Timestamps (no assumed zone).** The stamp is `YYYY-MM-DD h:mm am|pm <ZONE>` (am/pm
 case-insensitive) or `YYYY-MM-DD HH:mm <ZONE>`. It is resolved to an absolute instant using only
@@ -250,7 +288,7 @@ by item id, not DOM position, so re-renders, re-ordering and tab switches do not
 successful submit clears that card's draft. If an option a draft selected disappears from the
 item's options, the selection is dropped and the card says so; the comment is kept. If a
 non-empty draft's item stops being writable — it leaves `## Open` (for example `main` moved it
-to `## Ruled`), becomes a duplicate, or is ruled from elsewhere — the draft is *held*: shown
+to `## Ruled`), becomes a duplicate, or gains text after its Your-word line from elsewhere — the draft is *held*: shown
 read-only under a notice naming the reason, with the text selectable for copying and a Discard
 action. An unsaved comment is never silently lost.
 
@@ -290,6 +328,12 @@ drafts stay visible).
 - [ ] An item with existing text after its Your-word line shows it as the current ruling and is
       read-only; duplicate-id items and items without exactly one Your-word line are read-only
       with a notice.
+- [ ] Question-and-answer pairs in an item's body render as a thread on the card in file order
+      (newest at the bottom), not duplicated in the body; their `(time)` stamps are shown as
+      written.
+- [ ] A question round-trip works end to end: a comment-only question is written after the
+      Your-word line and the card goes read-only; once the file shows the pair above the
+      Your-word line and nothing after it, the card is writable again and shows the thread.
 - [ ] `## Ruled` shows below the cards, read-only, collapsed by default.
 - [ ] An external write to the file is reflected in the open tab within a few seconds, without
       a manual refresh; a draft comment and a selected option survive that re-render.
@@ -376,6 +420,16 @@ falls back.
   `## Open` and records a one-liner under `## Ruled`. (Consequence for the tab: a ruled item
   normally disappears from `## Open` shortly after a submit, which the held-draft and
   read-only-when-ruled behaviour already cover.)
+- **Hub behaviour for questions** (owner's protocol addition, issue comment 2026-10-17 6:15 am;
+  confirmed by the adopter's hub architect, relayed by the architect): when `main` pastes a
+  *You asked* / *answer* pair above the `**Your word:**` line, it **removes the question text and
+  any `<!-- REVIEW -->` comment from under that line**, leaving nothing after it, so the item is
+  unruled again. The tab's read-only rule (text after the Your-word line ⇒ read-only) relies on
+  this to make a question round-trip leave the item writable. If a hub did not clear the
+  question, the item would stay read-only after the answer and the owner would rule through
+  `main` or a hand edit — a hub-side defect, not something the tab works around.
+- The *You asked* / *<Name>'s answer* labels and their list-line shape are as the owner's
+  addition shows; `main` appends each new pair below the previous one.
 - Anyone with access to the workspace's Tower dashboard is acting as the owner, exactly as with
   the existing file tab's edit + save. No per-user identity is recorded.
 - The file is small (tens of KB at most), so reading and parsing it on every request and poll
@@ -471,6 +525,10 @@ watchers, and mirrors how the existing file tab already detects change.
   appears as the current ruling and makes the item read-only.
 - `###`, `## Ruled` and `**Your word:**` inside a fenced code block are content, not structure;
   backtick and tilde fences; a longer closing fence; an unclosed fence.
+- Question-and-answer entries: one pair; two pairs (file order kept); a question awaiting its
+  answer; an answer with no question; curly apostrophe; a multi-word `<Name>`; an indented
+  continuation line; entries removed from the rendered body; time text kept verbatim.
+- A current ruling that is only an `<!-- REVIEW -->` comment is non-empty and shown verbatim.
 - Malformed: no `## Open`; item without a Your-word line; two Your-word lines; duplicate ids;
   empty `## Open`; no `## Ruled`; CRLF file; file without trailing newline.
 
@@ -521,12 +579,17 @@ watchers, and mirrors how the existing file tab already detects change.
   the returned document.
 - Clicking an `http(s)` link opens a new browser tab; clicking another link does nothing; neither
   navigates the dashboard.
+- Question round-trip: a submitted question makes the card read-only with the neutral note; a
+  re-render with the pair above the Your-word line and nothing after it makes the card writable
+  and shows the thread.
 
 **End-to-end (Playwright, real Tower + browser):**
 - Workspace with a fixture decisions file: the tab appears; choose an option, type a comment,
   submit; the file on disk contains exactly the inserted lines; the card shows the ruling.
 - An external write to the file re-renders the tab within a few seconds while a typed draft in
   another card is preserved.
+- Question round-trip: submit a question, then (as `main` would) paste the pair above the
+  Your-word line and remove the question below it; the card shows the thread and accepts a word.
 - Mobile viewport: the tab is reachable and a submit works.
 - Workspace without the file: no Decisions tab.
 
@@ -551,7 +614,7 @@ watchers, and mirrors how the existing file tab already detects change.
 ## References
 
 - Issue #1819 (body: process and format; comments: owner time-zone rule, architect baked
-  decisions).
+  decisions, owner's question-and-answer protocol addition of 2026-10-17 6:15 am).
 - `packages/codev/src/agent-farm/servers/tower-routes.ts` — workspace routes, the annotate
   route, file tab save.
 - `packages/codev/templates/open.html` — annotator's 1s mtime auto-reload (polling precedent).

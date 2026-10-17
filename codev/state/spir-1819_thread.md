@@ -23,3 +23,8 @@ Addressed all points in the spec:
 ## 2026-10-17 · Spec gate wait — Open Question 1 resolved
 
 - Architect relayed the adopter hub's scan contract: everything after the **Your word:** line to end of item is the ruling; same-line text after the options is NOT read; no **Ruling:** line is appended; on a ruling the item leaves ## Open for a one-liner in ## Ruled. Folded into Assumptions; OQ1 marked resolved. Still waiting on the human spec-approval.
+
+## 2026-10-17 · Spec addition — owner questions (Q&A thread)
+
+- Owner's protocol addition (issue comment 6:15 am): owner may type a QUESTION in the comment box (no new write shape); main pastes `- **You asked (t):**` / `- **<Name>'s answer (t):**` pairs above the Your-word line; tab renders them as a thread, newest at bottom.
+- Design point (read-only rule vs question round-trip) resolved by the hub: it REMOVES the question text (and any <!-- REVIEW --> comment) from under Your-word when it pastes the pair, so the item is unruled again. Read-only rule unchanged; recorded as an explicit dependency in Assumptions. Current ruling now shown verbatim (plain text) so a REVIEW comment is visible; read-only note made neutral (tab can't tell a ruling from a question).
