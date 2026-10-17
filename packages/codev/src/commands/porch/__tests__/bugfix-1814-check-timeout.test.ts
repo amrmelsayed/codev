@@ -149,7 +149,7 @@ describe('bugfix #1814: a timed-out check dies with its whole process tree', () 
 
     expect(result.error).toContain('Timed out after 0.3s');
     await expectProcessGone(await readPid(pidFile), 500);
-  }, 15_000);
+  }, 30_000);
 
   it("porch's own SIGINT is relayed to the check's process group, then re-raised", async () => {
     const pidFile = path.join(root, 'grandchild.pid');

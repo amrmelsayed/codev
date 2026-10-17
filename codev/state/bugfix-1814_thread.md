@@ -48,3 +48,20 @@ Note: `getPhaseCompletionChecks` has no production caller — phase checks via
   0 immediately" (already `skipIf(CI)`, timing-based against real shellpers). Machine load avg
   was 22–41; it passed 3/3 in isolation and the retry passed the whole suite. Unrelated to this
   change (terminal code; separate vitest worker). Left as is — noted in the PR as a flake.
+
+## PR #1815 + CMAP (2026-10-16)
+
+- Lanes per `.codev/config.json`: codex + claude. `consult` auto-detect failed in this
+  worktree ("Multiple projects found") — needed `--issue 1814 --project-id bugfix-1814`.
+- Round 1: codex REQUEST_CHANGES (real): `runCheck` resolved on the shell's `close`, and
+  `porch done` / gate approval `process.exit(1)` right after a failed check, cancelling the 5 s
+  SIGKILL timer — a member ignoring SIGTERM with no pipe survived. Fixed: after a timeout the
+  runner waits until the process group is empty (bounded by the grace) before resolving; new
+  test with a `trap "" TERM` grandchild on /dev/null fails without it. claude APPROVE with nits
+  (`!== undefined` instead of truthiness for `timeout_ms`; skill wording implied
+  `phase_completion` takes a timeout) — both taken.
+- Round 2: codex COMMENT, claude APPROVE. Taken: keep the signal relay alive through the
+  post-timeout wait; widen the 5 s-grace test's timeout to 30 s. Left as pre-existing drift,
+  not this PR: draft-07 schemas type `defaults.checks` as string-only (loader already accepted
+  objects); adopter skeleton docs have no `porch.checks` section at all (Spec #550 never
+  mirrored it); checks are a flat name-keyed map, so one name in two phases collides.

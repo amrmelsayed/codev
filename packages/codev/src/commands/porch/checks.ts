@@ -123,7 +123,6 @@ export async function runCheck(
 
     proc.on('close', async (code) => {
       clearTimeout(timeout);
-      stopRelaying();
 
       if (killed) {
         // 'close' means the pipes closed, not that the group is gone: a member
@@ -131,6 +130,7 @@ export async function runCheck(
         // now would let porch exit before the SIGKILL escalation fires.
         if (proc.pid !== undefined) await waitForGroupExit(proc.pid, KILL_GRACE_MS + 1000);
         clearTimeout(escalation);
+        stopRelaying();
         resolve({
           name,
           command,
@@ -141,6 +141,7 @@ export async function runCheck(
         return;
       }
 
+      stopRelaying();
       const duration = Date.now() - startTime;
       if (code === 0) {
         resolve({
