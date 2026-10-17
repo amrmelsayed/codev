@@ -47,7 +47,12 @@ async function waitForGroupExit(pgid: number, withinMs: number): Promise<void> {
 }
 
 /**
- * Run a single check command
+ * Run a single check command.
+ *
+ * While the check runs, this installs process-level SIGINT/SIGTERM/SIGHUP
+ * listeners that re-raise the signal on porch itself, so call it only from
+ * the short-lived porch CLI (porch check/done/approve in index.ts), never
+ * from a long-running server.
  */
 export async function runCheck(
   name: string,
@@ -70,7 +75,9 @@ export async function runCheck(
 
     // detached: the check leads its own process group, so a timeout can kill
     // the whole tree (#1814). Killing only the shell left its grandchildren
-    // (test workers) holding stdout open, and 'close' never fired.
+    // (test workers) holding stdout open, and 'close' never fired. detached
+    // calls setsid, so the check also has no controlling terminal: one that
+    // opens /dev/tty fails instead of prompting, which is intended.
     const proc = spawn(executable, args, {
       cwd,
       shell: true,
