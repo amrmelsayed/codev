@@ -34,3 +34,17 @@ Note: `getPhaseCompletionChecks` has no production caller — phase checks via
   the pty-session / cleanup precedent. Because `detached` also leaves porch's foreground
   group, porch relays its own SIGINT/SIGTERM/SIGHUP to the check's group while it runs, so
   Ctrl+C still stops a check.
+
+## Fix (2026-10-16)
+
+- Regression test `porch/__tests__/bugfix-1814-check-timeout.test.ts`: 11 of 13 cases fail
+  against the unfixed source (the 2 that pass both ways pin invariants: no-`timeout_ms` keeps
+  the default; a normal exit removes the signal relay). Without the fix the grandchild case
+  hangs until vitest's 15 s test timeout — the issue's "waits forever".
+- Verified the real user paths outside vitest: the scratch protocol from investigate now
+  fails at `Timed out after 1s`; a real SIGINT to a node process running a check exits 130
+  (ordinary Ctrl+C death) and the check's grandchild is gone.
+- First `porch done` failed `tests` on `session-manager.test.ts` › "bounds a harness that exits
+  0 immediately" (already `skipIf(CI)`, timing-based against real shellpers). Machine load avg
+  was 22–41; it passed 3/3 in isolation and the retry passed the whole suite. Unrelated to this
+  change (terminal code; separate vitest worker). Left as is — noted in the PR as a flake.
