@@ -952,6 +952,28 @@ The file is `codev/state/pending-decisions.md` unless `dashboard.decisionsFile` 
 
 The tab appears once the file exists (within about 5 seconds of a change to the setting), and then stays for the page session: if the file is deleted while the tab is open, the tab says so and keeps any unsent draft. A reload of a workspace without the file shows no tab. A submit is refused, with a message on the card and the draft kept, when the item has changed or been ruled since the tab showed it. Tower applies one write to a file at a time and replaces the file atomically (a temporary file renamed over it).
 
+### Porch check overrides
+
+Protocol checks default to the npm toolchain (`npm run build`, `npm test`). Override them per check name under `porch.checks` instead of forking `protocol.json`:
+
+```json
+{
+  "porch": {
+    "checks": {
+      "build": { "command": "cargo build" },
+      "tests": { "command": "cargo test", "timeout_ms": 900000 },
+      "e2e_tests": { "skip": true }
+    }
+  }
+}
+```
+
+**Override fields:**
+- `command` — Replace the protocol's check command with a custom shell command
+- `cwd` — Override the working directory for this check (relative to project root)
+- `timeout_ms` — Kill the check after this many milliseconds (default 5 minutes; a protocol.json check can set it too). On timeout porch kills the check's whole process tree
+- `skip: true` — Omit this check entirely (for checks that don't apply to your project)
+
 ---
 
 ## Files

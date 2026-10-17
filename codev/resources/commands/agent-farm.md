@@ -1201,6 +1201,7 @@ By default, porch protocol checks use `npm run build` and `npm test`. Non-Node.j
 **Override fields:**
 - `command` — Replace the protocol's check command with a custom shell command
 - `cwd` — Override the working directory for this check (relative to project root)
+- `timeout_ms` — Kill the check after this many milliseconds (default 5 minutes; a protocol.json check can set it too). On timeout porch kills the check's whole process tree
 - `skip: true` — Omit this check entirely (for checks that don't apply to your project)
 
 Porch logs a visible warning for each overridden or skipped check so the change is always visible.
