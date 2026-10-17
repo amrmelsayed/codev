@@ -158,3 +158,9 @@ Addressed all points in the spec:
 
 - dashboard-e2e on `1c4a5a35a` (run 39059487181): success. Decisions step 9/9, no retries. Main step: 66 passed, 4 skipped, 1 flaky — `spec-823-builder-attribution.test.ts` "N=3 — attribution renders for three sibling architects" (pre-existing, untouched here, passed on retry): goes under Flaky Tests in the review.
 - Not acted on (claude, minor): the state/socket-dir guards live only in `playwright.decisions.config.ts` (the port guard is also in the test file) — the config is the only way the suite runs (the default config ignores it), and it refuses before any Tower starts; the screenshots are copied from the run, so they can drift from the UI later — they are evidence for this change, dated by the run.
+
+## 2026-10-17 · Review phase
+
+- Merged main (42 commits behind) as `b0a84b0a0`. One conflict: `codev-skeleton/resources/commands/agent-farm.md`, where main added "Porch check overrides" at the same spot as the Decisions tab section. Kept both, Decisions first, the same order as the `codev/` copy; the Decisions sections in the two trees are still byte-identical. Main's `artifact-canvas` theme change (hover reading aid, #1802) is scoped to the composed `.codev-artifact-canvas` surface, so it doesn't affect `MarkdownView`.
+- On the merged branch: build exit 0; codev unit 6451 passed / 48 skipped; web 499 passed / 1 skipped. dashboard-e2e dispatched on the merge (run 39060162578): Decisions 9/9, main 67 passed / 4 skipped, none flaky.
+- Review written at `codev/reviews/1819-tower-a-decisions-tab-a-ui-vie.md` with both screenshots embedded. Six lessons routed to cold `lessons-learned.md` (Testing ×2, UI/UX ×3, Process ×1). No hot-tier change; the arch entry went in during phase 7.
