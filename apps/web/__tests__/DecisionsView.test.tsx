@@ -291,6 +291,12 @@ describe('DecisionsView card content', () => {
     expect(within(card('Q')).getByRole('note')).toHaveTextContent(text);
   });
 
+  it('names a card by its id when the heading carries no question, with no empty heading', () => {
+    showItems(makeItem('main-12', ''));
+    const c = screen.getByRole('article', { name: 'main-12' });
+    expect(within(c).queryByRole('heading')).not.toBeInTheDocument();
+  });
+
   it('labels an item without an id', () => {
     showItems(makeItem('', 'Q', { problems: ['id-missing'], writable: false }));
     expect(within(card('Q')).getByText('(no id)')).toBeInTheDocument();

@@ -144,13 +144,14 @@ function CurrentRuling({ text }: { text: string }) {
 
 function DecisionCard({ item }: { item: DecisionItem }) {
   const questionId = useId();
+  const idLabelId = useId();
   return (
-    <article className="decisions-card" aria-labelledby={questionId}>
+    <article className="decisions-card" aria-labelledby={item.question ? questionId : idLabelId}>
       <div className="decisions-card-meta">
-        <span className="decisions-item-id">{item.id || '(no id)'}</span>
+        <span id={idLabelId} className="decisions-item-id">{item.id || '(no id)'}</span>
         {item.stamp && <Stamp stamp={item.stamp} />}
       </div>
-      <h3 id={questionId} className="decisions-card-question">{item.question}</h3>
+      {item.question && <h3 id={questionId} className="decisions-card-question">{item.question}</h3>}
       {item.problems.map(problem => (
         <div key={problem} className="decisions-notice" role="note">{ITEM_PROBLEM_TEXT[problem]}</div>
       ))}
