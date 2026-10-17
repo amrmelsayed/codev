@@ -294,6 +294,32 @@ test.describe('Spec 1819: Decisions tab', () => {
     await expect(page.getByRole('tab', { name: /Decisions/ })).toBeVisible();
   });
 
+  test('a file tab open on the decisions file follows a ruling written by rename', async ({ page, request }) => {
+    const ws = makeWorkspace({ [DEFAULT_FILE]: FIXTURE });
+    const created = await request.post(`${ws.url}api/tabs/file`, { data: { path: DEFAULT_FILE } });
+    expect(created.ok()).toBe(true);
+
+    await page.goto(ws.url);
+    // The viewer takes its first mtime reading a second after it loads, as its baseline; a write
+    // before that reading would be the baseline itself. Write only once it has been taken.
+    const baseline = page.waitForResponse((res) => /\/api\/annotate\/[^/]+\/api\/mtime$/.test(res.url()));
+    await page.getByRole('tab', { name: /pending-decisions\.md/ }).click();
+    const viewer = page.frameLocator('iframe[src*="api/annotate/"]');
+    await expect(viewer.getByText(QUESTION.ops).first()).toBeVisible({ timeout: 15_000 });
+    await baseline;
+
+    // A ruling through the route the tab uses replaces the file by renaming a new one over it.
+    const read = await request.get(`${ws.url}api/decisions`);
+    const ops = (await read.json()).document.items.find((item: { id: string }) => item.id === 'ops-3');
+    const text = 'split it; the open file tab should follow.';
+    const ruled = await request.post(`${ws.url}api/decisions/rule`, {
+      data: { id: 'ops-3', fingerprint: ops.fingerprint, word: 'split', comment: text },
+    });
+    expect(ruled.ok()).toBe(true);
+
+    await expect(viewer.getByText(text).first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('dashboard.decisionsFile points the tab at another file', async ({ page }) => {
     const configured = 'notes/owner-decisions.md';
     const ws = makeWorkspace({

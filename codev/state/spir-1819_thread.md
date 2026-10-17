@@ -147,3 +147,9 @@ Addressed all points in the spec:
 - dashboard-e2e dispatched on the branch at `5a200fd24` (run 39058813921): success — Decisions step 8 passed (14.1 s, no retries); main step 71 tests, 67 passed, rest skipped.
 - (codex) The test Tower still shared `~/.codev/run`: Tower probes/unlinks sockets there at startup and every 60 s, and its husk sweep judges shellpers against its own (empty) DB. My local script always isolated it; the documented command and CI didn't. Now enforced: `playwright.decisions.config.ts` throws before any Tower starts unless `TOWER_TEST_PORT` (≠ 4100), `CODEV_AGENT_FARM_DIR` and `SHELLPER_SOCKET_DIR` are all set. Each refusal checked collect-only; full run 8/8, 0 shellpers.
 - (claude) The Decisions CI step moves to port 14101 so it can't reuse a lingering first-step Tower with a different state dir.
+
+## 2026-10-17 · Phase 7 iteration 3 — the plan's annotator risk, now a test
+
+- dashboard-e2e on `e20acb2a7` (run 39059250714, Decisions step on 14101 with its own state and socket dirs): success, 8/8.
+- The plan's risk table says the atomic rename vs an annotator file tab open on the same file is "covered in the Phase 7 manual pass"; I had not done it. Added an e2e test instead: open a file tab on the decisions file, rule through `POST /api/decisions/rule` (temp file + rename), and the open viewer must show the new text. It does — the annotator polls mtime and re-reads by path.
+- Its first run failed, and the cause is pre-existing and unrelated to the rename: the annotator takes its first mtime reading a second after it loads and adopts it as the baseline, so a write landing in that first second is never shown (until the next write). The test now writes after that first reading; 3/3 repeated, suite 9/9. Not changed (annotator, outside this spec) — goes in the review doc.
