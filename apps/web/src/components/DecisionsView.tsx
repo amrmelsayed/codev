@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent, ReactNode } from 'react';
 import { MarkdownView } from '@cluesmith/codev-artifact-canvas';
 import { useDecisions } from '../hooks/useDecisions.js';
@@ -110,6 +110,27 @@ function handleLinkClick(event: MouseEvent<HTMLDivElement>) {
   if (EXTERNAL_LINK_RE.test(href)) window.open(href, '_blank', 'noopener');
 }
 
+/**
+ * `MarkdownView` with the same rule applied to the rendered anchors themselves, so it also holds
+ * for a middle-click, the context menu or the keyboard: an http(s) link opens in a new tab, and
+ * any other link loses its `href`, leaving nothing to open. The shared renderer is unchanged.
+ */
+function DecisionsMarkdown({ source }: { source: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    for (const anchor of ref.current?.querySelectorAll('a') ?? []) {
+      const href = anchor.getAttribute('href')?.trim() ?? '';
+      if (EXTERNAL_LINK_RE.test(href)) {
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+      } else {
+        anchor.removeAttribute('href');
+      }
+    }
+  }, [source]);
+  return <div ref={ref}><MarkdownView source={source} /></div>;
+}
+
 /** What a submit writes under the item, and what a held draft shows: the word, a blank line, the comment. */
 function draftText(draft: Draft): string {
   return [draft.word, draft.comment.trim()].filter(Boolean).join('\n\n');
@@ -204,7 +225,7 @@ function QaThread({ entries }: { entries: DecisionQaEntry[] }) {
             <span className="decisions-thread-who">{entry.kind === 'asked' ? 'You asked' : `${entry.name}'s answer`}</span>
             <span className="decisions-thread-time">{entry.time}</span>
           </div>
-          <MarkdownView source={entry.markdown} />
+          <DecisionsMarkdown source={entry.markdown} />
           {entry.kind === 'asked' && !entry.answered && (
             <div className="decisions-thread-awaiting">Awaiting an answer</div>
           )}
@@ -370,7 +391,7 @@ function DecisionCard({ item, ruling, handlers }: { item: DecisionItem; ruling: 
       {item.problems.map(problem => (
         <div key={problem} className="decisions-notice" role="note">{ITEM_PROBLEM_TEXT[problem]}</div>
       ))}
-      {item.bodyMarkdown && <div className="decisions-card-body"><MarkdownView source={item.bodyMarkdown} /></div>}
+      {item.bodyMarkdown && <div className="decisions-card-body"><DecisionsMarkdown source={item.bodyMarkdown} /></div>}
       {item.qa.length > 0 && <QaThread entries={item.qa} />}
       {item.writable ? (
         <RulingForm
@@ -413,7 +434,7 @@ function DecisionsBody({ doc, ruling, handlers }: { doc: DecisionsDocument; ruli
       <details className="decisions-ruled">
         <summary>Ruled</summary>
         {doc.ruledMarkdown
-          ? <MarkdownView source={doc.ruledMarkdown} />
+          ? <DecisionsMarkdown source={doc.ruledMarkdown} />
           : <div className="decisions-ruled-empty">Nothing under <code>## Ruled</code> yet.</div>}
       </details>
     </>

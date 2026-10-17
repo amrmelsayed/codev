@@ -353,7 +353,11 @@ describe('DecisionsView link handling', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const before = window.location.href;
     showLinks();
-    const notPrevented = fireEvent.click(screen.getByRole('link', { name }));
+    const link = screen.getByRole('link', { name });
+    // A middle-click or the context menu opens it the same way: in a new tab, without an opener.
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    const notPrevented = fireEvent.click(link);
     expect(notPrevented).toBe(false);
     expect(open).toHaveBeenCalledExactlyOnceWith(href, '_blank', 'noopener');
     expect(window.location.href).toBe(before);
@@ -370,10 +374,30 @@ describe('DecisionsView link handling', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const before = window.location.href;
     showLinks();
-    const notPrevented = fireEvent.click(screen.getByRole('link', { name }));
+    // No href, so there is nothing for a middle-click, the context menu or the keyboard to open.
+    const anchor = screen.getByText(name).closest('a')!;
+    expect(anchor).not.toHaveAttribute('href');
+    expect(screen.queryByRole('link', { name })).toBeNull();
+    const notPrevented = fireEvent.click(anchor);
     expect(notPrevented).toBe(false);
     expect(open).not.toHaveBeenCalled();
     expect(window.location.href).toBe(before);
+  });
+
+  it('applies the link rule again when the markdown changes', () => {
+    const { rerender } = showLinks();
+    mockUseDecisions.mockReturnValue({
+      state: {
+        status: 'ready',
+        document: makeDocument({
+          items: [makeItem('main-12', 'Q', { bodyMarkdown: '[guide](codev/guide.md) and https://example.com/new' })],
+        }),
+      },
+      applyDocument: () => {},
+    });
+    rerender(<DecisionsView isActive />);
+    expect(screen.getByText('guide').closest('a')).not.toHaveAttribute('href');
+    expect(screen.getByRole('link', { name: 'https://example.com/new' })).toHaveAttribute('target', '_blank');
   });
 
   it('leaves clicks that are not on a link alone', () => {
