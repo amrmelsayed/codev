@@ -141,3 +141,9 @@ Addressed all points in the spec:
 - (codex, claude) Screenshots committed at `codev/reviews/1819-tower-a-decisions-tab-a-ui-vie/` (85 KB + 73 KB) for the review doc to embed — reverses my earlier "binary, not committed".
 - (claude) The "no tab" title wait accepts `<ws> on <tower name> overview`.
 - (claude, informational) dashboard-e2e runs only on schedule/dispatch: dispatch it on this branch once pushed; record the result in the review.
+
+## 2026-10-17 · Phase 7 review (iter 2): codex REQUEST_CHANGES, claude APPROVE — all accepted
+
+- dashboard-e2e dispatched on the branch at `5a200fd24` (run 39058813921): success — Decisions step 8 passed (14.1 s, no retries); main step 71 tests, 67 passed, rest skipped.
+- (codex) The test Tower still shared `~/.codev/run`: Tower probes/unlinks sockets there at startup and every 60 s, and its husk sweep judges shellpers against its own (empty) DB. My local script always isolated it; the documented command and CI didn't. Now enforced: `playwright.decisions.config.ts` throws before any Tower starts unless `TOWER_TEST_PORT` (≠ 4100), `CODEV_AGENT_FARM_DIR` and `SHELLPER_SOCKET_DIR` are all set. Each refusal checked collect-only; full run 8/8, 0 shellpers.
+- (claude) The Decisions CI step moves to port 14101 so it can't reuse a lingering first-step Tower with a different state dir.

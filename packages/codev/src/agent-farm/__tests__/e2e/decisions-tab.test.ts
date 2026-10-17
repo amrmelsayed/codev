@@ -14,14 +14,15 @@
  *     `/workspace/<base64url(path)>/` (the workspace API and the dashboard shell need no
  *     activation), and removed afterwards. Nothing is written under the repo.
  *   - It runs only through `playwright.decisions.config.ts`, which drops the default config's
- *     global setup: that setup activates the repository workspace and starts a shell in it.
+ *     global setup (that setup activates the repository workspace and starts a shell in it),
+ *     and refuses to start a Tower without its own state dir and shellper socket dir.
  *
  * Prerequisites:
  *   - npm run build (dist/ and dashboard-dist/ must exist)
  *   - npx playwright install chromium
  *
- * Run (an isolated state dir, so the test Tower never opens the live Tower's database):
- *   TOWER_TEST_PORT=14100 CODEV_AGENT_FARM_DIR="$(mktemp -d)" \
+ * Run:
+ *   TOWER_TEST_PORT=14101 CODEV_AGENT_FARM_DIR="$(mktemp -d)" SHELLPER_SOCKET_DIR="$(mktemp -d)" \
  *     npx playwright test --config playwright.decisions.config.ts
  */
 
