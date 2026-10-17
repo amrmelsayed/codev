@@ -683,10 +683,17 @@ export type DecisionsRefusalCode =
   | 'unknown-word'
   | 'item-changed'
   | 'structure-changed'
+  | 'not-utf8'
   | 'not-found'
   | 'outside-workspace'
   | 'config-error';
 
+/** GET …/api/decisions. */
+export type DecisionsReadResponse =
+  | { ok: true; document: DecisionsDocument }
+  | { ok: false; code: DecisionsRefusalCode; message: string };
+
+/** POST …/api/decisions/rule; on success, the document re-parsed from the bytes just written. */
 export type DecisionsRuleResponse =
   | { ok: true; document: DecisionsDocument }
   | { ok: false; code: DecisionsRefusalCode; message: string };

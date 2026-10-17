@@ -58,3 +58,11 @@ Addressed all points in the spec:
 - Comment line breaks: CRLF, CR and LF are all treated as breaks and rewritten in the file's own line ending, so a lone CR can't hide a heading on what other renderers treat as its own line.
 - `**Your word:**` in the middle of a comment line is accepted: per the grammar, only a line that *starts* with the label is a Your-word line.
 - Added the carried-forward `labelAt === -1` guard in `parseOptions`.
+
+## 2026-10-17 · Phase 3 (routes) — implemented after a context refresh
+
+- `servers/decisions/file.ts`: config key `dashboard.decisionsFile` (default kept as a constant, not in `DEFAULT_CONFIG`, so `getDefaultConfig()` starter configs don't change); canonical containment walks to the nearest existing ancestor, so `../missing/dir/x.md` is refused as outside rather than throwing; atomic write = temp file beside the canonical target (`wx`, target mode, fsync) + rename, temp removed on failure; one `KeyedSerializer` per canonical path.
+- `servers/decisions/routes.ts`: GET answers `{ ok: true, document }` (plan said `{ document }`; `ok` added so both routes share one response shape, typed `DecisionsReadResponse`). Status map is exhaustive over `DecisionsRefusalCode`: input 400 (incl. `outside-workspace`), `not-found` 404, state 409 (incl. `open-multiple`), `structure-changed` 422, `config-error` 500.
+- New refusal `not-utf8` (422): the route checks the file's bytes round-trip through UTF-8 before splicing; otherwise a stray invalid byte anywhere would be rewritten as U+FFFD, breaking "every pre-existing byte preserved".
+- Handlers take Tower's `ctx.log` (plan signatures had none); `handleWorkspaceState` now takes `ctx` to log the flag's config error. That log is deduped per workspace so a broken config logs once, not once a second per dashboard.
+- I/O failures during the write (e.g. rename EIO) are not refusals: they propagate to `handleRequest`'s generic 500; the test confirms the file is intact, no temp file is left, and the queue isn't wedged.

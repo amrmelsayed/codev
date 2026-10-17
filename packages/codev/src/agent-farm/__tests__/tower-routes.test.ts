@@ -9,6 +9,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PASTE_BEGIN, PASTE_END } from '../servers/message-write.js';
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import Database from 'better-sqlite3';
 import { handleRequest } from '../servers/tower-routes.js';
@@ -733,6 +736,80 @@ describe('tower-routes', () => {
       expect(statusCode()).toBe(200);
       const parsed = JSON.parse(body());
       expect(parsed.hostname).toBeUndefined();
+    });
+
+    describe('decisions (Spec 1819)', () => {
+      const FIXTURE = fs.readFileSync(path.resolve(import.meta.dirname, 'fixtures/decisions/issue-format.md'), 'utf8');
+      let workspace: string;
+      let encoded: string;
+      let decisionsFile: string;
+      let origHome: string | undefined;
+
+      beforeEach(() => {
+        workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tower-routes-decisions-')));
+        encoded = Buffer.from(workspace).toString('base64url');
+        decisionsFile = path.join(workspace, 'codev', 'state', 'pending-decisions.md');
+        fs.mkdirSync(path.dirname(decisionsFile), { recursive: true });
+        // The decisions path comes from loadConfig, which also reads ~/.codev/config.json.
+        origHome = process.env.HOME;
+        process.env.HOME = path.join(workspace, 'home');
+      });
+
+      afterEach(() => {
+        process.env.HOME = origHome;
+        fs.rmSync(workspace, { recursive: true, force: true });
+      });
+
+      async function request(method: string, sub: string) {
+        const { res, statusCode, body } = makeRes();
+        await handleRequest(makeReq(method, `/workspace/${encoded}/${sub}`), res, makeCtx());
+        return { status: statusCode(), body: JSON.parse(body()) };
+      }
+
+      it('sets decisionsEnabled on /api/state from whether the file exists', async () => {
+        expect((await request('GET', 'api/state')).body.decisionsEnabled).toBe(false);
+        fs.writeFileSync(decisionsFile, FIXTURE);
+        expect((await request('GET', 'api/state')).body.decisionsEnabled).toBe(true);
+      });
+
+      it('keeps /api/state working, with decisionsEnabled false, when the config is broken', async () => {
+        fs.writeFileSync(decisionsFile, FIXTURE);
+        fs.mkdirSync(path.join(workspace, '.codev'));
+        fs.writeFileSync(path.join(workspace, '.codev', 'config.json'), '{ not json');
+        const { status, body } = await request('GET', 'api/state');
+        expect(status).toBe(200);
+        expect(body.decisionsEnabled).toBe(false);
+        expect(body).toHaveProperty('builders');
+        expect((await request('GET', 'api/decisions')).body.code).toBe('config-error');
+      });
+
+      it('dispatches GET api/decisions and POST api/decisions/rule', async () => {
+        fs.writeFileSync(decisionsFile, FIXTURE);
+        const read = await request('GET', 'api/decisions');
+        expect(read.status).toBe(200);
+        const item = read.body.document.items.find((i: { id: string }) => i.id === 'main-11');
+
+        mockParseJsonBody.mockResolvedValueOnce({ id: 'main-11', word: 'accept', fingerprint: item.fingerprint });
+        const written = await request('POST', 'api/decisions/rule');
+        expect(written.status).toBe(200);
+        expect(written.body.document.items.find((i: { id: string }) => i.id === 'main-11').currentRuling).toBe('accept');
+        expect(fs.readFileSync(decisionsFile, 'utf8')).not.toBe(FIXTURE);
+      });
+
+      it('rejects both routes without the Tower key', async () => {
+        fs.writeFileSync(decisionsFile, FIXTURE);
+        const actual = await vi.importActual<typeof import('../utils/server-utils.js')>('../utils/server-utils.js');
+        const { isRequestAllowed } = await import('../utils/server-utils.js');
+        for (const [method, sub] of [['GET', 'api/decisions'], ['POST', 'api/decisions/rule']]) {
+          (isRequestAllowed as any).mockImplementationOnce(actual.isRequestAllowed);
+          const { res, statusCode, body } = makeRes();
+          await handleRequest(makeReq(method, `/workspace/${encoded}/${sub}`), res, makeCtx());
+          expect(statusCode()).toBe(401);
+          expect(body()).toBe('Unauthorized');
+        }
+        expect(mockParseJsonBody).not.toHaveBeenCalled();
+        expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(FIXTURE);
+      });
     });
   });
 

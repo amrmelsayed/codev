@@ -30,7 +30,7 @@ export interface RulingRequest {
 }
 
 /** The refusals a splice can return; the rest belong to the route (file and config). */
-export type SpliceRefusalCode = Exclude<DecisionsRefusalCode, 'not-found' | 'outside-workspace' | 'config-error'>;
+export type SpliceRefusalCode = Exclude<DecisionsRefusalCode, 'not-utf8' | 'not-found' | 'outside-workspace' | 'config-error'>;
 
 export interface SpliceRefusal {
   ok: false;

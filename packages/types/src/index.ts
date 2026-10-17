@@ -83,6 +83,7 @@ export {
   type DecisionsDocument,
   type DecisionsRuleRequest,
   type DecisionsRefusalCode,
+  type DecisionsReadResponse,
   type DecisionsRuleResponse,
   type TunnelStatus,
   type TowerVersionInfo,
