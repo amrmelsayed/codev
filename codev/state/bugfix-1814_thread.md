@@ -65,3 +65,14 @@ Note: `getPhaseCompletionChecks` has no production caller — phase checks via
   not this PR: draft-07 schemas type `defaults.checks` as string-only (loader already accepted
   objects); adopter skeleton docs have no `porch.checks` section at all (Spec #550 never
   mirrored it); checks are a flat name-keyed map, so one name in two phases collides.
+
+## Architect integration review, round 1 (2026-10-17)
+
+- Asked: document `timeout_ms` in the adopter skeleton (its porch skill twins and
+  `agent-farm.md` had no `porch.checks` section at all — added a minimal one each); announce an
+  override that sets only `timeout_ms` (`logCheckOverrides` checked only command/cwd — exported
+  it, added `timeout: Nms`, one test that fails without the change); two doc comments on
+  `runCheck` (detached = setsid, no controlling terminal; process-level signal listeners, so
+  CLI-only). Only `index.ts` calls the runner (`next.ts` doesn't), so the comment names it alone.
+- CMAP round 3: codex COMMENT (PR-body drift only, fixed), claude APPROVE. Full suite 6253
+  passed. Follow-ups and known limits listed in the PR body.
