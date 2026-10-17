@@ -1,7 +1,7 @@
 id: bugfix-1814
 title: porch-per-check-timeout-ms-in-
 protocol: bugfix
-phase: pr
+phase: verified
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -13,5 +13,5 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-17T00:11:09.820Z'
-updated_at: '2026-10-17T13:20:55.605Z'
+updated_at: '2026-10-17T13:21:00.521Z'
 pr_ready_for_human: false
