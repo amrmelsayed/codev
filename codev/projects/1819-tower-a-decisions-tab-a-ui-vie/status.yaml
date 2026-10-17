@@ -38,8 +38,20 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 1
-build_complete: true
-history: []
+iteration: 2
+build_complete: false
+history:
+  - iteration: 1
+    plan_phase: phase_1
+    build_output: ''
+    reviews:
+      - model: codex
+        verdict: REQUEST_CHANGES
+        file: >-
+          /Users/mwk/Development/cluesmith/codev/.builders/spir-1819/codev/projects/1819-tower-a-decisions-tab-a-ui-vie/1819-phase_1-iter1-codex.txt
+      - model: claude
+        verdict: REQUEST_CHANGES
+        file: >-
+          /Users/mwk/Development/cluesmith/codev/.builders/spir-1819/codev/projects/1819-tower-a-decisions-tab-a-ui-vie/1819-phase_1-iter1-claude.txt
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-17T16:45:21.545Z'
+updated_at: '2026-10-17T16:51:26.367Z'
