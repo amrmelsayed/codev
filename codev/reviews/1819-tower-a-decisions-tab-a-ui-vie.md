@@ -62,7 +62,7 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
   - web suite 500 passed / 1 skipped; `tsc -b` clean;
   - browser suite 9/9 locally on a fresh build, 0 shellpers left;
   - a server already listening on the suite's port now fails the run ("http://localhost:14101 is already used") instead of being reused;
-  - dashboard-e2e: POST_REVIEW_CI.
+  - dashboard-e2e [39061143299](https://github.com/cluesmith/codev/actions/runs/39061143299) on `fb1bcbc71`: success. Decisions 9/9, no retries; main suite 66 passed, 4 skipped, 1 flaky (the same pre-existing `spec-823` N=3 test).
 
 ## Deviations from Plan
 
@@ -309,7 +309,7 @@ Hot (`lessons-critical.md`): no change. These are subsystem-specific, and the ho
 
 No test was skipped by this project. Observed, pre-existing, and unrelated to this change:
 
-- `packages/codev/src/agent-farm/__tests__/e2e/spec-823-builder-attribution.test.ts`, "N=3 — attribution renders for three sibling architects": failed once and passed on retry in dashboard-e2e run 39059487181. The file is untouched here.
+- `packages/codev/src/agent-farm/__tests__/e2e/spec-823-builder-attribution.test.ts`, "N=3 — attribution renders for three sibling architects": failed once and passed on retry in dashboard-e2e runs 39059487181 and 39061143299. The file is untouched here.
 - `apps/web/__tests__/Terminal.fit-scroll.test.tsx`: an `it.skip` marked FLAKY that is already on main. It accounts for the web suite's one skip.
 
 ## Follow-up Items
