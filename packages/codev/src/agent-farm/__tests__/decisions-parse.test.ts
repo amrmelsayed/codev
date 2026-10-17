@@ -76,13 +76,21 @@ describe('parseOptions', () => {
     ]);
   });
 
-  it('returns no options when the text after the label does not start with a backtick', () => {
+  it('returns no options when no segment starts with a backticked word', () => {
     expect(parseOptions('**Your word:** approve or reject')).toEqual([]);
   });
 
-  it('keeps trailing text after a span without `=` as its description', () => {
-    expect(parseOptions('**Your word:** `hold` (wait a day)')).toEqual([
-      { word: 'hold', description: '(wait a day)', recommended: true },
+  it('reads later options when the first segment is not one; the first option found is recommended', () => {
+    expect(parseOptions('**Your word:** approve / `rework` = send back / `hold`')).toEqual([
+      { word: 'rework', description: 'send back', recommended: true },
+      { word: 'hold', description: '', recommended: false },
+    ]);
+  });
+
+  it('reads a description only after `=`', () => {
+    expect(parseOptions('**Your word:** `hold` (wait a day) / `go` = now')).toEqual([
+      { word: 'hold', description: '', recommended: true },
+      { word: 'go', description: 'now', recommended: false },
     ]);
   });
 });
@@ -143,6 +151,11 @@ describe('parseDecisions — the issue format', () => {
     expect(FIXTURE.slice(item.start, item.end).endsWith('`hold`\n\n')).toBe(true);
   });
 
+  it('does not change an item\'s fingerprint when only the spacing before the next item changes', () => {
+    const respaced = parseDecisions(FIXTURE.replace('`hold`\n\n### main-11', '`hold`\n\n\n\n### main-11'));
+    expect(respaced.items[0].fingerprint).toBe(parsed.items[0].fingerprint);
+  });
+
   it('changes the version and only the edited item\'s fingerprint when one item changes', () => {
     const edited = parseDecisions(FIXTURE.replace('the retry fix is green', 'the retry fix is now green'));
     expect(edited.version).not.toBe(parsed.version);
@@ -158,12 +171,15 @@ describe('parseDecisions — headings', () => {
     expect(items[0].stamp?.raw).toBe('2026-10-17 9:00 am UTC');
   });
 
-  it('yields no stamp for a heading without separators, or with only one', () => {
-    const { items } = parseDecisions('## Open\n### a-1 Plain question\n**Your word:** `y`\n### a-2 · Only a question\n**Your word:** `y`\n');
-    expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([
-      ['a-1', null, 'Plain question'],
-      ['a-2', null, 'Only a question'],
-    ]);
+  it('yields no stamp for a heading without separators', () => {
+    const { items } = parseDecisions('## Open\n### a-1 Plain question\n**Your word:** `y`\n');
+    expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([['a-1', null, 'Plain question']]);
+  });
+
+  it('reads the part after a single separator as the stamp, shown unconverted when it is not one', () => {
+    const { items } = parseDecisions('## Open\n### a-2 · Only a question\n**Your word:** `y`\n');
+    expect(items[0].stamp).toEqual({ raw: 'Only a question', instant: null, unconvertedReason: 'unrecognized-format' });
+    expect(items[0].question).toBe('');
   });
 
   it('accepts indented item headings and keeps level-4 headings in the body', () => {
@@ -258,6 +274,19 @@ describe('parseDecisions — Q&A thread', () => {
     expect(items[0].bodyMarkdown).toBe('- **Problem:** p\n- **Fix:** f');
   });
 
+  it('takes only indented lines as continuation: unindented prose and headings stay in the body', () => {
+    const body = '- **You asked (6:07 am):** why?\n  more of the question\nUnindented prose.\n- **Main\'s answer (6:09 am):** because.\n#### Detail\ntext';
+    const { items } = parseDecisions(oneItem(body));
+    expect(items[0].qa.map(e => e.markdown)).toEqual(['why?\nmore of the question', 'because.']);
+    expect(items[0].bodyMarkdown).toBe('Unindented prose.\n#### Detail\ntext');
+  });
+
+  it('starts a new entry rather than continuing when an indented line is itself an entry', () => {
+    const body = '- **You asked (6:07 am):** why?\n  - **Main\'s answer (6:09 am):** because.';
+    const { items } = parseDecisions(oneItem(body));
+    expect(items[0].qa.map(e => e.kind)).toEqual(['asked', 'answer']);
+  });
+
   it('does not read Q&A lines inside a fence', () => {
     const { items } = parseDecisions(oneItem('```\n- **You asked (1:00 am):** no\n```'));
     expect(items[0].qa).toEqual([]);
@@ -330,7 +359,8 @@ describe('parseDecisions — malformed input', () => {
 describe('parseDecisions — independent of the machine time zone', () => {
   const originalTz = process.env.TZ;
   afterEach(() => {
-    process.env.TZ = originalTz;
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
   });
 
   it('produces identical documents under different TZ values', () => {

@@ -50,14 +50,17 @@ export interface ParsedDecisions {
 const SEPARATOR = ' · ';
 const ASKED_RE = /^ {0,3}- \*\*You asked \(([^)]*)\):\*\*[ \t]*(.*)$/;
 const ANSWER_RE = /^ {0,3}- \*\*(.+?)['’]s answer \(([^)]*)\):\*\*[ \t]*(.*)$/;
-const LIST_ITEM_RE = /^ {0,3}(?:[-*+]|\d+[.)])(?:[ \t]|$)/;
+const CONTINUATION_INDENT_RE = /^(?: {2}|\t)/;
 const LEADING_SPAN_RE = /^`([^`\n]+)`/;
 
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-/** Join line contents with '\n', dropping leading and trailing blank lines. */
+/**
+ * Join line contents with '\n', dropping leading and trailing blank lines. The result
+ * is LF-normalized whatever the file's line ending, so compare it with LF text.
+ */
 function joinTrimmed(lines: SourceLine[]): string {
   let from = 0;
   let to = lines.length;
@@ -66,27 +69,29 @@ function joinTrimmed(lines: SourceLine[]): string {
   return lines.slice(from, to).map(l => l.text).join('\n');
 }
 
-/** Split a heading's text into id, stamp text and question. */
+/**
+ * Split a heading's text into id, stamp text and question: the first token is the id;
+ * after a ` · `, the first part is the stamp and the rest (re-joined) the question. A
+ * heading without separators has a question and no stamp.
+ */
 function splitHeading(headingText: string): { id: string; stampText: string | null; question: string } {
   const id = headingText.split(/\s+/)[0] ?? '';
   const rest = headingText.slice(id.length);
   if (!rest.startsWith(SEPARATOR)) return { id, stampText: null, question: rest.trim() };
-  const parts = rest.slice(SEPARATOR.length).split(SEPARATOR);
-  if (parts.length < 2) return { id, stampText: null, question: parts[0].trim() };
-  return { id, stampText: parts[0].trim(), question: parts.slice(1).join(SEPARATOR).trim() };
+  const [stampText, ...questionParts] = rest.slice(SEPARATOR.length).split(SEPARATOR);
+  return { id, stampText: stampText.trim(), question: questionParts.join(SEPARATOR).trim() };
 }
 
 /**
  * Options from a `**Your word:**` line. An option starts at a backticked span at the
  * start of the text after the label, or at a backticked span immediately preceded by
- * ` / `. Its description is the text after its `=` (or after the span, when there is
- * no `=`) up to the next ` / ` that is followed by a backtick, or end of line. Any
- * other ` / ` is part of the description.
+ * ` / `. Its description is the text after its `=`, if any, up to the next ` / ` that
+ * is followed by a backtick, or end of line. Any other ` / ` is part of the
+ * description. Text that is not an option, or not after an `=`, is not read.
  */
 export function parseOptions(yourWordLineText: string): DecisionOption[] {
   const labelAt = yourWordLineText.indexOf(YOUR_WORD_LABEL);
   const rest = yourWordLineText.slice(labelAt + YOUR_WORD_LABEL.length).trim();
-  if (!rest.startsWith('`')) return [];
 
   const starts = [0];
   for (let i = rest.indexOf(' / `'); i !== -1; i = rest.indexOf(' / `', i + 1)) {
@@ -101,8 +106,8 @@ export function parseOptions(yourWordLineText: string): DecisionOption[] {
     if (!span) continue;
     const word = span[1].trim();
     if (!word) continue;
-    let description = segment.slice(span[0].length).trim();
-    if (description.startsWith('=')) description = description.slice(1).trim();
+    const after = segment.slice(span[0].length).trim();
+    const description = after.startsWith('=') ? after.slice(1).trim() : '';
     options.push({ word, description, recommended: options.length === 0 });
   }
   return options;
@@ -122,12 +127,19 @@ function extractQa(bodyLines: SourceLine[]): { qa: DecisionQaEntry[]; rest: Sour
       continue;
     }
 
-    // Continuation: following non-blank, unfenced lines that don't start a new list
-    // item — indented lines, and lazy (unindented) paragraph continuations.
+    // Continuation: the following indented (2+ spaces or a tab), non-blank, unfenced
+    // lines that are neither headings nor the start of another entry.
     const parts = [asked ? asked[2] : answer![3]];
     while (i + 1 < bodyLines.length) {
       const next = bodyLines[i + 1];
-      if (next.fenced || next.text.trim() === '' || LIST_ITEM_RE.test(next.text)) break;
+      const continues =
+        !next.fenced &&
+        next.headingLevel === 0 &&
+        next.text.trim() !== '' &&
+        CONTINUATION_INDENT_RE.test(next.text) &&
+        !ASKED_RE.test(next.text) &&
+        !ANSWER_RE.test(next.text);
+      if (!continues) break;
       parts.push(next.text.trim());
       i++;
     }
@@ -218,6 +230,10 @@ function parseItem(
   const start = heading.start;
   const end = offsetOf(endLine);
   const itemLines = lines.slice(headingLine + 1, endLine);
+  // The fingerprint excludes the blank lines that separate this item from the next, so
+  // re-spacing between items is not an edit of this one.
+  let lastContent = heading;
+  for (const l of itemLines) if (l.text.trim() !== '') lastContent = l;
   const yourWordLines = itemLines.filter(l => l.yourWord).map(l => l.index);
 
   const problems: DecisionItemProblem[] = [];
@@ -245,7 +261,7 @@ function parseItem(
     options,
     currentRuling,
     qa,
-    fingerprint: sha256(text.slice(start, end)),
+    fingerprint: sha256(text.slice(start, lastContent.end)),
     problems,
     writable: false,
     headingLine,

@@ -78,8 +78,9 @@ function isIanaZone(name: string): boolean {
 }
 
 function parseZone(zone: string): Zone | null {
-  if (zone in FIXED_ZONES) return { kind: 'fixed', offsetMinutes: FIXED_ZONES[zone] };
-  if (zone in GENERIC_ZONES) return { kind: 'iana', name: GENERIC_ZONES[zone] };
+  // Own keys only: `in` would let prototype names (`toString`, `__proto__`, …) through.
+  if (Object.hasOwn(FIXED_ZONES, zone)) return { kind: 'fixed', offsetMinutes: FIXED_ZONES[zone] };
+  if (Object.hasOwn(GENERIC_ZONES, zone)) return { kind: 'iana', name: GENERIC_ZONES[zone] };
   const offset = OFFSET_RE.exec(zone);
   if (offset) {
     const hours = Number(offset[2]);

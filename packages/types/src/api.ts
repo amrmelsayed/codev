@@ -641,7 +641,7 @@ export interface DecisionItem {
   /** Text after the `**Your word:**` line, trimmed, verbatim; '' when unruled. */
   currentRuling: string;
   qa: DecisionQaEntry[];
-  /** SHA-256 of the item's exact text; echoed back on a ruling request. */
+  /** SHA-256 of the item's exact text (trailing blank lines excluded); echoed back on a ruling request. */
   fingerprint: string;
   problems: DecisionItemProblem[];
   /** Whether the tab may write a ruling for this item. */

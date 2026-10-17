@@ -81,7 +81,10 @@ describe('resolveStamp — numeric offsets and IANA names', () => {
 });
 
 describe('resolveStamp — unconverted, never guessed', () => {
-  it.each(['IST', 'BST', 'AST', 'XYZ', 'pt', 'EST5EDT', 'Not/AZone'])('unknown or excluded zone %s', zone => {
+  it.each([
+    'IST', 'BST', 'AST', 'XYZ', 'pt', 'EST5EDT', 'Not/AZone',
+    'toString', '__proto__', 'constructor', 'hasOwnProperty', 'valueOf',
+  ])('unknown or excluded zone %s', zone => {
     expect(resolveStamp(`2026-10-17 12:10 am ${zone}`)).toEqual({
       raw: `2026-10-17 12:10 am ${zone}`,
       instant: null,
@@ -128,7 +131,8 @@ describe('resolveStamp — unconverted, never guessed', () => {
 describe('resolveStamp — independent of the machine time zone', () => {
   const originalTz = process.env.TZ;
   afterEach(() => {
-    process.env.TZ = originalTz;
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
   });
 
   it('gives identical results under different TZ values', () => {

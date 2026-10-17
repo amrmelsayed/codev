@@ -135,7 +135,7 @@ export function classifyLines(text: string): SourceLine[] {
   return lines;
 }
 
-/** The line ending a file predominantly uses (CRLF if its first terminator is CRLF). */
+/** The line ending for inserted text: the file's first terminator (LF when it has none). */
 export function detectLineEnding(lines: SourceLine[]): '\n' | '\r\n' {
   const first = lines.find(l => l.eol !== '');
   return first?.eol === '\r\n' ? '\r\n' : '\n';
