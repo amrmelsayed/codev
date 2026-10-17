@@ -115,6 +115,8 @@ import type {
   HeldMessage,
   DashboardState,
   DecisionsDocument,
+  DecisionsRefusalCode,
+  DecisionsRuleRequest,
 } from '@cluesmith/codev-types';
 
 export async function fetchAnalytics(range: string, refresh?: boolean): Promise<AnalyticsResponse> {
@@ -140,18 +142,27 @@ export type DecisionsFetchResult =
   | { kind: 'not-found'; message: string }
   | { kind: 'error'; message: string };
 
+/**
+ * Spec 1819: the outcome of submitting a ruling. Never thrown — the card shows a
+ * refusal or a transport failure and keeps the owner's draft.
+ */
+export type DecisionRulingResult =
+  | { kind: 'document'; document: DecisionsDocument }
+  | { kind: 'refused'; code: DecisionsRefusalCode; message: string }
+  | { kind: 'error'; message: string };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
 /**
- * Spec 1819: read the decisions document. Every decisions response carries `ok`;
+ * Spec 1819: one request to a decisions route. Every decisions response carries `ok`;
  * anything else (a 401's plain-text body, a dispatcher `{ error }`) is an error.
  */
-export async function fetchDecisions(): Promise<DecisionsFetchResult> {
+async function requestDecisions(path: string, init: RequestInit): Promise<DecisionRulingResult> {
   let res: Response;
   try {
-    res = await fetch(apiUrl('api/decisions'), { headers: getAuthHeaders() });
+    res = await fetch(apiUrl(path), init);
   } catch (err) {
     return { kind: 'error', message: `Could not reach Tower: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -166,11 +177,27 @@ export async function fetchDecisions(): Promise<DecisionsFetchResult> {
     return { kind: 'document', document: body.document as unknown as DecisionsDocument };
   }
   if (isRecord(body) && body.ok === false && typeof body.code === 'string' && typeof body.message === 'string') {
-    return body.code === 'not-found'
-      ? { kind: 'not-found', message: body.message }
-      : { kind: 'error', message: body.message };
+    return { kind: 'refused', code: body.code as DecisionsRefusalCode, message: body.message };
   }
   return { kind: 'error', message: `Unexpected response from Tower (HTTP ${res.status})` };
+}
+
+/** Spec 1819: read the decisions document. */
+export async function fetchDecisions(): Promise<DecisionsFetchResult> {
+  const result = await requestDecisions('api/decisions', { headers: getAuthHeaders() });
+  if (result.kind !== 'refused') return result;
+  return result.code === 'not-found'
+    ? { kind: 'not-found', message: result.message }
+    : { kind: 'error', message: result.message };
+}
+
+/** Spec 1819: write the owner's ruling into the decisions file; success carries the re-parsed document. */
+export async function postDecisionRuling(request: DecisionsRuleRequest): Promise<DecisionRulingResult> {
+  return requestDecisions('api/decisions/rule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(request),
+  });
 }
 
 export async function fetchOverview(): Promise<OverviewData> {

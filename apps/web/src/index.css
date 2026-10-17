@@ -2677,6 +2677,161 @@ a.attention-row {
   color: var(--text-secondary);
 }
 
+.decisions-form {
+  margin-bottom: 8px;
+}
+
+/* The fieldset is there for the radio group's semantics; it draws no frame of its own. */
+.decisions-form .decisions-options {
+  border: none;
+  margin: 0 0 8px;
+  padding: 0;
+  min-width: 0;
+}
+
+.decisions-form legend {
+  padding: 0;
+}
+
+.decisions-choice {
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.decisions-choice input {
+  margin: 0;
+  align-self: center;
+  accent-color: var(--accent);
+}
+
+.decisions-options:disabled .decisions-choice {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.decisions-link-btn {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.decisions-held-pointer {
+  margin: 8px 0 0;
+}
+
+.decisions-held-pointer .decisions-link-btn {
+  color: inherit;
+  font-size: inherit;
+}
+
+.decisions-comment-label {
+  display: block;
+}
+
+.decisions-comment {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 60px;
+  resize: vertical;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.decisions-comment:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.decisions-comment:read-only {
+  opacity: 0.6;
+}
+
+.decisions-form .decisions-notice,
+.decisions-form .decisions-error {
+  margin: 6px 0 0;
+}
+
+.decisions-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.decisions-submit-btn {
+  padding: 5px 14px;
+  font-size: 13px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.decisions-submit-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.decisions-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.decisions-held {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.decisions-held-card {
+  border-style: dashed;
+  border-color: var(--status-waiting);
+}
+
+.decisions-held-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--status-waiting);
+}
+
+.decisions-held-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.decisions-held-text {
+  user-select: text;
+}
+
+.decisions-discard-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.decisions-discard-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .decisions-ruled {
   margin-top: 16px;
   padding-top: 8px;
@@ -2703,5 +2858,15 @@ a.attention-row {
 
   .decisions-card {
     padding: 8px 10px;
+  }
+
+  /* 16px keeps iOS from zooming the page when the comment box takes focus. */
+  .decisions-comment {
+    font-size: 16px;
+  }
+
+  .decisions-submit-btn {
+    padding: 8px 18px;
+    font-size: 14px;
   }
 }

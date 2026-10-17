@@ -2,6 +2,7 @@
  * Spec 1819 Phases 4–5: DecisionsView — the shell (header, file-level problems, loading /
  * not-found / error states) and the read-only cards (stamps, body, Q&A thread, options,
  * current ruling, item notices, the collapsed `## Ruled` list, container link handling).
+ * Ruling from a writable card (Phase 6) is in DecisionsView.ruling.test.tsx.
  */
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
@@ -235,13 +236,15 @@ describe('DecisionsView card content', () => {
     expect(within(card('Q')).queryByRole('list', { name: 'Questions and answers' })).not.toBeInTheDocument();
   });
 
-  it('lists the options in order with descriptions, the first marked recommended, and no controls yet', () => {
+  it('lists a read-only card\'s options in order with descriptions, the first marked recommended, with no controls', () => {
     showItems(makeItem('main-12', 'Q', {
       options: [
         { word: 'accept', description: 'merge as is', recommended: true },
         { word: 'rework', description: 'send back', recommended: false },
         { word: 'hold', description: '', recommended: false },
       ],
+      currentRuling: 'rework',
+      writable: false,
     }));
     const options = within(within(card('Q')).getByRole('list', { name: 'Options' })).getAllByRole('listitem');
     expect(options.map(o => o.textContent)).toEqual(['acceptRecommendedmerge as is', 'reworksend back', 'hold']);
