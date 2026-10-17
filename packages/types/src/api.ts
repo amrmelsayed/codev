@@ -684,6 +684,7 @@ export type DecisionsRefusalCode =
   | 'item-changed'
   | 'structure-changed'
   | 'not-utf8'
+  | 'write-failed'
   | 'not-found'
   | 'outside-workspace'
   | 'config-error';

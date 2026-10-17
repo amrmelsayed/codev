@@ -46,6 +46,9 @@ function readConfiguredPath(workspacePath: string): ConfiguredPathOutcome {
     if (typeof value !== 'string' || value.trim() === '') {
       throw new Error(`dashboard.decisionsFile must be a non-empty string, got ${JSON.stringify(value)}`);
     }
+    if (path.isAbsolute(value)) {
+      throw new Error(`dashboard.decisionsFile must be relative to the workspace root, got ${JSON.stringify(value)}`);
+    }
     return { ok: true, path: value };
   } catch (err) {
     return { ok: false, error: err as Error };

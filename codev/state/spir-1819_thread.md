@@ -66,3 +66,10 @@ Addressed all points in the spec:
 - New refusal `not-utf8` (422): the route checks the file's bytes round-trip through UTF-8 before splicing; otherwise a stray invalid byte anywhere would be rewritten as U+FFFD, breaking "every pre-existing byte preserved".
 - Handlers take Tower's `ctx.log` (plan signatures had none); `handleWorkspaceState` now takes `ctx` to log the flag's config error. That log is deduped per workspace so a broken config logs once, not once a second per dashboard.
 - I/O failures during the write (e.g. rename EIO) are not refusals: they propagate to `handleRequest`'s generic 500; the test confirms the file is intact, no temp file is left, and the queue isn't wedged.
+
+## 2026-10-17 · Phase 3 review (iter 1): codex COMMENT, claude APPROVE — porch advanced to phase_4
+
+- Acted on two non-blocking points as a follow-up `[Phase: phase_3] fix` commit, because the client phases consume the route's contract:
+  - An I/O failure while writing (ENOSPC/EACCES/EIO, or the file vanishing before the stat) is now a typed refusal `write-failed` (500, `{ ok: false, code, message }`) rather than escaping to `handleRequest`'s generic `{ error }` 500, so the card always has a message and keeps the draft. (claude)
+  - An absolute `dashboard.decisionsFile` is a `config-error`, even when it points inside the workspace — the setting is defined as workspace-relative. (codex)
+- Not acted on: logging the GET route's refusals (it is polled every couple of seconds while the tab is visible, so a misconfiguration would log on every poll; the state flag already logs a config error once per workspace). A directory at the configured path reads as `not-found` (nit, left as is).

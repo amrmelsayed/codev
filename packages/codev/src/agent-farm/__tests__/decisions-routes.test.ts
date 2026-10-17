@@ -144,6 +144,14 @@ describe('GET decisions', () => {
     expect(body.code).toBe('config-error');
   });
 
+  it('reports an absolute dashboard.decisionsFile as config-error, even inside the workspace', async () => {
+    fs.writeFileSync(decisionsFile, FIXTURE);
+    writeConfig({ dashboard: { decisionsFile: decisionsFile } });
+    const { status, body } = await get();
+    expect(status).toBe(500);
+    expect(body).toEqual({ ok: false, code: 'config-error', message: expect.stringContaining('relative to the workspace root') });
+  });
+
   it('reports a non-string dashboard.decisionsFile as config-error', async () => {
     fs.writeFileSync(decisionsFile, FIXTURE);
     writeConfig({ dashboard: { decisionsFile: 42 } });
@@ -290,10 +298,12 @@ describe('POST decisions/rule', () => {
     expect(fs.readdirSync(path.dirname(decisionsFile))).toEqual(['pending-decisions.md']);
   });
 
-  it('leaves the original intact and no temporary file when the rename fails', async () => {
+  it('refuses as write-failed, leaving the original intact and no temporary file, when the rename fails', async () => {
     const rename = vi.spyOn(fs.promises, 'rename').mockRejectedValueOnce(Object.assign(new Error('EIO: rename failed'), { code: 'EIO' }));
     const request = { id: 'main-11', word: 'accept', fingerprint: fingerprintOf(FIXTURE, 'main-11') };
-    await expect(rule(request)).rejects.toThrow('EIO: rename failed');
+    const failed = await rule(request);
+    expect(failed.status).toBe(500);
+    expect(failed.body).toEqual({ ok: false, code: 'write-failed', message: expect.stringContaining('EIO: rename failed') });
     expect(rename).toHaveBeenCalledOnce();
     expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(FIXTURE);
     expect(fs.readdirSync(path.dirname(decisionsFile))).toEqual(['pending-decisions.md']);

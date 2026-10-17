@@ -40,6 +40,7 @@ export const DECISIONS_REFUSAL_STATUS: Record<DecisionsRefusalCode, number> = {
   'structure-changed': 422,
   'not-utf8': 422,
   'config-error': 500,
+  'write-failed': 500,
 };
 
 type Refusal = { ok: false; code: DecisionsRefusalCode; message: string };
@@ -142,7 +143,11 @@ export async function handleDecisionsRule(
     }
     const spliced = spliceRuling(text, ruling);
     if (!spliced.ok) return spliced;
-    await writeFileAtomic(canonicalPath, spliced.text);
+    try {
+      await writeFileAtomic(canonicalPath, spliced.text);
+    } catch (err) {
+      return refusal('write-failed', `${displayPath} could not be written (${(err as Error).message}); the file is unchanged.`);
+    }
     return spliced;
   });
   if (!outcome.ok) return refuse(outcome, ruling.id);
