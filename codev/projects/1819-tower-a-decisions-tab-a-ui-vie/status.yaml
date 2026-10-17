@@ -8,10 +8,10 @@ plan_phases:
     status: complete
   - id: phase_2
     title: Ruling splice with fail-loud validation
-    status: in_progress
+    status: complete
   - id: phase_3
     title: 'Tower decisions routes: config, containment, serialized atomic writes'
-    status: pending
+    status: in_progress
   - id: phase_4
     title: 'Decisions tab shell: dependency, race-safe polling, tab wiring'
     status: pending
@@ -24,7 +24,7 @@ plan_phases:
   - id: phase_7
     title: Browser verification and documentation
     status: pending
-current_plan_phase: phase_2
+current_plan_phase: phase_3
 gates:
   spec-approval:
     status: approved
@@ -39,7 +39,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -54,8 +54,10 @@ history:
         file: >-
           /Users/mwk/Development/cluesmith/codev/.builders/spir-1819/codev/projects/1819-tower-a-decisions-tab-a-ui-vie/1819-phase_1-iter1-claude.txt
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-17T17:04:45.305Z'
+updated_at: '2026-10-17T17:09:13.272Z'
 context_refreshes:
   - boundary: plan-phase:phase_2
     at: '2026-10-17T16:56:28.468Z'
     acknowledged_at: '2026-10-17T16:56:33.276Z'
+  - boundary: plan-phase:phase_3
+    at: '2026-10-17T17:09:13.272Z'
