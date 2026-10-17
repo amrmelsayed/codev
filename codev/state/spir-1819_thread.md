@@ -153,3 +153,8 @@ Addressed all points in the spec:
 - dashboard-e2e on `e20acb2a7` (run 39059250714, Decisions step on 14101 with its own state and socket dirs): success, 8/8.
 - The plan's risk table says the atomic rename vs an annotator file tab open on the same file is "covered in the Phase 7 manual pass"; I had not done it. Added an e2e test instead: open a file tab on the decisions file, rule through `POST /api/decisions/rule` (temp file + rename), and the open viewer must show the new text. It does — the annotator polls mtime and re-reads by path.
 - Its first run failed, and the cause is pre-existing and unrelated to the rename: the annotator takes its first mtime reading a second after it loads and adopts it as the baseline, so a write landing in that first second is never shown (until the next write). The test now writes after that first reading; 3/3 repeated, suite 9/9. Not changed (annotator, outside this spec) — goes in the review doc.
+
+## 2026-10-17 · Phase 7 review (iter 3): codex APPROVE, claude APPROVE — porch advanced to review
+
+- dashboard-e2e on `1c4a5a35a` (run 39059487181): success. Decisions step 9/9, no retries. Main step: 66 passed, 4 skipped, 1 flaky — `spec-823-builder-attribution.test.ts` "N=3 — attribution renders for three sibling architects" (pre-existing, untouched here, passed on retry): goes under Flaky Tests in the review.
+- Not acted on (claude, minor): the state/socket-dir guards live only in `playwright.decisions.config.ts` (the port guard is also in the test file) — the config is the only way the suite runs (the default config ignores it), and it refuses before any Tower starts; the screenshots are copied from the run, so they can drift from the UI later — they are evidence for this change, dated by the run.
