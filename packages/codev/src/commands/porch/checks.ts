@@ -373,7 +373,7 @@ export async function runPhaseChecks(
     const checkCwd = typeof checkVal === 'object' && checkVal.cwd
       ? path.resolve(cwd, checkVal.cwd)
       : cwd;
-    const checkTimeoutMs = typeof checkVal === 'object' && checkVal.timeout_ms
+    const checkTimeoutMs = typeof checkVal === 'object' && checkVal.timeout_ms !== undefined
       ? checkVal.timeout_ms
       : timeoutMs;
 

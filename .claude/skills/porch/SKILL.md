@@ -60,7 +60,7 @@ porch pending --all            # Include stale records on finished/advanced proj
 
 Protocol check commands default to the **npm** toolchain (`npm run build`, `npm test`, etc.) baked into each `protocol.json`. A non-Node project (Python/uv, Go, Rust) will BLOCK at the first implement-phase check because `npm` can never pass there — even when the code is green under its real test runner.
 
-**You do NOT need to fork `protocol.json`.** Override check commands per-name in `.codev/config.json` under `porch.checks`. Each entry takes `command` (replace), `cwd` (replace), `timeout_ms` (replace), and/or `skip: true`. This covers both phase checks **and** the `phase_completion` predicates (`build_succeeds` / `tests_pass`).
+**You do NOT need to fork `protocol.json`.** Override check commands per-name in `.codev/config.json` under `porch.checks`. Each entry takes `command` (replace), `cwd` (replace), and/or `skip: true`. This covers both phase checks **and** the `phase_completion` predicates (`build_succeeds` / `tests_pass`).
 
 ```jsonc
 // .codev/config.json — Python/uv example
@@ -77,7 +77,7 @@ Protocol check commands default to the **npm** toolchain (`npm run build`, `npm 
 }
 ```
 
-A check is killed after 5 minutes unless it sets `timeout_ms` — in `protocol.json` or in its override, e.g. `"tests": { "command": "uv run pytest", "timeout_ms": 900000 }` for a long suite. On timeout porch kills the check's whole process tree.
+A phase check is killed after 5 minutes unless it sets `timeout_ms` — in `protocol.json` or in its `porch.checks` override (`phase_completion` predicates take no timeout), e.g. `"tests": { "command": "uv run pytest", "timeout_ms": 900000 }` for a long suite. On timeout porch kills the check's whole process tree.
 
 Keys are the **check names** from the protocol: `build` / `test` / `e2e_tests` live in phases; `build_succeeds` / `tests_pass` live in `phase_completion`. An override key that matches no check in the protocol prints a warning. Shipped by Spec #550.
 
