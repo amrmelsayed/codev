@@ -138,6 +138,7 @@ export interface CodevConfig {
 export interface CheckOverride {
   command?: string;
   cwd?: string;
+  timeout_ms?: number;
   skip?: boolean;
 }
 

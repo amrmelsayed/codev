@@ -14,8 +14,11 @@ import { executeForgeCommand, getForgeCommand, loadForgeConfig } from '../../lib
 
 const execFileAsync = promisify(execFile);
 
-/** Default timeout for checks: 5 minutes */
+/** Default timeout for checks: 5 minutes. A check may set its own `timeout_ms`. */
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** Signals porch forwards to a running check's process group */
+const RELAYED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 // ============================================================================
 // Check Execution
@@ -49,9 +52,13 @@ export async function runCheck(
     const executable = parts[0];
     const args = parts.slice(1);
 
+    // detached: the check leads its own process group, so a timeout can kill
+    // the whole tree (#1814). Killing only the shell left its grandchildren
+    // (test workers) holding stdout open, and 'close' never fired.
     const proc = spawn(executable, args, {
       cwd,
       shell: true,
+      detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -60,15 +67,33 @@ export async function runCheck(
       },
     });
 
+    const killGroup = (signal: NodeJS.Signals) => {
+      if (proc.pid === undefined) return;
+      try {
+        process.kill(-proc.pid, signal);
+      } catch {
+        // Group already gone
+      }
+    };
+
+    // Leaving porch's process group also means a Ctrl+C at porch's terminal
+    // no longer reaches the check. Relay porch's own interruption to the
+    // group, then re-raise it so porch dies of the signal as before.
+    const relay = (signal: NodeJS.Signals) => {
+      stopRelaying();
+      killGroup(signal);
+      process.kill(process.pid, signal);
+    };
+    const stopRelaying = () => {
+      for (const signal of RELAYED_SIGNALS) process.removeListener(signal, relay);
+    };
+    for (const signal of RELAYED_SIGNALS) process.on(signal, relay);
+
     // Set up timeout
     const timeout = setTimeout(() => {
       killed = true;
-      proc.kill('SIGTERM');
-      setTimeout(() => {
-        if (!proc.killed) {
-          proc.kill('SIGKILL');
-        }
-      }, 5000);
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), 5000);
     }, timeoutMs);
 
     proc.stdout.on('data', (data) => {
@@ -81,6 +106,7 @@ export async function runCheck(
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
+      stopRelaying();
       const duration = Date.now() - startTime;
 
       if (killed) {
@@ -88,7 +114,7 @@ export async function runCheck(
           name,
           command,
           passed: false,
-          error: `Timed out after ${timeoutMs / 1000}s`,
+          error: `Timed out after ${timeoutMs / 1000}s (raise this check's timeout_ms if it needs longer)`,
           duration_ms: duration,
         });
       } else if (code === 0) {
@@ -113,6 +139,7 @@ export async function runCheck(
 
     proc.on('error', (err) => {
       clearTimeout(timeout);
+      stopRelaying();
       resolve({
         name,
         command,
@@ -287,6 +314,7 @@ export function runArtifactCheck(
 /**
  * Run multiple checks for a phase.
  * Accepts either Record<string, string> (legacy) or Record<string, CheckDef>.
+ * `timeoutMs` applies to each check that carries no `timeout_ms` of its own.
  *
  * Special handling: `pr_exists` checks are routed through the forge concept
  * command dispatcher instead of running the protocol.json command directly.
@@ -320,6 +348,9 @@ export async function runPhaseChecks(
     const checkCwd = typeof checkVal === 'object' && checkVal.cwd
       ? path.resolve(cwd, checkVal.cwd)
       : cwd;
+    const checkTimeoutMs = typeof checkVal === 'object' && checkVal.timeout_ms
+      ? checkVal.timeout_ms
+      : timeoutMs;
 
     // Intercept pr_exists: route through forge concept command
     if (name === 'pr_exists') {
@@ -329,7 +360,7 @@ export async function runPhaseChecks(
       continue;
     }
 
-    const result = await runCheck(name, command, checkCwd, env, timeoutMs);
+    const result = await runCheck(name, command, checkCwd, env, checkTimeoutMs);
     results.push(result);
 
     // Stop on first failure
