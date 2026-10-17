@@ -1,7 +1,7 @@
 id: '1819'
 title: tower-a-decisions-tab-a-ui-vie
 protocol: spir
-phase: specify
+phase: plan
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -16,7 +16,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-17T13:20:57.642Z'
+updated_at: '2026-10-17T13:21:04.946Z'
