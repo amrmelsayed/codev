@@ -138,6 +138,19 @@ describe('bugfix #1814: a timed-out check dies with its whole process tree', () 
     await expectProcessGone(await readPid(pidFile));
   }, 15_000);
 
+  it('a member that ignores SIGTERM and holds no pipe is SIGKILLed before the check resolves', async () => {
+    const pidFile = path.join(root, 'stubborn.pid');
+    // The shell dies on SIGTERM and closes the pipes at once; the backgrounded
+    // grandchild ignores SIGTERM with its stdio on /dev/null. porch exits right
+    // after a failed check, so the runner itself must outlast the escalation.
+    const command = `sh -c 'trap "" TERM; echo $$ > ${pidFile}; exec sleep 30' >/dev/null 2>&1 & wait`;
+
+    const result = await runCheck('stubborn', command, root, env, 300);
+
+    expect(result.error).toContain('Timed out after 0.3s');
+    await expectProcessGone(await readPid(pidFile), 500);
+  }, 15_000);
+
   it("porch's own SIGINT is relayed to the check's process group, then re-raised", async () => {
     const pidFile = path.join(root, 'grandchild.pid');
     const before = new Set(process.listeners('SIGINT'));

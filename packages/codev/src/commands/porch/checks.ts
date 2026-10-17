@@ -17,6 +17,9 @@ const execFileAsync = promisify(execFile);
 /** Default timeout for checks: 5 minutes. A check may set its own `timeout_ms`. */
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
+/** After a timeout's SIGTERM, how long the check's process group gets before SIGKILL */
+const KILL_GRACE_MS = 5000;
+
 /** Signals porch forwards to a running check's process group */
 const RELAYED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
@@ -28,6 +31,19 @@ const RELAYED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 export interface CheckEnv {
   PROJECT_ID: string;
   PROJECT_TITLE: string;
+}
+
+/** Resolve once process group `pgid` has no members, or after `withinMs`. */
+async function waitForGroupExit(pgid: number, withinMs: number): Promise<void> {
+  const deadline = Date.now() + withinMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-pgid, 0);
+    } catch {
+      return; // Group is empty
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
 }
 
 /**
@@ -90,10 +106,11 @@ export async function runCheck(
     for (const signal of RELAYED_SIGNALS) process.on(signal, relay);
 
     // Set up timeout
+    let escalation: NodeJS.Timeout | undefined;
     const timeout = setTimeout(() => {
       killed = true;
       killGroup('SIGTERM');
-      setTimeout(() => killGroup('SIGKILL'), 5000);
+      escalation = setTimeout(() => killGroup('SIGKILL'), KILL_GRACE_MS);
     }, timeoutMs);
 
     proc.stdout.on('data', (data) => {
@@ -104,20 +121,28 @@ export async function runCheck(
       stderr += data.toString();
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
       clearTimeout(timeout);
       stopRelaying();
-      const duration = Date.now() - startTime;
 
       if (killed) {
+        // 'close' means the pipes closed, not that the group is gone: a member
+        // that ignores SIGTERM and holds no pipe outlives the shell. Resolving
+        // now would let porch exit before the SIGKILL escalation fires.
+        if (proc.pid !== undefined) await waitForGroupExit(proc.pid, KILL_GRACE_MS + 1000);
+        clearTimeout(escalation);
         resolve({
           name,
           command,
           passed: false,
           error: `Timed out after ${timeoutMs / 1000}s (raise this check's timeout_ms if it needs longer)`,
-          duration_ms: duration,
+          duration_ms: Date.now() - startTime,
         });
-      } else if (code === 0) {
+        return;
+      }
+
+      const duration = Date.now() - startTime;
+      if (code === 0) {
         resolve({
           name,
           command,
