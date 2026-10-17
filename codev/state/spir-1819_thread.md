@@ -35,3 +35,13 @@ Addressed all points in the spec:
 - Housekeeping: owner's global rules forbid Co-Authored-By / "Generated with" lines — none from here on (earlier spec commits keep theirs; architect said no rewrite).
 - Owner ask at plan time: evaluate YAML/JSON/hybrid instead of markdown. Plan carries a "Format Evaluation" section; recommendation: KEEP MARKDOWN (owner hand-typeability, per-item failure vs whole-file failure in YAML/JSON, js-yaml can't round-trip so the byte-preserving splice doesn't get easier, cross-repo hub migration). The one real structured win — unambiguous stamps — is already available: the spec accepts numeric offsets, so the hub can write `12:10 am -07:00` with no tab change.
 - Plan: 6 phases — read model (parser+stamp+types) → splice → routes (config, realpath containment, KeyedSerializer + atomic rename) → read-only tab → ruling UI/drafts → Playwright + docs.
+
+## 2026-10-17 · Plan iter 1 review (codex + claude: both REQUEST_CHANGES) — all accepted
+
+- useDecisions: skip-while-in-flight + generation counter (applyDocument bumps it) so a stale poll can't overwrite a write's document.
+- E2E: explicit non-4100 TOWER_TEST_PORT required (precedent #1630); throwaway mkdtemp workspaces only — never the repo (codev/state/*.md is gitignored, a leftover would be invisible).
+- Option tokenization: ` / ` starts an option only when followed by a backtick.
+- Tab is conditional-then-sticky for the page session so "file disappears → not-found, held drafts visible" is reachable.
+- decisionsEnabled: configured path memoized ≤5s for the state flag only (state polled every 1s); config errors → flag false, logged, never fail /api/state.
+- Theme CSS imported from main.tsx; structure-changed reached via a pathological option word (`##`), no mocks.
+- Old Phase 4 split → 7 phases total.
