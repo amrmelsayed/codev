@@ -17,14 +17,14 @@ plan_phases:
     status: complete
   - id: phase_5
     title: Read-only decision cards
-    status: in_progress
+    status: complete
   - id: phase_6
     title: 'Ruling from the tab: options, comment, drafts, submit'
-    status: pending
+    status: in_progress
   - id: phase_7
     title: Browser verification and documentation
     status: pending
-current_plan_phase: phase_5
+current_plan_phase: phase_6
 gates:
   spec-approval:
     status: approved
@@ -39,7 +39,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -54,7 +54,7 @@ history:
         file: >-
           /Users/mwk/Development/cluesmith/codev/.builders/spir-1819/codev/projects/1819-tower-a-decisions-tab-a-ui-vie/1819-phase_1-iter1-claude.txt
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-17T17:53:58.621Z'
+updated_at: '2026-10-17T17:58:12.488Z'
 context_refreshes:
   - boundary: plan-phase:phase_2
     at: '2026-10-17T16:56:28.468Z'
@@ -68,3 +68,5 @@ context_refreshes:
   - boundary: plan-phase:phase_5
     at: '2026-10-17T17:43:08.327Z'
     acknowledged_at: '2026-10-17T17:43:22.284Z'
+  - boundary: plan-phase:phase_6
+    at: '2026-10-17T17:58:12.488Z'
