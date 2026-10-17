@@ -1,3 +1,8 @@
+---
+approved: 2026-10-17
+validated: [codex, claude]
+---
+
 # Plan: Tower Decisions tab — a UI view of the pending-decisions file
 
 **Specification**: [codev/specs/1819-tower-a-decisions-tab-a-ui-vie.md](../specs/1819-tower-a-decisions-tab-a-ui-vie.md)

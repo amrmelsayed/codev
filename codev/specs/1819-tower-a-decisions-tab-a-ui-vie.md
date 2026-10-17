@@ -1,3 +1,8 @@
+---
+approved: 2026-10-17
+validated: [codex, claude]
+---
+
 # Specification: Tower Decisions tab — a UI view of the pending-decisions file
 
 <!--

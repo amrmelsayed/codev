@@ -58,6 +58,11 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
   - [39059487181](https://github.com/cluesmith/codev/actions/runs/39059487181) on `1c4a5a35a`: Decisions 9/9 with no retries; main suite 66 passed, 4 skipped, 1 flaky (see Flaky Tests);
   - [39060162578](https://github.com/cluesmith/codev/actions/runs/39060162578) on the merge with main (`b0a84b0a0`): success. Decisions 9/9 (16.1 s, no retries); main suite 67 passed, 4 skipped, none flaky.
 - **Unit suites on the merged branch:** `packages/codev` build exit 0; codev unit 6451 passed / 48 skipped; `apps/web` 499 passed / 1 skipped (the pre-existing skip on main).
+- **After the PR review round's link and config changes:**
+  - web suite 500 passed / 1 skipped; `tsc -b` clean;
+  - browser suite 9/9 locally on a fresh build, 0 shellpers left;
+  - a server already listening on the suite's port now fails the run ("http://localhost:14101 is already used") instead of being reused;
+  - dashboard-e2e: POST_REVIEW_CI.
 
 ## Deviations from Plan
 
@@ -100,6 +105,10 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
   - The plan assumed the default Playwright config. The suite runs through a dedicated `playwright.decisions.config.ts` with no global setup, which `testIgnore`s it from the default config. That config refuses to start unless `TOWER_TEST_PORT` (not 4100), `CODEV_AGENT_FARM_DIR` and `SHELLPER_SOCKET_DIR` are all set, and a separate CI step runs it on port 14101 (codex's reviews).
   - A ninth test replaces the plan's "covered in the Phase 7 manual pass" for the annotator risk.
   - The screenshots are committed under `codev/reviews/1819-tower-a-decisions-tab-a-ui-vie/`.
+
+- **PR review round:**
+  - Links are made inert on the anchors themselves, not only in the click handler. Every `MarkdownView` in the view renders through a `DecisionsMarkdown` wrapper that removes the `href` from non-`http(s)` anchors and gives `http(s)` anchors `target="_blank" rel="noopener noreferrer"`. This covers a middle-click, the context menu and the keyboard. The shared renderer is still unchanged.
+  - `playwright.decisions.config.ts` no longer reuses a server already on its port.
 
 The owner's plan-time format question (YAML/JSON/hybrid instead of markdown) was answered in the plan's Format Evaluation: keep markdown. The plan was approved on that basis.
 
@@ -199,7 +208,7 @@ Several phase 3–7 outputs carry the "working tree changed during review" warni
 - Codex: APPROVE, no concerns.
 - Claude: APPROVE. Notes:
   - A question-less card got an empty accessible name → **Addressed**.
-  - `auxclick` bypasses the handler → **Rebutted**: middle-click opens a new tab, which never navigates the dashboard.
+  - `auxclick` bypasses the handler → **Rebutted** at the time (a middle-click opens a new tab, which never navigates the dashboard). Withdrawn in the PR review round, when codex raised the same gap; now **Addressed** (see below).
   - Bundle +139 kB → **N/A**: the cost of baked decision 1. Lazy-loading is listed as a follow-up.
   - Keep options inert on read-only cards → **Addressed** in Phase 6.
   - Save the screenshots → **Addressed** in Phase 7.
@@ -240,6 +249,18 @@ Several phase 3–7 outputs carry the "working tree changed during review" warni
   - The state-dir and socket-dir guards live only in the config → **Rebutted**: the config is the only way the suite runs, and it refuses before any Tower starts.
   - Committed screenshots can drift from the UI → **N/A**: they are evidence for this change, dated by the run.
   - dashboard-e2e not on PRs → **N/A**: a separate decision.
+
+### Review (PR) Phase (Round 1)
+
+- **Codex — REQUEST_CHANGES:**
+  - Non-http(s) links are not fully inert: a middle-click or the context menu could still open them → **Addressed**. Inert anchors lose their `href`; `http(s)` anchors get `target="_blank" rel="noopener noreferrer"`. Tested, and mutation-checked.
+  - The approved spec and plan lack frontmatter → **Addressed**: `approved: 2026-10-17`, `validated: [codex, claude]`.
+  - Three `-context.md` consultation files were untracked → **Addressed**: committed, as other projects' are.
+- **Claude — APPROVE.** Minor notes:
+  - The Decisions config inherited `reuseExistingServer: true` → **Addressed**: it declares its own `webServer` with `reuseExistingServer: false`.
+  - A comment starting with `---` / `===` can setext-promote the Your-word line in other viewers → **N/A**: setext is non-structural by spec, and the tab and `main`'s scan are unaffected. Listed as a follow-up.
+  - Read-path I/O errors are not a typed refusal → **N/A**: the client degrades correctly and nothing is lost. Listed as a follow-up.
+  - `--retries 3` on the CI Decisions step → **Rebutted**: it mirrors the main step, and Playwright reports a retried pass as flaky. The recorded runs had no retries.
 
 ## Lessons Learned
 
@@ -298,6 +319,8 @@ No test was skipped by this project. Observed, pre-existing, and unrelated to th
 - **Repo paths in `Links:` as Tower file tabs** (spec Open Question 6); they render as text today.
 - **Lazy-load `DecisionsView`** to take markdown-it, linkify and DOMPurify (+139 kB minified) out of the dashboard's main chunk.
 - **Run the Decisions e2e step on pull requests.** dashboard-e2e is schedule/dispatch only today.
+- **Setext promotion in other viewers.** A comment-only ruling whose first line is `---` or `===` lands right under the Your-word line. A strict CommonMark renderer (the annotator preview, GitHub) then shows that line as a heading. The tab and `main`'s scan are unaffected, because setext is non-structural by spec. Refusing such lines would need a spec change (claude, PR review).
+- **A typed `read-failed` refusal** for read-path I/O errors (EACCES, ELOOP, ENOTDIR), matching the write path's `write-failed`. Today they reach the generic 500, which the tab already shows as an error over the last document (claude, PR review).
 - Small items:
   - The error banner reads "Could not reach Tower: Failed to fetch Showing the last version read." (a transport message has no closing period before the suffix).
   - The `comment-fence` message could say "begins with three or more backticks/tildes".
