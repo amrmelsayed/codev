@@ -94,6 +94,17 @@ export type {
   HeldMessage,
   ProtocolStats,
   AnalyticsResponse,
+  DecisionStamp,
+  DecisionOption,
+  DecisionQaEntry,
+  DecisionItemProblem,
+  DecisionsFileProblem,
+  DecisionItem,
+  DecisionsDocument,
+  DecisionsRuleRequest,
+  DecisionsRefusalCode,
+  DecisionsReadResponse,
+  DecisionsRuleResponse,
 } from '@cluesmith/codev-types';
 
 // Re-import for use in function signatures below
@@ -103,6 +114,7 @@ import type {
   OverviewData,
   HeldMessage,
   DashboardState,
+  DecisionsDocument,
 } from '@cluesmith/codev-types';
 
 export async function fetchAnalytics(range: string, refresh?: boolean): Promise<AnalyticsResponse> {
@@ -117,6 +129,48 @@ export async function fetchTeam(): Promise<TeamApiResponse> {
   const res = await fetch(apiUrl('api/team'), { headers: getAuthHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch team: ${res.status}`);
   return res.json();
+}
+
+/**
+ * Spec 1819: the outcome of reading the workspace's decisions file. Never thrown —
+ * a refusal or a transport failure is something the Decisions tab shows.
+ */
+export type DecisionsFetchResult =
+  | { kind: 'document'; document: DecisionsDocument }
+  | { kind: 'not-found'; message: string }
+  | { kind: 'error'; message: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Spec 1819: read the decisions document. Every decisions response carries `ok`;
+ * anything else (a 401's plain-text body, a dispatcher `{ error }`) is an error.
+ */
+export async function fetchDecisions(): Promise<DecisionsFetchResult> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl('api/decisions'), { headers: getAuthHeaders() });
+  } catch (err) {
+    return { kind: 'error', message: `Could not reach Tower: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return { kind: 'error', message: `Unexpected response from Tower (HTTP ${res.status})` };
+  }
+  if (isRecord(body) && body.ok === true && isRecord(body.document)
+    && typeof body.document.version === 'string' && Array.isArray(body.document.items)) {
+    return { kind: 'document', document: body.document as unknown as DecisionsDocument };
+  }
+  if (isRecord(body) && body.ok === false && typeof body.code === 'string' && typeof body.message === 'string') {
+    return body.code === 'not-found'
+      ? { kind: 'not-found', message: body.message }
+      : { kind: 'error', message: body.message };
+  }
+  return { kind: 'error', message: `Unexpected response from Tower (HTTP ${res.status})` };
 }
 
 export async function fetchOverview(): Promise<OverviewData> {
