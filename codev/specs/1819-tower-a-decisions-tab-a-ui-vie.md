@@ -104,8 +104,8 @@ has the decisions file at its configured path. Opening it shows:
 For `main`, nothing changes in kind: a tab-written ruling is plain text on the lines directly
 after the item's `**Your word:**` line — where a hand-typed ruling goes — so the existing scan
 and the `ddu` / cron flow pick it up. The exact bytes are pinned under "Writing (the splice)".
-`main`'s scan is not in this repository, so its contract is an item for confirmation at the spec
-gate (Open Question 1).
+`main`'s scan reads everything after that line to the end of the item (confirmed by the
+adopter's hub architect; see Assumptions).
 
 ### Behavioural detail
 
@@ -367,11 +367,15 @@ falls back.
 - `main` keeps the file newest-first; the tab does not re-sort.
 - The owner's word is a single token from the offered options; anything else goes in the
   comment.
-- `main`'s scan reads a word written on the line directly after the `**Your word:**` line, and
-  a comment paragraph there, as the ruling — the issue says the scan is "a regex over the text
-  after `**Your word:**`" and picks the tab's output up unchanged. Not verifiable from this
-  repository (the scan, `decision-protocol.md` and a live `pending-decisions.md` live in the
-  adopter's repo); Open Question 1 asks for confirmation.
+- **`main`'s scan contract** (confirmed by the adopter's hub architect, relayed by the architect
+  2026-10-17): the scan takes *everything* after the `**Your word:**` line to the end of the item
+  as the ruling. A word on the next line, a blank line then a comment, and a comment-only
+  sentence all read. Text on the **same line** after the options is *not* read — so the tab must
+  keep writing on the following line, never appending to the `**Your word:**` line itself. The
+  scan appends no `**Ruling:**` line under the item; on a ruling, `main` moves the item out of
+  `## Open` and records a one-liner under `## Ruled`. (Consequence for the tab: a ruled item
+  normally disappears from `## Open` shortly after a submit, which the held-draft and
+  read-only-when-ruled behaviour already cover.)
 - Anyone with access to the workspace's Tower dashboard is acting as the owner, exactly as with
   the existing file tab's edit + save. No per-user identity is recorded.
 - The file is small (tens of KB at most), so reading and parsing it on every request and poll
@@ -431,13 +435,10 @@ watchers, and mirrors how the existing file tab already detects change.
 
 ## Open Questions
 
-**Critical** (needs the architect's confirmation at the spec gate; does not block drafting the
-plan):
-1. *`main`'s scan contract.* This spec writes the word on the line directly after the
-   `**Your word:**` line, then the comment after a blank line (see "Writing"). The issue says the
-   scan is "a regex over the text after `**Your word:**`" and picks this up unchanged, but the
-   scan lives in the adopter's `main` and cannot be checked from this repository. Confirm that a
-   word on the next line (and a comment-only paragraph there) is read as the ruling.
+**Critical** — none open.
+1. *`main`'s scan contract* — **resolved** (see Assumptions): the scan reads everything after the
+   `**Your word:**` line to the end of the item, so the shape in "Writing" is read as written;
+   same-line text is not read, so the tab never writes on the `**Your word:**` line itself.
 
 **Important** (shape the design; the spec takes a position — confirm at the spec gate):
 2. *Explicit Submit vs write-on-click.* The issue says "on choose / submit". This spec uses an
@@ -533,7 +534,7 @@ plan):
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| `main`'s scan does not read a word on the line after `**Your word:**` | Low | High | Open Question 1 asks the architect to confirm the scan contract at the spec gate; the bytes written are pinned and unit-tested, so changing the shape later is one place. |
+| `main`'s scan does not read the tab's output | Low | High | Scan contract confirmed (everything after the `**Your word:**` line to the end of the item; same-line text not read); the tab writes only on following lines; the bytes are pinned and unit-tested, so a future change of shape is one place. |
 | Two submits race inside Tower and one is lost | Low | High | Writes are serialized per file and re-read after taking their turn; an already-ruled item refuses, so the second submit fails loudly instead of stacking or vanishing. |
 | `main` rewrites the file while Tower is writing | Low | High | Tower re-reads immediately before an atomic rename; the fingerprint refuses item edits made earlier; `main`'s editor refuses to write a file changed since it read it, so a Tower write between `main`'s read and write forces `main` to re-read. |
 | A crash mid-write truncates the decisions file | Low | High | Write to a temporary file in the target's directory, then rename over the target. |

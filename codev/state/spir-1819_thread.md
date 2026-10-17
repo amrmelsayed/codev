@@ -19,3 +19,7 @@ Addressed all points in the spec:
 - Timestamp zone table enumerated; DST gap/fold → unconverted; Intl offset probing, no date lib.
 - Links: Decisions view opens http(s) in new tab, others inert; shared renderer untouched.
 - Dropped the blank line between Your-word line and the word (word on the very next line) and the untestable "same bytes as hand-typed" criterion. main's scan contract is now Open Question 1 (Critical, confirm at gate).
+
+## 2026-10-17 · Spec gate wait — Open Question 1 resolved
+
+- Architect relayed the adopter hub's scan contract: everything after the **Your word:** line to end of item is the ruling; same-line text after the options is NOT read; no **Ruling:** line is appended; on a ruling the item leaves ## Open for a one-liner in ## Ruled. Folded into Assumptions; OQ1 marked resolved. Still waiting on the human spec-approval.
