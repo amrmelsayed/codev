@@ -83,120 +83,189 @@ has the decisions file at its configured path. Opening it shows:
 1. **A card per `## Open` item, in file order** (the file is newest-first by convention; the
    tab is a view and does not re-sort). Each card shows the id, the heading's timestamp rendered
    in the viewer's local time zone (the original stamp available on hover), the question, and
-   the item body rendered as markdown with URLs as clickable links.
+   the item body rendered as markdown with URLs as clickable links (opening in a new browser
+   tab, never navigating the dashboard away).
 2. **The options from the `**Your word:**` line as radio buttons**, each with its description
    (the text after `=`), the first option visibly marked *Recommended*.
 3. **One free-text comment box** per card, for anything the owner wants to say instead of, or
    in addition to, a word.
 4. **A Submit action** per card. It writes into the file, under that item, directly after the
-   `**Your word:**` line, exactly what the owner would have typed by hand: the chosen word on
-   its own line, then the comment as a paragraph. Nothing else in the file changes.
+   `**Your word:**` line, what the owner would have typed by hand: the chosen word on its own
+   line, then the comment as a paragraph. Nothing else in the file changes.
 5. **The current ruling.** Any text already present after the item's `**Your word:**` line
-   (typed by hand or written by an earlier submit) is shown on the card as the current ruling.
+   (typed by hand or written by an earlier submit) is shown on the card as the current ruling,
+   and that card is then read-only.
 6. **`## Ruled`** below the cards: a read-only list, collapsed by default.
 7. **Live.** When the file changes on disk the tab re-renders from the new content. A
    half-written comment or a selected-but-unsubmitted option survives the re-render.
 8. **Failures are loud.** A submit that cannot be applied cleanly is refused with a message on
    that card, and the owner's comment stays in the box.
 
-For `main`, nothing changes: a ruling written by the tab is byte-for-byte what a hand-typed
-ruling of the same word and sentence would be, so the existing scan and the `ddu` / cron flow
-pick it up unchanged.
+For `main`, nothing changes in kind: a tab-written ruling is plain text on the lines directly
+after the item's `**Your word:**` line — where a hand-typed ruling goes — so the existing scan
+and the `ddu` / cron flow pick it up. The exact bytes are pinned under "Writing (the splice)".
+`main`'s scan is not in this repository, so its contract is an item for confirmation at the spec
+gate (Open Question 1).
 
 ### Behavioural detail
 
+**Structural grammar (what counts as structure).** The read model and every write check use one
+grammar, a subset of CommonMark:
+- A *fence line* has up to three leading spaces, then three or more backticks or tildes. A fence
+  opened by a run of N characters closes at the next fence line of the same character with at
+  least N characters; the lines between are fenced content. An unclosed fence runs to end of
+  file.
+- A *heading line* is an unfenced line with up to three leading spaces, then one to six `#`,
+  then a space or end of line (ATX). Only ATX headings are structural; setext underlines are
+  not.
+- `## Open` and `## Ruled` are level-2 heading lines whose text is exactly `Open` / `Ruled`
+  (trailing spaces and closing `#`s ignored).
+- An *item* is a level-3 heading line inside `## Open`. Its text runs to the next heading line
+  of level 1–3, or end of file; level-4+ headings are part of the item.
+- A *Your-word line* is an unfenced line in an item that, after up to three leading spaces,
+  begins with `**Your word:**`.
+
 **Parsing (the read model).** The file is parsed fresh on every read; there is no cached copy.
-- Sections are the level-2 headings `## Open` and `## Ruled`. Items are level-3 (`### `)
-  headings inside `## Open`; an item's text runs to the next `###` or `##` heading or end of
-  file. Headings inside fenced code blocks are content, not structure.
 - **Item id** = the heading's first whitespace-delimited token. The rest of the heading is split
   on ` · `: the first part is the timestamp, the remainder (re-joined) is the question. A heading
   without separators yields an id and a question with no timestamp.
-- **`**Your word:**` line** = a line in the item that begins with `**Your word:**`. The text after
-  the label is split on ` / `; each segment that begins with a backticked word contributes one
-  option: the word, plus the description after `=` if present. The first option is the
-  recommended one.
-- **Body** = the item's lines between the heading and the `**Your word:**` line.
-  **Current ruling** = the item's text after the `**Your word:**` line, trimmed; empty means
-  unruled.
+- **Options** = the text after `**Your word:**`, split on ` / `; each segment that begins with a
+  backticked word contributes one option: the word, plus the description after `=` if present.
+  The first option is the recommended one. The file's preamble allows "a letter or one word";
+  the tab offers and writes the word (letters are a hand-typing shorthand, not separate options).
+- **Body** = the item's lines between the heading and the Your-word line.
+  **Current ruling** = the item's text after the Your-word line, trimmed; empty means unruled.
+- **Fingerprint** = a digest of the item's full text, used by the write checks below.
 - **`## Ruled`** = the section's content, shown as markdown, read-only.
 - **Malformed input is reported, not guessed at.** A file with no `## Open` section shows an
-  error naming the problem. An item with no `**Your word:**` line, or more than one, is shown
-  with its body and a notice that the tab cannot write a ruling for it (Submit disabled). Two
-  items with the same id are both shown, flagged as duplicates, with Submit disabled.
+  error naming the problem. An item with no Your-word line, or more than one, is shown with its
+  body and a notice that the tab cannot write a ruling for it. Two or more items with the same
+  id are all shown, flagged as duplicates, and are entirely read-only (no option buttons, no
+  comment box, no draft).
 
-**Timestamps (no assumed zone).** The stamp `YYYY-MM-DD h:mm am|pm <ZONE>` (24-hour `HH:mm` is
-also accepted) is resolved to an absolute instant using the zone written in the text, then
-displayed in the viewer's local zone. Accepted zone forms: `UTC`/`GMT`/`Z`; numeric offsets
-(`+05:30`, `UTC+5:30`, `GMT-7`); IANA names (`Europe/London`); and an explicit, documented table
-of abbreviations — the North-American generic zones (`PT`, `MT`, `CT`, `ET`, `AKT`, `HT`, which
-follow DST for the stamp's date) and their specific forms (`PST`/`PDT`, `MST`/`MDT`, `CST`/`CDT`,
-`EST`/`EDT`, …), plus a small set of unambiguous others. A stamp whose zone is not recognized is
-displayed verbatim, marked as not converted — never interpreted in any default zone. Nothing in
-the parser defaults to, or special-cases, Pacific time.
+**Already-ruled items are read-only.** An item whose current ruling is non-empty — typed by hand,
+or written by an earlier submit from this or another browser — shows that ruling and offers no
+option buttons or comment box; a note says it is already ruled and that a change of mind goes
+through `main` or a hand edit of the file. So the file never carries two tab-written rulings for
+one item, and of two near-simultaneous submits the second is refused rather than stacked.
+
+**Timestamps (no assumed zone).** The stamp is `YYYY-MM-DD h:mm am|pm <ZONE>` (am/pm
+case-insensitive) or `YYYY-MM-DD HH:mm <ZONE>`. It is resolved to an absolute instant using only
+the zone written in the text; the tab then displays that instant in the viewer's local zone, with
+the original stamp available on hover. Accepted zones:
+- `UTC`, `GMT`, `Z` — offset 0.
+- Numeric offsets `±HH:MM`, `±HHMM`, `±H`, optionally prefixed by `UTC` or `GMT` (`+05:30`,
+  `UTC+5:30`, `GMT-7`).
+- IANA names (`Europe/London`, `America/Los_Angeles`) known to the runtime's time-zone data.
+- Generic North-American abbreviations, resolved through their IANA zone for the stamp's date
+  (so DST follows the date): `PT` America/Los_Angeles, `MT` America/Denver, `CT` America/Chicago,
+  `ET` America/New_York, `AKT` America/Anchorage, `HT` Pacific/Honolulu.
+- Fixed-offset abbreviations: `PST` −8, `PDT` −7, `MST` −7, `MDT` −6, `CST` −6, `CDT` −5,
+  `EST` −5, `EDT` −4, `AKST` −9, `AKDT` −8, `HST` −10, `WET` 0, `WEST` +1, `CET` +1, `CEST` +2,
+  `EET` +2, `EEST` +3, `MSK` +3, `SGT` +8, `HKT` +8, `JST` +9, `KST` +9, `AEST` +10, `AEDT` +11,
+  `NZST` +12, `NZDT` +13. (`CST` means North-American Central here; China Standard Time is
+  written `+08:00` or `Asia/Shanghai`.)
+- Everything else — including the deliberately excluded ambiguous `IST`, `BST`, `AST` — is shown
+  verbatim and marked unconverted.
+- For IANA and generic zones, a wall-clock time that does not exist on that date (spring-forward
+  gap) or occurs twice (fall-back fold) is shown verbatim and marked unconverted; there is no
+  tie-break rule.
+- Resolution uses the runtime's built-in `Intl` time-zone data; no date library is added. Nothing
+  defaults to, or special-cases, Pacific time.
 
 **Writing (the splice).** A submit carries the item id, the chosen word (optional), the comment
-(optional; at least one of the two is required), and a fingerprint of the item's text as the
-card last rendered it. At write time the server re-reads the file from disk and:
-- refuses if the `### <id>` heading is missing from `## Open` or appears more than once
-  (baked decision 3);
-- refuses if the item has no `**Your word:**` line or more than one;
-- refuses if the chosen word is not one of the options on the item's *current* `**Your word:**`
-  line;
-- refuses if the item's text no longer matches the submitted fingerprint (the item was edited
-  after the owner last saw it — the owner re-reads and resubmits). Changes elsewhere in the file
-  (the status line, other items, `## Ruled`) do not trigger this;
-- refuses a comment containing a line that begins with `#` or contains `**Your word:**`, since
-  either would corrupt the item structure that `main` and the tab both parse;
-- otherwise inserts, directly after the `**Your word:**` line: a blank line, the word on its own
-  line (if given), a blank line and the comment (if given) — separated by a blank line from
-  whatever follows. Every pre-existing byte of the file is preserved in place, the file's line
-  ending style (LF or CRLF) is used for inserted lines, and no other part of the file is
-  touched.
+(optional; at least one of the two is required; trimmed; internal newlines kept; at most 10,000
+characters), and the item's fingerprint as the card last rendered it. Writes to the decisions
+file are serialized inside Tower — at most one is in progress per file — and each re-reads the
+file from disk once it has its turn. A write is refused, with an error naming the reason, if:
+- the `### <id>` heading is missing from `## Open` or appears more than once (baked decision 3);
+- the item has no Your-word line, or more than one;
+- the item already has a current ruling;
+- the chosen word is not one of the options on the item's *current* Your-word line;
+- the item's fingerprint differs from the submitted one (the item was edited after the owner last
+  saw it). Changes elsewhere in the file — the status line, other items, `## Ruled` — do not
+  trigger this;
+- the comment is empty when no word is chosen, or exceeds the length limit;
+- the comment contains a heading line, a fence line, or a Your-word line (per the grammar above),
+  any of which would change the structure that `main` and the tab parse;
+- **the result does not verify**: the spliced text is re-parsed and must have the same sections,
+  the same items in the same order with the same ids, the same options on this item, and this
+  item's current ruling equal to exactly the inserted text. This catch-all refuses anything the
+  explicit checks miss.
 
-  Example — before:
+Otherwise the write inserts, directly after the Your-word line: the word on the very next line
+(if given); then the comment (if given), preceded by a blank line when a word was written; then a
+blank line if the line that follows is not already blank. Every pre-existing byte of the file is
+preserved in order, the file's line-ending style (LF or CRLF) is used for inserted lines, a
+missing final newline on the Your-word line is supplied, and nothing else is touched.
 
-  ```markdown
-  **Your word:** `accept` = merge as is / `rework` = send back / `hold`
+Example — before:
 
-  ### main-11 · …
-  ```
+```markdown
+**Your word:** `accept` = merge as is / `rework` = send back / `hold`
 
-  after choosing `accept` with a comment:
+### main-11 · …
+```
 
-  ```markdown
-  **Your word:** `accept` = merge as is / `rework` = send back / `hold`
+After choosing `accept` with a comment:
 
-  accept
+```markdown
+**Your word:** `accept` = merge as is / `rework` = send back / `hold`
+accept
 
-  accept but don't add the limit on additional tests. That could easily backfire.
+accept but don't add the limit on additional tests. That could easily backfire.
 
-  ### main-11 · …
-  ```
+### main-11 · …
+```
 
-- A refused write returns a clear, specific error; the card shows it and keeps the draft.
-- A second submit on an already-ruled item is allowed (the owner may change their mind). Its
-  text is inserted directly after the `**Your word:**` line, i.e. above the earlier ruling, so
-  the newest ruling reads first — consistent with the file's newest-first convention.
+After a comment with no word:
+
+```markdown
+**Your word:** `keep` = keep the skills / `drop` = drop them / `hold`
+Wait. That means if someone after onboarding connects whatsapp they can't do the scan? Keep the skills…
+
+### main-11 · …
+```
+
+- **Atomic replacement.** The new content is written to a temporary file in the same directory as
+  the real target and renamed over it, keeping the file's permissions. A crash mid-write leaves
+  the old or the new file, never a truncated one. If the configured path is a symlink (to a
+  target inside the workspace), the target is replaced and the link left in place.
+- **Response.** A successful write returns the re-parsed document (with new fingerprints), which
+  the tab renders at once rather than waiting for the next change check. A refused write returns
+  the error; the file is byte-identical, the card shows the error, and the draft is kept.
+- **`main` writes out of process**, so Tower cannot lock against it. The exposure is the
+  milliseconds between Tower's re-read and its rename; the fingerprint refuses item edits made
+  before that, and `main`'s editor (Claude Code's Edit) refuses to write a file changed since it
+  read it.
+
+**Links.** URLs in item bodies and in `## Ruled` render as links (`MarkdownView` linkifies).
+Within the Decisions view, `http(s)` links open in a new browser tab (`noopener`) and other links
+are inert, so a click never navigates the dashboard away — important on mobile through the
+tunnel. This is handled by the Decisions view's own container; the shared renderer, which VS Code
+also consumes, is not changed.
 
 **Drafts.** Each card's draft (selected option + comment text) is held in component state keyed
 by item id, not DOM position, so re-renders, re-ordering and tab switches do not lose it. A
 successful submit clears that card's draft. If an option a draft selected disappears from the
-item's options, the selection is dropped and the card says so; the comment is kept. If an item
-with a non-empty draft disappears from `## Open` (for example `main` moved it to `## Ruled`), its
-card stays visible in a "no longer open" state showing the draft text so it can be copied, with
-Submit disabled and a Discard action — an unsaved comment is never silently lost.
+item's options, the selection is dropped and the card says so; the comment is kept. If a
+non-empty draft's item stops being writable — it leaves `## Open` (for example `main` moved it
+to `## Ruled`), becomes a duplicate, or is ruled from elsewhere — the draft is *held*: shown
+read-only under a notice naming the reason, with the text selectable for copying and a Discard
+action. An unsaved comment is never silently lost.
 
 **Configuration.** The file path is a Tower setting in `.codev/config.json` (key
 `dashboard.decisionsFile`), relative to the workspace root, default
 `codev/state/pending-decisions.md`, read through the normal config layers (so
-`.codev/config.local.json` can override it). A configured path that resolves outside the
-workspace is rejected with an error rather than read or written. The client never supplies a
-file path; both read and write resolve the path server-side from configuration.
+`.codev/config.local.json` can override it). At every read and write the path is resolved
+against the workspace root and canonicalized (symlinks followed); if the canonical path is
+outside the canonical workspace root, the request is refused with an error and nothing is read or
+written. The client never supplies a file path.
 
 **Visibility.** The workspace `state` response carries a flag indicating whether the decisions
 file exists at the configured path; the Decisions tab appears only when it does (Team-tab
-precedent). If the file disappears while the tab is open, the tab shows a not-found message.
+precedent). If the file disappears while the tab is open, the tab shows a not-found message (held
+drafts stay visible).
 
 ## Success Criteria
 
@@ -204,30 +273,34 @@ precedent). If the file disappears while the tab is open, the tab shows a not-fo
       in the Tower dashboard, on desktop and in the mobile layout; a workspace without it shows
       no such tab.
 - [ ] Each `## Open` item renders as a card in file order with id, local-time timestamp,
-      question, and markdown body; URLs in the body are clickable and open outside the
-      dashboard.
-- [ ] Each card shows one radio per option on its `**Your word:**` line, in order, with
+      question, and markdown body; `http(s)` links open in a new browser tab and no click
+      navigates the dashboard away.
+- [ ] Each writable card shows one radio per option on its Your-word line, in order, with
       descriptions; the first is visibly marked recommended.
-- [ ] Each card has one comment box and a Submit action; Submit is disabled until an option is
-      selected or a comment is non-empty, and while a submit is in flight.
-- [ ] Submitting writes the word line and comment paragraph directly after that item's
-      `**Your word:**` line; a byte diff of the file before/after shows only the inserted lines.
-- [ ] The result of a tab submit is identical to the hand-typed equivalent (same bytes), so
-      `main`'s existing scan reads it unchanged.
+- [ ] Each writable card has one comment box and a Submit action; Submit is disabled until an
+      option is selected or a comment is non-empty, and while a submit is in flight.
+- [ ] A submit inserts exactly the bytes defined in "Writing (the splice)" directly after that
+      item's Your-word line (unit-tested byte-for-byte for word, comment, and word + comment); a
+      before/after diff of the file shows only the inserted lines.
 - [ ] Every refusal case in "Writing (the splice)" returns a specific error, leaves the file
       byte-identical, shows the error on the card, and keeps the draft.
-- [ ] Existing text after a `**Your word:**` line shows as the card's current ruling.
+- [ ] Writes are serialized per file and replace the file atomically; of two concurrent submits
+      to one item, exactly one is applied and the other is refused as already ruled.
+- [ ] A successful submit's response re-renders the card at once, showing the new ruling.
+- [ ] An item with existing text after its Your-word line shows it as the current ruling and is
+      read-only; duplicate-id items and items without exactly one Your-word line are read-only
+      with a notice.
 - [ ] `## Ruled` shows below the cards, read-only, collapsed by default.
 - [ ] An external write to the file is reflected in the open tab within a few seconds, without
       a manual refresh; a draft comment and a selected option survive that re-render.
-- [ ] A draft on an item that leaves `## Open` stays visible as "no longer open" until
-      discarded.
+- [ ] A draft whose item stops being writable is held, visible and copyable, until discarded.
 - [ ] Timestamps convert from the zone written in the stamp to the viewer's local zone for every
-      accepted zone form; an unrecognized zone is shown verbatim and marked unconverted. Tests
-      cover at least PT across both DST states, a non-US offset, UTC, and an unknown zone; no
-      code path assumes PT.
+      accepted zone form; unrecognized zones and DST gap/fold times are shown verbatim and marked
+      unconverted. Tests cover PT in both DST states, every fixed abbreviation, a non-US offset,
+      UTC, an IANA name, an unknown zone, a gap and a fold; no code path assumes PT.
 - [ ] The path is configurable via `dashboard.decisionsFile`; the default is
-      `codev/state/pending-decisions.md`; a path outside the workspace is refused.
+      `codev/state/pending-decisions.md`; a path — including one reached through a symlink —
+      whose canonical location is outside the workspace is refused for both read and write.
 - [ ] The parser and the splice are pure functions with their own unit tests against the
       format in this spec, including malformed-input and edge cases.
 - [ ] The tab is exercised in a real browser via Playwright (render, choose + comment + submit,
@@ -269,8 +342,10 @@ Note on decision 1: the web dashboard does not yet depend on `@cluesmith/codev-a
 is the intended reading of the decision, not a new renderer.
 
 Note on decision 3: this spec adds further refusals (missing/duplicate `**Your word:**` line,
-word not among current options, item changed since rendered, structure-breaking comment). Each
-is a stricter fail-loud check in the same spirit; none reformats, merges, or falls back.
+item already ruled, word not among current options, item changed since rendered,
+structure-breaking comment, failed re-parse verification) and requires writes to be serialized
+and atomic. Each is a stricter fail-loud guarantee in the same spirit; none reformats, merges, or
+falls back.
 
 ### Other constraints
 
@@ -292,9 +367,11 @@ is a stricter fail-loud check in the same spirit; none reformats, merges, or fal
 - `main` keeps the file newest-first; the tab does not re-sort.
 - The owner's word is a single token from the offered options; anything else goes in the
   comment.
-- `main`'s scan tolerates a blank line between the `**Your word:**` line and the word (the issue
-  says the tab should write "exactly what the owner would have typed" and that the scan "picks
-  it up unchanged"; the example above is that shape).
+- `main`'s scan reads a word written on the line directly after the `**Your word:**` line, and
+  a comment paragraph there, as the ruling — the issue says the scan is "a regex over the text
+  after `**Your word:**`" and picks the tab's output up unchanged. Not verifiable from this
+  repository (the scan, `decision-protocol.md` and a live `pending-decisions.md` live in the
+  adopter's repo); Open Question 1 asks for confirmation.
 - Anyone with access to the workspace's Tower dashboard is acting as the owner, exactly as with
   the existing file tab's edit + save. No per-user identity is recorded.
 - The file is small (tens of KB at most), so reading and parsing it on every request and poll
@@ -307,16 +384,21 @@ is a stricter fail-loud check in the same spirit; none reformats, merges, or fal
 The server owns one parser used by both the read route and the write route. The read route
 returns the parsed document (items with id, raw stamp, resolved instant, question, body
 markdown, options, current ruling, fingerprint, problems; the ruled markdown; a document
-version). The write route re-reads, re-parses, validates, splices. The client renders cards,
-converts the resolved instant to local time, and while the tab is visible polls the read route
-every couple of seconds, re-rendering only when the version changes.
+version). The write route takes its turn on the file, re-reads, re-parses, validates, splices,
+verifies, and replaces the file atomically. The client renders cards, formats the resolved
+instant in local time, and while the tab is visible checks the read route every couple of
+seconds, re-rendering only when the version changes.
 
 - **Pros:** one parser for read and write, so what the owner sees and what the write validates
-  can never disagree; the client stays a thin view; time-zone resolution happens once with a
-  full ICU (Node); polling matches the existing annotator's mtime poll, needs no new watcher
-  lifecycle in Tower, and works unchanged through the tunnel and on mobile.
-- **Cons:** up to a poll interval of lag; a request every few seconds while the tab is visible
-  (negligible for a small file, and suspended when hidden).
+  can never disagree; the client stays a thin view; time-zone resolution happens once, on the
+  server, with the runtime's built-in `Intl` data (offset probing; no new dependency); polling
+  matches the existing annotator's mtime poll, needs no new watcher lifecycle in Tower, and works
+  unchanged through the tunnel and on mobile.
+- **Cons:** up to a poll interval of lag for external changes (the tab's own writes render at
+  once from the write response); a request every few seconds while the tab is visible
+  (negligible for a small file, and suspended when hidden). Wall-clock → instant conversion for
+  IANA zones has to be built on `Intl` offset probing, since the monorepo has no date library and
+  the supported Node versions have no `Temporal`.
 - **Risk/complexity:** low.
 
 ### Approach 2: Client parses raw text; server only splices
@@ -326,8 +408,9 @@ the item and validate, so it needs its own parse.
 
 - **Pros:** minimal read route.
 - **Cons:** two parsers (or a parser shared across the client/server boundary, which the
-  isolation rule makes awkward) that must agree byte-for-byte on item boundaries; a disagreement
-  writes into the wrong place or refuses spuriously.
+  isolation rule makes awkward) that must agree on item boundaries; a disagreement writes into
+  the wrong place or refuses spuriously. Time-zone resolution would run in every viewer's
+  browser.
 - **Risk/complexity:** medium; violates "single source of truth" in spirit.
 
 ### Approach 3: Server push (file watcher + SSE) instead of polling
@@ -337,9 +420,10 @@ stream; the tab refetches on that event.
 
 - **Pros:** near-instant updates, no polling traffic.
 - **Cons:** a watcher per workspace with its own start/stop lifecycle across workspace
-  activation, file creation/deletion and editors that replace files by rename; the dashboard's
-  SSE consumer currently refetches on any event, so a new event type needs plumbing in the
-  shared SSE hook. More moving parts for a file written a few times an hour.
+  activation, file creation/deletion and editors that replace files by rename (as this tab's own
+  atomic write does); the dashboard's SSE consumer currently refetches on any event, so a new
+  event type needs plumbing in the shared SSE hook. More moving parts for a file written a few
+  times an hour.
 - **Risk/complexity:** medium. Worth revisiting only if polling proves inadequate.
 
 **Recommendation: Approach 1.** It keeps one parser, keeps Tower free of new long-lived
@@ -347,26 +431,28 @@ watchers, and mirrors how the existing file tab already detects change.
 
 ## Open Questions
 
-**Critical** — none open. The baked decisions and the issue settle scope, data flow, and the
-write format.
+**Critical** (needs the architect's confirmation at the spec gate; does not block drafting the
+plan):
+1. *`main`'s scan contract.* This spec writes the word on the line directly after the
+   `**Your word:**` line, then the comment after a blank line (see "Writing"). The issue says the
+   scan is "a regex over the text after `**Your word:**`" and picks this up unchanged, but the
+   scan lives in the adopter's `main` and cannot be checked from this repository. Confirm that a
+   word on the next line (and a comment-only paragraph there) is read as the ruling.
 
 **Important** (shape the design; the spec takes a position — confirm at the spec gate):
-1. *Explicit Submit vs write-on-click.* The issue says "on choose / submit". This spec uses an
+2. *Explicit Submit vs write-on-click.* The issue says "on choose / submit". This spec uses an
    explicit Submit per card so a misclick never writes and word + comment land in one splice.
-2. *Re-ruling an already-ruled item.* Allowed, inserted above the earlier ruling (newest first).
-   Alternative: refuse when a ruling exists, forcing hand-editing to change one's mind.
-3. *Item fingerprint check.* Refusing when the item changed since it was rendered is stricter
+3. *Already-ruled items are read-only.* A change of mind goes through `main` or a hand edit.
+   The alternative — allowing a second tab ruling inserted above the first — leaves two words
+   after the Your-word line and makes the file ambiguous.
+4. *Item fingerprint check.* Refusing when the item changed since it was rendered is stricter
    than baked decision 3 requires. It guards against ruling on text `main` has since rewritten;
    the cost is an occasional resubmit.
-4. *Config key name.* `dashboard.decisionsFile`, next to the existing `dashboard.frontend`.
-5. *Blank-line separation.* The splice puts a blank line between the `**Your word:**` line, the
-   word, and the comment, so each renders as its own paragraph in a markdown view. Writing the
-   word on the very next line (no blank) would render it joined to the options line. Assumes
-   `main`'s scan reads past a blank line (see Assumptions).
+5. *Config key name.* `dashboard.decisionsFile`, next to the existing `dashboard.frontend`.
 
 **Nice-to-know:**
-6. Repo paths in **Links:** could open as Tower file tabs; this spec makes URLs clickable and
-   leaves repo paths as rendered text. Follow-up if wanted.
+6. Repo paths in **Links:** could open as Tower file tabs; this spec makes `http(s)` URLs
+   clickable and leaves repo paths as rendered text. Follow-up if wanted.
 7. An open-count badge on the tab label (`Decisions (3)`) would need the state route to parse
    the file on every state poll; left out.
 8. Persisting drafts across a page reload (localStorage) is not required; drafts survive
@@ -374,55 +460,70 @@ write format.
 
 ## Test Scenarios
 
-**Parser (unit, pure):**
+**Grammar and parser (unit, pure):**
 - The issue's format example parses to the expected items, options (order, descriptions,
-  recommended = first), body, empty current ruling, and ruled content.
-- Multiple items; ids from first heading token; question containing ` · `; heading with no
-  separators.
-- Option descriptions containing backticks and `=`; a `hold` option with no description.
-- Existing owner text after the `**Your word:**` line (word only; word + sentence; multiple
-  paragraphs) appears as the current ruling.
-- `###` inside a fenced code block is not an item boundary.
-- Malformed: no `## Open`; item without `**Your word:**`; two `**Your word:**` lines; duplicate
-  ids; empty `## Open`; no `## Ruled`; CRLF file; file without trailing newline.
+  recommended = first), body, empty current ruling, fingerprint, and ruled content.
+- Multiple items; ids from the first heading token; question containing ` · `; heading with no
+  separators; headings with up to three leading spaces; a level-4 heading inside an item.
+- Option descriptions containing backticks, `=` and ` / `; a `hold` option with no description.
+- Existing owner text after the Your-word line (word only; word + sentence; multiple paragraphs)
+  appears as the current ruling and makes the item read-only.
+- `###`, `## Ruled` and `**Your word:**` inside a fenced code block are content, not structure;
+  backtick and tilde fences; a longer closing fence; an unclosed fence.
+- Malformed: no `## Open`; item without a Your-word line; two Your-word lines; duplicate ids;
+  empty `## Open`; no `## Ruled`; CRLF file; file without trailing newline.
 
 **Timestamps (unit):**
-- `2026-07-01 3:05 pm PT` → PDT instant; `2026-12-01 3:05 pm PT` → PST instant.
-- `PST`/`PDT` explicit, `ET`, `UTC`, `Z`, `+05:30`, `UTC+5:30`, `GMT-7`, `Europe/London`,
-  24-hour `15:05`.
-- Unknown zone (`XYZ`), missing zone, malformed time → unconverted, raw text preserved.
+- `2026-07-01 3:05 pm PT` → the PDT instant; `2026-12-01 3:05 pm PT` → the PST instant.
+- Every fixed abbreviation in the table; each generic zone; `UTC`, `GMT`, `Z`; `+05:30`,
+  `+0530`, `UTC+5:30`, `GMT-7`; `Europe/London`; 24-hour `15:05`; `AM`/`pm` casing.
+- `IST`, `BST`, `AST`, `XYZ`, missing zone, malformed time → unconverted, raw text preserved.
+- Spring-forward gap (`2026-03-08 2:30 am PT`) and fall-back fold (`2026-11-01 1:30 am PT`) →
+  unconverted.
 - No path yields a PT interpretation for a stamp that does not say PT.
 
 **Splice (unit, pure):**
-- Word only; comment only; word + comment; multi-line comment — output equals the expected bytes
+- Word only; comment only; word + comment; multi-line comment — output equals the expected bytes,
   and every original byte is preserved in order.
-- Inserting above an existing ruling; `**Your word:**` line as the last line with and without a
-  trailing newline; next line non-blank; CRLF file uses CRLF.
-- Each refusal: heading missing, heading duplicated, no/two `**Your word:**` lines, unknown word,
-  fingerprint mismatch, comment with a `#` line, comment containing `**Your word:**`, empty word
-  and comment. Each returns a specific error and no output text.
-- An unrelated change elsewhere in the file (status line, another item) does not refuse.
+- Your-word line as the last line with and without a trailing newline; a heading directly after
+  the Your-word line (no blank); CRLF file uses CRLF.
+- Each refusal: heading missing, heading duplicated, no/two Your-word lines, already ruled,
+  unknown word, fingerprint mismatch, empty word and comment, over-length comment, comment with a
+  `#` heading line (including indented by up to three spaces), comment with a fence line,
+  comment containing `**Your word:**`, and a structure change caught only by the re-parse
+  verification. Each returns a specific error and no output text.
+- An unrelated change elsewhere in the file (status line, another item, `## Ruled`) does not
+  refuse.
 
 **Routes (integration):**
-- Read returns the parsed document for the configured path; 404-shaped response when absent;
-  error when the configured path escapes the workspace.
-- Write applies a valid splice to disk; refused writes leave the file byte-identical and return
-  the error; config override of the path is honoured; requests without the Tower key are
-  rejected.
-- The workspace state flag is true/false with file present/absent.
+- Read returns the parsed document for the configured path; not-found response when absent;
+  refused when the configured path, or a symlink it passes through, resolves outside the
+  workspace.
+- Write applies a valid splice to disk and returns the re-parsed document; refused writes leave
+  the file byte-identical and return the error; the config override of the path is honoured;
+  requests without the Tower key are rejected.
+- Two concurrent writes to the same item: exactly one applies, the other is refused as already
+  ruled; the file contains one ruling.
+- The write replaces the file by rename (old content intact if the write is interrupted before
+  the rename); a symlinked decisions file keeps its link and has its in-workspace target updated;
+  file permissions are kept.
+- The workspace state flag is true/false with the file present/absent.
 
 **Component (unit, jsdom):**
-- Cards, radios, recommended marker, comment box, current ruling, collapsed ruled list render
-  from a parsed document.
+- Cards, radios, recommended marker, comment box, current ruling, read-only states, collapsed
+  ruled list render from a parsed document.
 - A draft (option + comment) survives a re-render with new content, including re-ordering.
 - An option disappearing drops the selection with a notice and keeps the comment.
-- An item with a draft leaving `## Open` shows the "no longer open" card with the draft; Discard
-  removes it.
-- A refused submit shows the error and keeps the draft; a successful one clears it.
+- A draft whose item leaves `## Open`, becomes a duplicate, or is ruled from elsewhere is held
+  with the reason; Discard removes it.
+- A refused submit shows the error and keeps the draft; a successful one clears it and renders
+  the returned document.
+- Clicking an `http(s)` link opens a new browser tab; clicking another link does nothing; neither
+  navigates the dashboard.
 
 **End-to-end (Playwright, real Tower + browser):**
 - Workspace with a fixture decisions file: the tab appears; choose an option, type a comment,
-  submit; the file on disk contains exactly the inserted lines.
+  submit; the file on disk contains exactly the inserted lines; the card shows the ruling.
 - An external write to the file re-renders the tab within a few seconds while a typed draft in
   another card is preserved.
 - Mobile viewport: the tab is reachable and a submit works.
@@ -432,13 +533,17 @@ write format.
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Owner submits while `main` is mid-rewrite and one write clobbers the other | Low | High | The splice is a read-validate-write done in one short server step against the current disk content; the fingerprint refuses if the item changed. `main`'s editor (Claude Code's Edit) refuses to write a file modified since it read it, so a tab write between `main`'s read and write forces `main` to re-read rather than clobber. |
-| The owner's annotator file tab is in edit mode with an older buffer and saves over a tab-written ruling | Low | Medium | Pre-existing behaviour of the annotator's whole-file save; documented. The Decisions tab is the intended ruling surface. |
-| Tab and `main`'s scan disagree on where an item ends | Low | High | One server-side parser for read and write; item boundaries tested against the issue's format; malformed items are flagged and not writable. |
-| A comment injects structure (`###`, `## Ruled`, `**Your word:**`) and corrupts the file | Low | High | Such comments are refused with a clear error before any write. |
-| Ambiguous time-zone abbreviations (`IST`, `BST`, `CST`) are misread | Medium | Low | Only an explicit, documented abbreviation table is accepted; anything else is shown verbatim as unconverted. |
+| `main`'s scan does not read a word on the line after `**Your word:**` | Low | High | Open Question 1 asks the architect to confirm the scan contract at the spec gate; the bytes written are pinned and unit-tested, so changing the shape later is one place. |
+| Two submits race inside Tower and one is lost | Low | High | Writes are serialized per file and re-read after taking their turn; an already-ruled item refuses, so the second submit fails loudly instead of stacking or vanishing. |
+| `main` rewrites the file while Tower is writing | Low | High | Tower re-reads immediately before an atomic rename; the fingerprint refuses item edits made earlier; `main`'s editor refuses to write a file changed since it read it, so a Tower write between `main`'s read and write forces `main` to re-read. |
+| A crash mid-write truncates the decisions file | Low | High | Write to a temporary file in the target's directory, then rename over the target. |
+| The annotator file tab is in edit mode with an older buffer and saves over a tab-written ruling | Low | Medium | Pre-existing behaviour of the annotator's whole-file save; documented. The Decisions tab is the intended ruling surface. |
+| Tab and `main` disagree on where an item ends | Low | High | One server-side grammar for read and write, tested against the issue's format; malformed items are flagged and read-only. |
+| A comment injects structure (heading, fence, `**Your word:**`) and corrupts the file | Low | High | Explicit refusals for each, plus the re-parse verification that refuses any structural change. |
+| Ambiguous time-zone abbreviations (`IST`, `BST`, `CST`) are misread | Medium | Low | Only the enumerated table is accepted (`CST` documented as North-American Central); anything else, and DST gap/fold times, are shown verbatim as unconverted. |
 | Rendering untrusted markdown in the dashboard | Low | Medium | `MarkdownView` sanitizes with DOMPurify (scripts, event handlers, `javascript:` URLs stripped); option labels and descriptions render as React text. |
-| A malicious config path aims writes outside the workspace | Low | High | Paths resolving outside the workspace root are refused; the client never sends a path. |
+| A config path, or a symlink on it, aims reads/writes outside the workspace | Low | High | The canonical (symlink-resolved) path must lie inside the canonical workspace root at every read and write; the client never sends a path. |
+| A link click navigates the dashboard away (worst on mobile) | Medium | Low | The Decisions view opens `http(s)` links in a new tab and makes other links inert, without changing the shared renderer. |
 | Polling cost | Low | Low | Poll only while the tab and the browser tab are visible; small file. |
 | Adding `artifact-canvas` to the web build breaks build ordering | Medium | Low | Covered in the plan (workspace dependency + build order); CI build check. |
 
