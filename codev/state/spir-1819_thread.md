@@ -134,3 +134,10 @@ Addressed all points in the spec:
 - Local environment, not the change: `@playwright/test` 1.59.1 wants the chromium headless shell build 1217, and only 1243 is in the cache. Rather than download into the shared cache, the local runs used a scratchpad config that extends the repo's and sets `launchOptions.executablePath` (CI installs its own browser). `tsc` excludes `__tests__`, so the file was type-checked ad hoc: clean.
 - Docs: a "Decisions tab" subsection under Configuration in both `agent-farm.md` trees (identical text; the two files already differ elsewhere), and a "Decisions View" entry beside Team View in `arch.md`, plus the two new files in its component tree. No hot-tier change.
 - Screenshots (desktop 1280×720, phone 390×844) checked by eye; kept in the scratchpad, not committed (binary).
+
+## 2026-10-17 · Phase 7 review (iter 1): codex REQUEST_CHANGES, claude COMMENT — all accepted
+
+- (codex) The default config's global setup activates the repo workspace and starts an architect shell. With only `CODEV_AGENT_FARM_DIR` isolated (the minimum while the live Tower runs: the owner lock refuses a shared global.db), that shell's socket lands in `~/.codev/run`, the live Tower's socket dir — an orphan. Fix: `playwright.decisions.config.ts` (base config, `testMatch` the suite, no global setup); the default config `testIgnore`s the suite; a separate dashboard-e2e step runs it with its own `CODEV_AGENT_FARM_DIR`. Re-run: 8/8, **0** shellpers started. Collect-only: default 71 tests / 11 files without it; dedicated config exactly 8.
+- (codex, claude) Screenshots committed at `codev/reviews/1819-tower-a-decisions-tab-a-ui-vie/` (85 KB + 73 KB) for the review doc to embed — reverses my earlier "binary, not committed".
+- (claude) The "no tab" title wait accepts `<ws> on <tower name> overview`.
+- (claude, informational) dashboard-e2e runs only on schedule/dispatch: dispatch it on this branch once pushed; record the result in the review.

@@ -13,12 +13,16 @@
  *   - Every workspace is a throwaway `mkdtemp` directory outside the repo, driven through
  *     `/workspace/<base64url(path)>/` (the workspace API and the dashboard shell need no
  *     activation), and removed afterwards. Nothing is written under the repo.
+ *   - It runs only through `playwright.decisions.config.ts`, which drops the default config's
+ *     global setup: that setup activates the repository workspace and starts a shell in it.
  *
  * Prerequisites:
  *   - npm run build (dist/ and dashboard-dist/ must exist)
  *   - npx playwright install chromium
  *
- * Run: TOWER_TEST_PORT=14100 TOWER_ARCHITECT_CMD=bash npx playwright test decisions-tab
+ * Run (an isolated state dir, so the test Tower never opens the live Tower's database):
+ *   TOWER_TEST_PORT=14100 CODEV_AGENT_FARM_DIR="$(mktemp -d)" \
+ *     npx playwright test --config playwright.decisions.config.ts
  */
 
 import { test, expect } from './tower-auth.js';
@@ -315,8 +319,9 @@ test.describe('Spec 1819: Decisions tab', () => {
     expect((await state.json()).decisionsEnabled).toBe(false);
 
     await page.goto(ws.url);
-    // The title comes from /api/state, so the tab list has been built from it by then.
-    await expect(page).toHaveTitle(`${basename(ws.root)} overview`, { timeout: 15_000 });
+    // The title comes from /api/state, so the tab list has been built from it by then. It is
+    // "<workspace> on <tower name> overview" on a Tower registered with a cloud name.
+    await expect(page).toHaveTitle(new RegExp(`^${basename(ws.root)}( on .+)? overview$`), { timeout: 15_000 });
     await expect(page.getByRole('tab', { name: 'Work' })).toBeVisible();
     await expect(page.getByRole('tab', { name: /Decisions/ })).toHaveCount(0);
   });
