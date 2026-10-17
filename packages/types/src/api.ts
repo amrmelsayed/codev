@@ -674,6 +674,7 @@ export type DecisionsRefusalCode =
   | 'comment-heading'
   | 'comment-fence'
   | 'comment-your-word'
+  | 'open-multiple'
   | 'heading-missing'
   | 'heading-duplicate'
   | 'your-word-missing'

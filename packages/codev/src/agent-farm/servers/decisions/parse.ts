@@ -91,6 +91,7 @@ function splitHeading(headingText: string): { id: string; stampText: string | nu
  */
 export function parseOptions(yourWordLineText: string): DecisionOption[] {
   const labelAt = yourWordLineText.indexOf(YOUR_WORD_LABEL);
+  if (labelAt === -1) return [];
   const rest = yourWordLineText.slice(labelAt + YOUR_WORD_LABEL.length).trim();
 
   const starts = [0];

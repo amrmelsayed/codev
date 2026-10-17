@@ -45,3 +45,16 @@ Addressed all points in the spec:
 - decisionsEnabled: configured path memoized ≤5s for the state flag only (state polled every 1s); config errors → flag false, logged, never fail /api/state.
 - Theme CSS imported from main.tsx; structure-changed reached via a pathological option word (`##`), no mocks.
 - Old Phase 4 split → 7 phases total.
+
+## 2026-10-17 · Phase 1 (read model) — approved by codex + claude at iteration 2
+
+- Parser, grammar and stamp resolver landed with the wire types. Deliberate deviations, reviewed: the fingerprint is SHA-256 of heading → last non-blank line, so re-spacing between items is not an edit; two `## Open` sections → file problem `open-multiple`, every item read-only; an option description is only the text after `=`.
+
+## 2026-10-17 · Phase 2 (splice) — implemented after a context refresh
+
+- `spliceRuling(text, request)` in `servers/decisions/splice.ts`; pure, returns `{ ok, text }` or `{ ok: false, code, message }` and never text on refusal.
+- Added refusal code `open-multiple` to `DecisionsRefusalCode`: phase 1 makes every item read-only when the file has two `## Open` sections, and none of the existing codes describes that. Phase 3 should map it to 409 with the other state refusals.
+- Verification goes past the spec's comparison list in one way: every inserted line must also re-parse as plain, unfenced content. Without that, an option word like `` `####` `` (a level-4 heading inside the item) or `` `~~~` `` in the file's last item (an unclosed fence with nothing after it) passes the spec's checks. This is the same rule the comment checks apply, extended to the word.
+- Comment line breaks: CRLF, CR and LF are all treated as breaks and rewritten in the file's own line ending, so a lone CR can't hide a heading on what other renderers treat as its own line.
+- `**Your word:**` in the middle of a comment line is accepted: per the grammar, only a line that *starts* with the label is a Your-word line.
+- Added the carried-forward `labelAt === -1` guard in `parseOptions`.
