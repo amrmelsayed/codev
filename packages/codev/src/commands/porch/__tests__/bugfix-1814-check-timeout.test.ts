@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadProtocol, getPhaseChecks } from '../protocol.js';
 import { runCheck, runPhaseChecks, type CheckEnv } from '../checks.js';
+import { logCheckOverrides } from '../index.js';
 
 const env: CheckEnv = { PROJECT_ID: '1814', PROJECT_TITLE: 'check-timeout' };
 
@@ -112,6 +113,19 @@ describe('bugfix #1814: per-check timeout_ms', () => {
 
     expect(() => getPhaseChecks(protocol, 'implement', { tests_py: { timeout_ms: -5 } }))
       .toThrow(/porch\.checks\.tests_py: timeout_ms must be a positive integer/);
+  });
+
+  it('an override that sets only timeout_ms is announced like any other override', () => {
+    writeProtocol(root, { tests_py: { command: 'pytest' } });
+    const overrides = { tests_py: { timeout_ms: 900_000 } };
+    const checks = getPhaseChecks(loadProtocol(root, 'timeouts'), 'implement', overrides);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    logCheckOverrides(['tests_py'], checks, overrides);
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0][0]).toContain('Check "tests_py" overridden: timeout: 900000ms');
+    log.mockRestore();
   });
 });
 
