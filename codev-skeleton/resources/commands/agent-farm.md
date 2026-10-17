@@ -932,6 +932,28 @@ afx spawn 42 --protocol spir --builder-cmd "claude --model haiku"
 
 Both are Tower-global (they apply to the whole Tower, not per-project) and optional — omit them to use the defaults above.
 
+### Porch check overrides
+
+Protocol checks default to the npm toolchain (`npm run build`, `npm test`). Override them per check name under `porch.checks` instead of forking `protocol.json`:
+
+```json
+{
+  "porch": {
+    "checks": {
+      "build": { "command": "cargo build" },
+      "tests": { "command": "cargo test", "timeout_ms": 900000 },
+      "e2e_tests": { "skip": true }
+    }
+  }
+}
+```
+
+**Override fields:**
+- `command` — Replace the protocol's check command with a custom shell command
+- `cwd` — Override the working directory for this check (relative to project root)
+- `timeout_ms` — Kill the check after this many milliseconds (default 5 minutes; a protocol.json check can set it too). On timeout porch kills the check's whole process tree
+- `skip: true` — Omit this check entirely (for checks that don't apply to your project)
+
 ---
 
 ## Files
