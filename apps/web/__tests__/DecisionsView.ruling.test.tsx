@@ -449,6 +449,23 @@ describe('submit', () => {
     expect(applyDocument).not.toHaveBeenCalled();
   });
 
+  it('shows a thrown send on the card and unlocks it, keeping the draft', async () => {
+    postDecisionRuling.mockRejectedValue(new Error('localStorage is not available'));
+    show(makeDocument('v1', MERGE));
+    choose(MERGE.question, 'accept');
+    type(MERGE.question, 'ship it');
+
+    await submit(MERGE.question);
+
+    expect(within(card(MERGE.question)).getByRole('alert')).toHaveTextContent(
+      'The ruling could not be sent: localStorage is not available',
+    );
+    expect(radio(MERGE.question, 'accept')).toBeChecked();
+    expect(commentBox(MERGE.question)).toHaveValue('ship it');
+    expect(commentBox(MERGE.question)).not.toHaveAttribute('readonly');
+    expect(submitButton(MERGE.question)).toBeEnabled();
+  });
+
   it('clears the last refusal when the owner submits again', async () => {
     const reply = deferred<DecisionRulingResult>();
     postDecisionRuling.mockResolvedValueOnce({ kind: 'refused', code: 'item-changed', message: 'changed' });

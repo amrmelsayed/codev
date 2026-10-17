@@ -4,6 +4,7 @@ import { MarkdownView } from '@cluesmith/codev-artifact-canvas';
 import { useDecisions } from '../hooks/useDecisions.js';
 import { postDecisionRuling } from '../lib/api.js';
 import type {
+  DecisionRulingResult,
   DecisionItem,
   DecisionItemProblem,
   DecisionOption,
@@ -430,11 +431,11 @@ export function DecisionsView({ isActive }: DecisionsViewProps) {
     : state.status === 'error' ? state.lastDocument
       : null;
 
-  const [ruling, setRuling] = useState<RulingState>(NO_RULINGS);
+  const [stored, setRuling] = useState<RulingState>(NO_RULINGS);
   // Adjusting state during render (React's pattern for state derived from new input): the
   // re-render happens before anything is committed, so no frame shows a stale draft.
-  const reconciled = reconcile(ruling, doc, state.status === 'not-found');
-  if (reconciled !== ruling) setRuling(reconciled);
+  const ruling = reconcile(stored, doc, state.status === 'not-found');
+  if (ruling !== stored) setRuling(ruling);
 
   // Edits only reach a card that is not submitting: its controls are read-only while it is.
   const onEdit = useCallback((item: DecisionItem, edit: DraftEdit) => {
@@ -447,12 +448,18 @@ export function DecisionsView({ isActive }: DecisionsViewProps) {
 
   const onSubmit = useCallback(async (item: DecisionItem, draft: Draft) => {
     setRuling(prev => withDraft(prev, item.id, { ...draft, refusal: undefined }, true));
-    const result = await postDecisionRuling({
-      id: item.id,
-      fingerprint: item.fingerprint,
-      word: draft.word,
-      comment: draft.comment.trim() || undefined,
-    });
+    let result: DecisionRulingResult;
+    try {
+      result = await postDecisionRuling({
+        id: item.id,
+        fingerprint: item.fingerprint,
+        word: draft.word,
+        comment: draft.comment.trim() || undefined,
+      });
+    } catch (err) {
+      // It is written never to throw; if it does, say so on the card rather than leave it locked.
+      result = { kind: 'error', message: `The ruling could not be sent: ${err instanceof Error ? err.message : String(err)}` };
+    }
     if (result.kind === 'document') {
       applyDocument(result.document);
       setRuling(prev => withDraft(prev, item.id, null, false));
