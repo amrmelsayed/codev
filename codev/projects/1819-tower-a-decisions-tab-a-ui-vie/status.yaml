@@ -1,7 +1,7 @@
 id: '1819'
 title: tower-a-decisions-tab-a-ui-vie
 protocol: spir
-phase: implement
+phase: review
 plan_phases:
   - id: phase_1
     title: 'Decisions read model: parser, timestamp resolver, wire types'
@@ -23,8 +23,8 @@ plan_phases:
     status: complete
   - id: phase_7
     title: Browser verification and documentation
-    status: in_progress
-current_plan_phase: phase_7
+    status: complete
+current_plan_phase: null
 gates:
   spec-approval:
     status: approved
@@ -38,8 +38,8 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 3
-build_complete: true
+iteration: 1
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -78,7 +78,7 @@ history:
         file: >-
           /Users/mwk/Development/cluesmith/codev/.builders/spir-1819/codev/projects/1819-tower-a-decisions-tab-a-ui-vie/1819-phase_7-iter2-claude.txt
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-17T18:46:04.333Z'
+updated_at: '2026-10-17T18:49:44.540Z'
 context_refreshes:
   - boundary: plan-phase:phase_2
     at: '2026-10-17T16:56:28.468Z'
@@ -98,3 +98,5 @@ context_refreshes:
   - boundary: plan-phase:phase_7
     at: '2026-10-17T18:20:43.681Z'
     acknowledged_at: '2026-10-17T18:21:38.560Z'
+  - boundary: enter:review
+    at: '2026-10-17T18:49:44.539Z'
