@@ -51,6 +51,7 @@ import { getWorktreeConfig, getActivityHooks } from '../utils/config.js';
 import { ensureCodevConfigWatcher } from './codev-config-watcher.js';
 import { handleDecisionsGet, handleDecisionsRule } from './decisions/routes.js';
 import { decisionsFilePresent } from './decisions/file.js';
+import { DECISIONS_TAB_SENDER } from './decisions/notice.js';
 import { hasTeam, loadTeamMembers, loadMessages, type TeamMember, type TeamMessage } from '../../lib/team.js';
 import { fetchTeamGitHubData, type TeamMemberGitHubData } from '../../lib/team-github.js';
 import { resolveTarget, resolveAgentInRegistry, broadcastMessage, isResolveError, type ResolveResult } from './tower-messages.js';
@@ -61,6 +62,7 @@ import {
   formatArchitectToBuilderMessage,
   formatBuilderMessage,
   formatUserViaVsCodeMessage,
+  formatUserViaDecisionsTabMessage,
   isSafeSenderId,
   messageTooLargeError,
   MAX_MESSAGE_BYTES,
@@ -1674,6 +1676,47 @@ export async function deliverCronMessage(
 }
 
 /**
+ * Tell a workspace's hub architect about a ruling the owner just wrote from the
+ * Decisions tab (#1828). The recipient is the one a non-builder `afx send architect`
+ * reaches — `main`, else the first registered architect — resolved live, or through
+ * the registry when it has no live PTY so the notice holds rather than vanishes. One
+ * mailbox row is persisted, then offered to the same gated delivery `handleSend` uses;
+ * a busy line holds it for the backstop. Throws when the workspace has no architect.
+ */
+async function notifyHubOfRuling(workspacePath: string, message: string, log: RouteContext['log']): Promise<void> {
+  let toAgent: string;
+  let terminalId: string | null = null;
+  const live = resolveTarget('architect', workspacePath);
+  if (!isResolveError(live)) {
+    toAgent = liveTargetIdentity(live).toAgent;
+    terminalId = live.terminalId;
+  } else {
+    const reg = live.code === 'NOT_FOUND' ? resolveAgentInRegistry('architect', workspacePath) : live;
+    if (isResolveError(reg)) throw new Error(reg.message);
+    toAgent = reg.agent;
+  }
+
+  const db = getGlobalDb();
+  const row = enqueueMailbox(db, {
+    workspacePath,
+    toAgent,
+    body: message,
+    formattedMessage: formatUserViaDecisionsTabMessage(toAgent, message),
+    fromAgent: DECISIONS_TAB_SENDER,
+    fromWorkspace: workspacePath,
+    terminalId,
+  });
+  const ports = makeDeliveryPorts(log);
+  ports.onHeldStateChange();
+  try {
+    const outcome = await deliverAgentMailSerialized(ports, db, workspacePath, toAgent);
+    getMailboxDrainer().noteOutcome(workspacePath, toAgent, outcome);
+  } catch (err) {
+    log('ERROR', `Decisions notice delivery errored for ${toAgent} (row ${row.id.slice(0, 8)}... stays held): ${(err as Error).message}`);
+  }
+}
+
+/**
  * Persist a `held` mailbox row and write the Spec 1313 `held` send response. Used
  * for both dead-session cases (no live PTY, held `no-live-pty`). The row exists
  * before the response returns, so the backstop drainer will redeliver it once the
@@ -2925,7 +2968,7 @@ async function handleWorkspaceRoutes(
       return handleDecisionsGet(res, workspacePath);
     }
     if (req.method === 'POST' && apiPath === 'decisions/rule') {
-      return handleDecisionsRule(req, res, workspacePath, ctx.log);
+      return handleDecisionsRule(req, res, workspacePath, ctx.log, message => notifyHubOfRuling(workspacePath, message, ctx.log));
     }
 
     // GET /api/annotate/:tabId/* — Serve rich annotator template and sub-APIs

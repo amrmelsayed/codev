@@ -6,13 +6,14 @@
 // Neither route reads a path from the request: the file is the configured one,
 // resolved and contained by file.ts at every call. A write takes its turn on the file,
 // re-reads it, splices, and replaces it atomically; success returns the document
-// re-parsed from the bytes just written.
+// re-parsed from the bytes just written, then tells the hub architect (#1828).
 
 import type http from 'node:http';
 import { promises as fsp } from 'node:fs';
 import type { DecisionsRefusalCode, DecisionsReadResponse, DecisionsRuleResponse } from '@cluesmith/codev-types';
 import { parseJsonBody } from '../../utils/server-utils.js';
 import { configuredDecisionsPath, decisionsWriteQueue, resolveDecisionsPath, writeFileAtomic, type DecisionsLog } from './file.js';
+import { rulingNotice, type RulingNotifier } from './notice.js';
 import { parseDecisions, toDecisionsDocument } from './parse.js';
 import { spliceRuling, type RulingRequest } from './splice.js';
 
@@ -115,12 +116,17 @@ export async function handleDecisionsGet(res: http.ServerResponse, workspacePath
   send(res, 200, { ok: true, document: toDecisionsDocument(parseDecisions(bytes.toString('utf8')), located.displayPath) });
 }
 
-/** POST …/api/decisions/rule — splice the owner's ruling into the configured file. */
+/**
+ * POST …/api/decisions/rule — splice the owner's ruling into the configured file, then
+ * `notify` the hub architect of it. The notice is sent only after the file is replaced,
+ * and its failure is logged without touching the response: the file is the source of truth.
+ */
 export async function handleDecisionsRule(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   workspacePath: string,
   log: DecisionsLog,
+  notify: RulingNotifier,
 ): Promise<void> {
   const refuse = (refused: Refusal, id?: string): void => {
     log('WARN', `Decisions ruling refused${id ? ` for ${id}` : ''} (${refused.code}): ${refused.message}`);
@@ -154,4 +160,10 @@ export async function handleDecisionsRule(
 
   log('INFO', `Decisions ruling written for ${ruling.id} into ${displayPath}`);
   send(res, 200, { ok: true, document: toDecisionsDocument(parseDecisions(outcome.text), displayPath) });
+
+  try {
+    await notify(rulingNotice(ruling));
+  } catch (err) {
+    log('ERROR', `Decisions ruling for ${ruling.id} was written, but the hub architect was not told: ${(err as Error).message}`);
+  }
 }

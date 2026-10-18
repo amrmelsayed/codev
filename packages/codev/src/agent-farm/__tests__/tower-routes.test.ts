@@ -15,6 +15,8 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import Database from 'better-sqlite3';
 import { handleRequest } from '../servers/tower-routes.js';
+import { getWorkspaceTerminals } from '../servers/tower-terminals.js';
+import type { DbMailbox } from '../db/types.js';
 import type { RouteContext } from '../servers/tower-routes.js';
 import { GLOBAL_SCHEMA } from '../db/schema.js';
 import * as mailbox from '../db/mailbox.js';
@@ -794,6 +796,78 @@ describe('tower-routes', () => {
         expect(written.status).toBe(200);
         expect(written.body.document.items.find((i: { id: string }) => i.id === 'main-11').currentRuling).toBe('accept');
         expect(fs.readFileSync(decisionsFile, 'utf8')).not.toBe(FIXTURE);
+      });
+
+      // #1828: a submit tells the hub architect through the mailbox — one row, gated.
+      describe('the hub notice (#1828)', () => {
+        const allRows = () => sendDbHolder.db.prepare('SELECT * FROM mailbox').all() as DbMailbox[];
+
+        /** Submit a ruling for main-11 against a fresh fixture. */
+        async function submit(ruling: Record<string, unknown>, ctx = makeCtx()) {
+          fs.writeFileSync(decisionsFile, FIXTURE);
+          const item = (await request('GET', 'api/decisions')).body.document.items.find((i: { id: string }) => i.id === 'main-11');
+          mockParseJsonBody.mockResolvedValueOnce({ id: 'main-11', fingerprint: item.fingerprint, ...ruling });
+          const { res, statusCode, body } = makeRes();
+          await handleRequest(makeReq('POST', `/workspace/${encoded}/api/decisions/rule`), res, ctx);
+          return { status: statusCode(), body: JSON.parse(body()) };
+        }
+
+        afterEach(() => {
+          vi.mocked(getWorkspaceTerminals).mockImplementation(() => new Map());
+        });
+
+        it('delivers exactly one mailbox row to a live main architect through the gate', async () => {
+          const mockWrite = vi.fn();
+          vi.mocked(getWorkspaceTerminals).mockImplementation(() => new Map([[workspace, {
+            architects: new Map([['main', 'term-arch-main']]),
+            builders: new Map(),
+            shells: new Map(),
+            fileTabs: new Map(),
+          }]]) as any);
+          mockGetTerminalManager.mockReturnValue({
+            listSessions: mockListSessions.mockReturnValue([]),
+            getSession: (id: string) => (id === 'term-arch-main' ? gateSession(mockWrite, '❯ ', true, id) : null),
+          });
+          mockResolveTarget.mockReturnValue({ terminalId: 'term-arch-main', workspacePath: workspace, agent: 'architect' });
+
+          const { status } = await submit({ word: 'accept', comment: 'ship it\nno new limits' });
+          expect(status).toBe(200);
+          expect(mockResolveTarget).toHaveBeenCalledWith('architect', workspace);
+
+          const rows = allRows();
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({
+            workspace_path: workspace,
+            to_agent: 'main',
+            from_agent: 'decisions-tab',
+            body: 'RULED main-11: accept\nship it\nno new limits',
+            status: 'delivered',
+          });
+          expect(rows[0].formatted_message).toMatch(/^### \[USER via Decisions tab → main \| .+\] ###\nRULED main-11: accept\n/);
+          expect(mockWrite.mock.calls.map(([data]) => data).join('')).toContain('RULED main-11: accept');
+        });
+
+        it('holds the row for a main architect with no live terminal', async () => {
+          mockResolveTarget.mockReturnValue({ code: 'NOT_FOUND', message: 'no live terminal' });
+          mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
+
+          expect((await submit({ comment: 'which branch?' })).status).toBe(200);
+          expect(mockResolveAgentInRegistry).toHaveBeenCalledWith('architect', workspace);
+          const rows = allRows();
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({ to_agent: 'main', body: 'QUESTION main-11:\nwhich branch?', status: 'held', reason: 'no-live-pty' });
+        });
+
+        it('still writes the ruling, and logs, when the workspace has no architect', async () => {
+          mockResolveTarget.mockReturnValue({ code: 'NOT_FOUND', message: 'no live terminal' });
+          const ctx = makeCtx();
+          const { status, body } = await submit({ word: 'accept' }, ctx);
+
+          expect(status).toBe(200);
+          expect(body.document.items.find((i: { id: string }) => i.id === 'main-11').currentRuling).toBe('accept');
+          expect(allRows()).toHaveLength(0);
+          expect(ctx.log).toHaveBeenCalledWith('ERROR', expect.stringContaining('hub architect was not told'));
+        });
       });
 
       it('rejects both routes without the Tower key', async () => {
