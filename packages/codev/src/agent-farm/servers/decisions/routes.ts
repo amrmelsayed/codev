@@ -164,6 +164,6 @@ export async function handleDecisionsRule(
   try {
     await notify(rulingNotice(ruling));
   } catch (err) {
-    log('ERROR', `Decisions ruling for ${ruling.id} was written, but the hub architect was not told: ${(err as Error).message}`);
+    log('WARN', `Decisions ruling for ${ruling.id} was written, but the hub architect was not told: ${(err as Error).message}`);
   }
 }

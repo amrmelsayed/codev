@@ -20,7 +20,7 @@ import type { DbMailbox } from '../db/types.js';
 import type { RouteContext } from '../servers/tower-routes.js';
 import { GLOBAL_SCHEMA } from '../db/schema.js';
 import * as mailbox from '../db/mailbox.js';
-import { MAX_SENDER_ID_LENGTH } from '../utils/message-format.js';
+import { MAX_MESSAGE_BYTES, MAX_SENDER_ID_LENGTH } from '../utils/message-format.js';
 import { SessionScreen } from '../../terminal/session-screen.js';
 // Issue #1473: a REAL PtySession for the raw-write route test. The claim under test is that the
 // route's bytes reach the gate's input signal, and a session double cannot make that claim —
@@ -802,9 +802,9 @@ describe('tower-routes', () => {
       describe('the hub notice (#1828)', () => {
         const allRows = () => sendDbHolder.db.prepare('SELECT * FROM mailbox').all() as DbMailbox[];
 
-        /** Submit a ruling for main-11 against a fresh fixture. */
-        async function submit(ruling: Record<string, unknown>, ctx = makeCtx()) {
-          fs.writeFileSync(decisionsFile, FIXTURE);
+        /** Submit a ruling for main-11 against a fresh copy of `text`. */
+        async function submit(ruling: Record<string, unknown>, ctx = makeCtx(), text = FIXTURE) {
+          fs.writeFileSync(decisionsFile, text);
           const item = (await request('GET', 'api/decisions')).body.document.items.find((i: { id: string }) => i.id === 'main-11');
           mockParseJsonBody.mockResolvedValueOnce({ id: 'main-11', fingerprint: item.fingerprint, ...ruling });
           const { res, statusCode, body } = makeRes();
@@ -816,23 +816,32 @@ describe('tower-routes', () => {
           vi.mocked(getWorkspaceTerminals).mockImplementation(() => new Map());
         });
 
-        it('delivers exactly one mailbox row to a live main architect through the gate', async () => {
-          const mockWrite = vi.fn();
+        /** Route the workspace's live architects to clean prompts; returns each one's write spy. */
+        function liveArchitects(...names: string[]): Record<string, ReturnType<typeof vi.fn>> {
+          const writes = Object.fromEntries(names.map(name => [name, vi.fn()]));
           vi.mocked(getWorkspaceTerminals).mockImplementation(() => new Map([[workspace, {
-            architects: new Map([['main', 'term-arch-main']]),
+            architects: new Map(names.map(name => [name, `term-arch-${name}`])),
             builders: new Map(),
             shells: new Map(),
             fileTabs: new Map(),
           }]]) as any);
           mockGetTerminalManager.mockReturnValue({
             listSessions: mockListSessions.mockReturnValue([]),
-            getSession: (id: string) => (id === 'term-arch-main' ? gateSession(mockWrite, '❯ ', true, id) : null),
+            getSession: (id: string) => {
+              const name = names.find(n => id === `term-arch-${n}`);
+              return name ? gateSession(writes[name], '❯ ', true, id) : null;
+            },
           });
-          mockResolveTarget.mockReturnValue({ terminalId: 'term-arch-main', workspacePath: workspace, agent: 'architect' });
+          return writes;
+        }
+
+        it('delivers exactly one mailbox row to a live main architect through the gate', async () => {
+          const writes = liveArchitects('main');
+          mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
 
           const { status } = await submit({ word: 'accept', comment: 'ship it\nno new limits' });
           expect(status).toBe(200);
-          expect(mockResolveTarget).toHaveBeenCalledWith('architect', workspace);
+          expect(mockResolveAgentInRegistry).toHaveBeenCalledWith('architect', workspace);
 
           const rows = allRows();
           expect(rows).toHaveLength(1);
@@ -844,29 +853,41 @@ describe('tower-routes', () => {
             status: 'delivered',
           });
           expect(rows[0].formatted_message).toMatch(/^### \[USER via Decisions tab → main \| .+\] ###\nRULED main-11: accept\n/);
-          expect(mockWrite.mock.calls.map(([data]) => data).join('')).toContain('RULED main-11: accept');
+          expect(writes.main.mock.calls.map(([data]) => data).join('')).toContain('RULED main-11: accept');
         });
 
-        it('holds the row for a main architect with no live terminal', async () => {
-          mockResolveTarget.mockReturnValue({ code: 'NOT_FOUND', message: 'no live terminal' });
+        it('holds the row for an offline main architect rather than telling a live sibling', async () => {
+          const writes = liveArchitects('sibling');
           mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
 
           expect((await submit({ comment: 'which branch?' })).status).toBe(200);
-          expect(mockResolveAgentInRegistry).toHaveBeenCalledWith('architect', workspace);
           const rows = allRows();
           expect(rows).toHaveLength(1);
           expect(rows[0]).toMatchObject({ to_agent: 'main', body: 'QUESTION main-11:\nwhich branch?', status: 'held', reason: 'no-live-pty' });
+          expect(writes.sibling).not.toHaveBeenCalled();
         });
 
         it('still writes the ruling, and logs, when the workspace has no architect', async () => {
-          mockResolveTarget.mockReturnValue({ code: 'NOT_FOUND', message: 'no live terminal' });
           const ctx = makeCtx();
           const { status, body } = await submit({ word: 'accept' }, ctx);
 
           expect(status).toBe(200);
           expect(body.document.items.find((i: { id: string }) => i.id === 'main-11').currentRuling).toBe('accept');
           expect(allRows()).toHaveLength(0);
-          expect(ctx.log).toHaveBeenCalledWith('ERROR', expect.stringContaining('hub architect was not told'));
+          expect(ctx.log).toHaveBeenCalledWith('WARN', expect.stringContaining('hub architect was not told'));
+        });
+
+        it('refuses, persisting nothing, a notice over the send limit', async () => {
+          mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
+          const word = 'x'.repeat(MAX_MESSAGE_BYTES);
+          const text = FIXTURE.replace('**Your word:** `accept`', `**Your word:** \`${word}\``);
+          expect(text).not.toBe(FIXTURE);
+          const ctx = makeCtx();
+
+          expect((await submit({ word }, ctx, text)).status).toBe(200);
+          expect(fs.readFileSync(decisionsFile, 'utf8')).toContain(`\n${word}\n`);
+          expect(allRows()).toHaveLength(0);
+          expect(ctx.log).toHaveBeenCalledWith('WARN', expect.stringContaining('over the 49152-byte'));
         });
       });
 

@@ -5,21 +5,35 @@
 - Hook point: `handleDecisionsRule` (`servers/decisions/routes.ts`), after the write queue
   returns success (the atomic rename has happened) and AFTER the 200 response is sent, so
   the notice can never change or delay what the tab sees. The route takes a `notify` port;
-  a throw from it is logged at ERROR and swallowed.
+  a throw from it is logged at WARN and swallowed.
 - Message text lives in `servers/decisions/notice.ts` (`rulingNotice`): `RULED <id>: <word>`
   then the trimmed comment on following lines; comment-only → `QUESTION <id>:` then the text
   on the following lines (read the issue's `QUESTION <id>:` with nothing after the colon as
   "text on the next lines", matching RULED's comment placement). Line breaks normalized to
   `\n` so no stray `\r` reaches a PTY.
-- Delivery: `notifyHubOfRuling` in `tower-routes.ts`, beside `deliverCronMessage`, because it
-  needs the private `liveTargetIdentity` reverse-map. Resolves bare `architect` with no sender
-  (= `main`, else first registered) live, else via the registry so a dead hub HOLDS
-  (`no-live-pty`) instead of dropping. `enqueueMailbox` → `deliverAgentMailSerialized` →
-  `noteOutcome` — the same persist-then-gate sequence as `handleSend`'s normal path. No
-  supersede key: two rulings must be two rows.
+- Delivery: `notifyHubOfRuling` in `tower-routes.ts`, beside `deliverCronMessage` and
+  `handleSend`. `enqueueMailbox` → `deliverAgentMailSerialized` → `noteOutcome` — the same
+  persist-then-gate sequence as `handleSend`'s normal path. No supersede key: two rulings must
+  be two rows.
 - Frame: added `formatUserViaDecisionsTabMessage` → `### [USER via Decisions tab → main | ts] ###`,
   modelled on the #1494 VS Code relay. Reusing a pseudo-sender through `formatBuilderMessage`
   (cron's way) would label the owner's word `BUILDER decisions-tab`, the wrong-role defect
   message-format.ts guards against. Row `from_agent` = `decisions-tab`.
 - Not touched: the hub's `ddu` scan / file watch (that lives in the hub architect's own
   workflow, not in Tower code).
+
+## 2026-10-18 — PR #1829, CMAP
+
+- codex REQUEST_CHANGES, both real, both fixed:
+  - First cut resolved the hub LIVE-first (as `afx send architect` / cron do). With `main`
+    registered but offline and a sibling live, the notice went to the sibling. Now the hub is
+    chosen from the registry only (`resolveAgentInRegistry('architect')` = `main`, else first
+    registered by insertion order) and the mailbox finds its live session by name; an offline
+    hub holds `no-live-pty`. Test: offline main + live sibling → one held row for main, sibling
+    untouched.
+  - Item id and option word come from the file unbounded, so the notice could pass the 48 KB
+    send limit. Now refused via `messageLimitError` before anything is persisted (logged).
+- claude APPROVE; took two minors: a comment tying `rulingNotice`'s trim/split to
+  `spliceRuling`, and WARN (cron's level for an unresolved target) instead of ERROR when the
+  hub is not told. Left for the architect: a follow-up for the hub-side half of the owner's
+  ruling (stop watching the file) — it lives outside this repo.

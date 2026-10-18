@@ -64,6 +64,7 @@ import {
   formatUserViaVsCodeMessage,
   formatUserViaDecisionsTabMessage,
   isSafeSenderId,
+  messageLimitError,
   messageTooLargeError,
   MAX_MESSAGE_BYTES,
 } from '../utils/message-format.js';
@@ -1677,24 +1678,19 @@ export async function deliverCronMessage(
 
 /**
  * Tell a workspace's hub architect about a ruling the owner just wrote from the
- * Decisions tab (#1828). The recipient is the one a non-builder `afx send architect`
- * reaches — `main`, else the first registered architect — resolved live, or through
- * the registry when it has no live PTY so the notice holds rather than vanishes. One
- * mailbox row is persisted, then offered to the same gated delivery `handleSend` uses;
- * a busy line holds it for the backstop. Throws when the workspace has no architect.
+ * Decisions tab (#1828). The hub is chosen from the registry — `main`, else the first
+ * registered architect — never from whichever architect happens to be live, so a hub
+ * that is offline holds the notice (`no-live-pty`) rather than a sibling receiving it.
+ * One mailbox row is persisted, then offered to the same gated delivery `handleSend`
+ * uses; a busy line holds it for the backstop. Throws, persisting nothing, when the
+ * workspace has no architect or the notice is over the send limit.
  */
 async function notifyHubOfRuling(workspacePath: string, message: string, log: RouteContext['log']): Promise<void> {
-  let toAgent: string;
-  let terminalId: string | null = null;
-  const live = resolveTarget('architect', workspacePath);
-  if (!isResolveError(live)) {
-    toAgent = liveTargetIdentity(live).toAgent;
-    terminalId = live.terminalId;
-  } else {
-    const reg = live.code === 'NOT_FOUND' ? resolveAgentInRegistry('architect', workspacePath) : live;
-    if (isResolveError(reg)) throw new Error(reg.message);
-    toAgent = reg.agent;
-  }
+  const tooLarge = messageLimitError(message);
+  if (tooLarge) throw new Error(tooLarge);
+  const hub = resolveAgentInRegistry('architect', workspacePath);
+  if (isResolveError(hub)) throw new Error(hub.message);
+  const toAgent = hub.agent;
 
   const db = getGlobalDb();
   const row = enqueueMailbox(db, {
@@ -1704,7 +1700,6 @@ async function notifyHubOfRuling(workspacePath: string, message: string, log: Ro
     formattedMessage: formatUserViaDecisionsTabMessage(toAgent, message),
     fromAgent: DECISIONS_TAB_SENDER,
     fromWorkspace: workspacePath,
-    terminalId,
   });
   const ports = makeDeliveryPorts(log);
   ports.onHeldStateChange();

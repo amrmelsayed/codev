@@ -16,6 +16,8 @@ export type RulingNotifier = (message: string) => Promise<void>;
 /**
  * The notice for a ruling the splice accepted: `RULED <id>: <word>`, or
  * `QUESTION <id>:` when no word was chosen, with the trimmed comment on the lines after it.
+ * The comment is trimmed and split exactly as `spliceRuling` does, so the notice carries
+ * the lines that were written to the file.
  */
 export function rulingNotice(ruling: RulingRequest): string {
   const head = ruling.word ? `RULED ${ruling.id}: ${ruling.word}` : `QUESTION ${ruling.id}:`;

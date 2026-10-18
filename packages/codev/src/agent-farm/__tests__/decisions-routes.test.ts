@@ -204,7 +204,7 @@ describe('POST decisions/rule', () => {
       expect(untold).toEqual(told);
       expect(untold.status).toBe(200);
       expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(fixtureRuledWith('accept\n'));
-      expect(log).toHaveBeenCalledWith('ERROR', expect.stringContaining('no architect registered'));
+      expect(log).toHaveBeenCalledWith('WARN', expect.stringContaining('no architect registered'));
     });
   });
 
