@@ -1,7 +1,7 @@
 id: '1819'
 title: tower-a-decisions-tab-a-ui-vie
 protocol: spir
-phase: verify
+phase: verified
 plan_phases:
   - id: phase_1
     title: 'Decisions read model: parser, timestamp resolver, wire types'
@@ -46,7 +46,7 @@ iteration: 1
 build_complete: true
 history: []
 started_at: '2026-10-17T07:13:03.052Z'
-updated_at: '2026-10-18T07:11:15.190Z'
+updated_at: '2026-10-18T07:11:17.537Z'
 context_refreshes:
   - boundary: plan-phase:phase_2
     at: '2026-10-17T16:56:28.468Z'
