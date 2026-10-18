@@ -8,8 +8,8 @@
  * editing it, the file disappearing), and check the bytes on disk after every write.
  *
  * Isolation — this suite WRITES files, so it must never reach anything real:
- *   - It refuses to run without an explicit TOWER_TEST_PORT, and refuses 4100 (the live Tower):
- *     the config's `reuseExistingServer: true` would otherwise attach it to the user's Tower.
+ *   - It refuses to run without an explicit TOWER_TEST_PORT, and refuses 4100 (the live Tower);
+ *     its config never reuses a server already listening on the port.
  *   - Every workspace is a throwaway `mkdtemp` directory outside the repo, driven through
  *     `/workspace/<base64url(path)>/` (the workspace API and the dashboard shell need no
  *     activation), and removed afterwards. Nothing is written under the repo.
@@ -51,7 +51,7 @@ const QUESTION = {
 };
 const YOUR_WORD = {
   main: '**Your word:** `accept` = merge as is / `rework` = send it back / `hold`',
-  ops: '**Your word:** `raise` = bump the timeout / `split` = split the suite / `hold`',
+  ops: '**Your word:** `raise` / `split` / `hold`',
   web: '**Your word:** `keep` = keep the skills / `drop` = drop them / `hold`',
 };
 const LINK_URL = 'https://decisions-e2e.invalid/pull/1819';
@@ -77,6 +77,7 @@ ${YOUR_WORD.main}
 ### ops-3 · 2026-10-17 8:05 pm PT · ${QUESTION.ops}
 
 - **Problem:** the dashboard e2e suite times out on slow runners.
+- **Options:** (a) \`raise\` = bump the timeout (b) \`split\` = split the suite
 - **Recommendation (ops):** raise.
 
 ${YOUR_WORD.ops}
@@ -183,8 +184,13 @@ test.describe('Spec 1819: Decisions tab', () => {
 
     const main = card(page, QUESTION.main);
     await expect(main.getByRole('radio')).toHaveCount(3);
-    await expect(main.getByRole('radio', { name: /^accept Recommended/ })).toBeVisible();
+    await expect(main.getByRole('radio', { name: 'accept: merge as is Recommended', exact: true })).toBeVisible();
     await expect(main.getByRole('button', { name: 'Submit' })).toBeDisabled();
+    // ops-3's Your-word line has bare words; each option reads with its meaning from the body's Options.
+    const ops = card(page, QUESTION.ops);
+    for (const name of ['raise: bump the timeout Recommended', 'split: split the suite', 'hold']) {
+      await expect(ops.getByRole('radio', { name, exact: true })).toBeVisible();
+    }
 
     const text = "accept but don't add the limit on additional tests. That could easily backfire.";
     await main.getByRole('radio', { name: /^accept/ }).check();

@@ -152,6 +152,19 @@ grammar, a subset of CommonMark:
   backticked word contributes one option: the word, plus the description after `=` if present.
   The first option is the recommended one. The file's preamble allows "a letter or one word";
   the tab offers and writes the word (letters are a hand-typing shorthand, not separate options).
+- **Option descriptions** (owner's change at the PR gate, 2026-10-17). An option's description
+  is the text after its `=` on the Your-word line when present. Otherwise, it is that word's
+  entry in the item body's `**Options:**`, in any of these forms:
+  - `(a) `word` = …` after the label, on its line (the label may follow other text on the line,
+    as in "For a choice: **Options:** …");
+  - `(a) `word`: …`;
+  - a `- `word` = …` (or `- `word`: …`) list item under the label.
+
+  The entries run from the label until a blank line (unless an entry follows it), a heading, a
+  fence, or a line that is neither indented nor an entry. A wrapped entry's lines are joined.
+  Fenced lines and Q&A entries are not read. Failing both sources, the option is the word
+  alone. The body itself is shown unchanged. Each option reads inline as `word: description`,
+  with the Recommended marker after it.
 - **Body** = the item's lines between the heading and the Your-word line, less any
   question-and-answer entries (below), which render as the thread instead.
 - **Current ruling** = the item's text after the Your-word line, trimmed; empty means unruled.
@@ -526,6 +539,10 @@ watchers, and mirrors how the existing file tab already detects change.
 - Multiple items; ids from the first heading token; question containing ` · `; heading with no
   separators; headings with up to three leading spaces; a level-4 heading inside an item.
 - Option descriptions containing backticks, `=` and ` / `; a `hold` option with no description.
+- Bare words on the Your-word line take their descriptions from the body's `**Options:**` in
+  each form: `(a) `w` = …`, `(a) `w`: …`, and a `- `w` = …` list. The Your-word line's own `= …`
+  wins over the body. A word with neither stays bare. Fenced Options, Options inside a Q&A
+  entry, and text after the Your-word line are not read.
 - Existing owner text after the Your-word line (word only; word + sentence; multiple paragraphs)
   appears as the current ruling and makes the item read-only.
 - `###`, `## Ruled` and `**Your word:**` inside a fenced code block are content, not structure;

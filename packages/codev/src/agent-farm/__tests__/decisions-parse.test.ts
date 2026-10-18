@@ -116,6 +116,11 @@ describe('parseDecisions — the issue format', () => {
     expect(doc.items[0].options[1].description).toBe('reuse the chat tools');
   });
 
+  it("prefers the Your-word line's description to the body's Options entry", () => {
+    // The body says `newtool` = "add a scan tool to the composer"; the Your-word line wins.
+    expect(doc.items[0].options[0].description).toBe('add the scan tool');
+  });
+
   it('extracts the Q&A thread with continuation lines and removes it from the body', () => {
     expect(doc.items[0].qa).toEqual([
       { kind: 'asked', time: '6:07 am', markdown: '"why a new tool? Don\'t we have existing tools?"', answered: true },
@@ -161,6 +166,67 @@ describe('parseDecisions — the issue format', () => {
     expect(edited.version).not.toBe(parsed.version);
     expect(edited.items[0].fingerprint).toBe(parsed.items[0].fingerprint);
     expect(edited.items[1].fingerprint).not.toBe(parsed.items[1].fingerprint);
+  });
+});
+
+describe('parseDecisions — descriptions from the body\'s Options', () => {
+  const BARE = '**Your word:** `raised` / `rotated` / `wait`';
+  const descriptions = (text: string) => parseDecisions(text).items[0].options.map(o => [o.word, o.description]);
+
+  it.each([
+    ['(a) `w` = …', '- **Options:** (a) `raised` = raise the limit now (b) `rotated` = rotate the key'],
+    ['(a) `w`: …', '- **Options:** (a) `raised`: raise the limit now (b) `rotated`: rotate the key'],
+    ['- `w` = … list', '- **Options:**\n  - `raised` = raise the limit now\n  - `rotated` = rotate the key\n- **Fix:** none'],
+  ])('reads the %s form for bare words; a word with no entry stays bare', (_form, body) => {
+    expect(descriptions(oneItem(body, BARE))).toEqual([
+      ['raised', 'raise the limit now'],
+      ['rotated', 'rotate the key'],
+      ['wait', ''],
+    ]);
+  });
+
+  it('keeps the recommended marker on the first option and the body unchanged', () => {
+    const body = '- **Options:** (a) `raised` = raise the limit now (b) `rotated` = rotate the key';
+    const item = parseDecisions(oneItem(body, BARE)).items[0];
+    expect(item.options.map(o => o.recommended)).toEqual([true, false, false]);
+    expect(item.bodyMarkdown).toBe(body);
+  });
+
+  it('reads the label mid-line, and a list under an unlisted label after a blank line', () => {
+    expect(descriptions(oneItem('- **Root cause:** why. For a choice: **Options:** (a) `raised` = raise it', BARE))[0])
+      .toEqual(['raised', 'raise it']);
+    expect(descriptions(oneItem('**Options:**\n\n- `raised` = raise it\n* `rotated`: rotate it', BARE)).slice(0, 2))
+      .toEqual([['raised', 'raise it'], ['rotated', 'rotate it']]);
+  });
+
+  it('joins a wrapped entry and drops a trailing separator', () => {
+    const body = '- **Options:** (a) `raised` = raise the\n  limit now; (b) `rotated` = rotate the key,';
+    expect(descriptions(oneItem(body, BARE)).slice(0, 2)).toEqual([['raised', 'raise the limit now'], ['rotated', 'rotate the key']]);
+  });
+
+  it("uses the body only for options the Your-word line leaves bare", () => {
+    const body = '- **Options:** (a) `raised` = from the body (b) `rotated` = rotate the key';
+    expect(descriptions(oneItem(body, '**Your word:** `raised` = from the line / `rotated` / `wait`'))).toEqual([
+      ['raised', 'from the line'],
+      ['rotated', 'rotate the key'],
+      ['wait', ''],
+    ]);
+  });
+
+  it('ignores entries without = or :, entries after the Options list ends, fenced Options, and text after the Your-word line', () => {
+    expect(descriptions(oneItem('- **Options:** (a) `raised` (b) `rotated` rotate', BARE))).toEqual([
+      ['raised', ''], ['rotated', ''], ['wait', ''],
+    ]);
+    expect(descriptions(oneItem('- **Options:** (a) `raised` = raise it\n- **Fix:** see\n- `rotated` = not an option entry', BARE))[1])
+      .toEqual(['rotated', '']);
+    expect(descriptions(oneItem('```\n- **Options:** (a) `raised` = fenced\n```', BARE))[0]).toEqual(['raised', '']);
+    expect(descriptions(oneItem('- **Problem:** p', BARE, '**Options:** (a) `raised` = written after the line\n'))[0])
+      .toEqual(['raised', '']);
+  });
+
+  it('does not read Options inside a Q&A entry', () => {
+    const body = '- **Problem:** p\n- **Ops\'s answer (7:00 am):** pick one.\n  **Options:** (a) `raised` = quoted in an answer';
+    expect(descriptions(oneItem(body, BARE))[0]).toEqual(['raised', '']);
   });
 });
 

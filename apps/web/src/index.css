@@ -2643,6 +2643,11 @@ a.attention-row {
   border-radius: 3px;
 }
 
+/* The word and its colon stay together: "raised: raise the limit now". */
+.decisions-option-term {
+  white-space: nowrap;
+}
+
 .decisions-option-desc {
   color: var(--text-secondary);
   overflow-wrap: anywhere;

@@ -6,7 +6,8 @@
 //   - `## Open` / `## Ruled` sections; items are `###` headings inside `## Open`,
 //     running to the next heading of level 1–3 (or end of file).
 //   - item id = the heading's first token; ` · ` separates id, stamp and question.
-//   - options = backticked words on the `**Your word:**` line, first recommended.
+//   - options = backticked words on the `**Your word:**` line, first recommended; an
+//     option with no `= …` there takes its description from the body's `**Options:**`.
 //   - current ruling = everything after the `**Your word:**` line, verbatim.
 //   - `- **You asked (t):**` / `- **<Name>'s answer (t):**` body entries form the
 //     item's question-and-answer thread.
@@ -52,6 +53,11 @@ const ASKED_RE = /^ {0,3}- \*\*You asked \(([^)]*)\):\*\*[ \t]*(.*)$/;
 const ANSWER_RE = /^ {0,3}- \*\*(.+?)['’]s answer \(([^)]*)\):\*\*[ \t]*(.*)$/;
 const CONTINUATION_INDENT_RE = /^(?: {2}|\t)/;
 const LEADING_SPAN_RE = /^`([^`\n]+)`/;
+const OPTIONS_LABEL = '**Options:**';
+// An entry of a body `**Options:**` list: a backticked word after an `(a)`-style marker
+// (anywhere, after whitespace) or after a list marker at the start of a line.
+const OPTION_ENTRY_RE = /(?:^[ \t]*[-*+][ \t]+|(?<!\S)\([A-Za-z0-9]{1,3}\)[ \t]*)`([^`\n]+)`/gm;
+const OPTION_ENTRY_START_RE = /^[ \t]*(?:[-*+][ \t]+|\([A-Za-z0-9]{1,3}\)[ \t]*)`/;
 
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
@@ -112,6 +118,49 @@ export function parseOptions(yourWordLineText: string): DecisionOption[] {
     options.push({ word, description, recommended: options.length === 0 });
   }
   return options;
+}
+
+/**
+ * Descriptions from an item body's `**Options:**` entries, by word: `(a) `word` = …` or
+ * `(a) `word`: …` after the label, or `- `word` = …` list items under it. The entries run
+ * from the label to a blank line (unless an entry follows it), a heading, a fence, or a
+ * line that is neither indented nor an entry. An entry without `=` or `:` gives none; the
+ * first description for a word wins.
+ */
+function bodyOptionDescriptions(bodyLines: SourceLine[]): Map<string, string> {
+  const descriptions = new Map<string, string>();
+  const startsEntry = (line: SourceLine | undefined): boolean =>
+    !!line && !line.fenced && line.headingLevel === 0 && OPTION_ENTRY_START_RE.test(line.text);
+
+  for (let i = 0; i < bodyLines.length; i++) {
+    const labelAt = bodyLines[i].fenced ? -1 : bodyLines[i].text.indexOf(OPTIONS_LABEL);
+    if (labelAt === -1) continue;
+    const block = [bodyLines[i].text.slice(labelAt + OPTIONS_LABEL.length)];
+    let j = i + 1;
+    for (; j < bodyLines.length; j++) {
+      const next = bodyLines[j];
+      if (next.fenced || next.headingLevel > 0) break;
+      if (next.text.trim() === '') {
+        if (startsEntry(bodyLines[j + 1])) continue;
+        break;
+      }
+      if (!CONTINUATION_INDENT_RE.test(next.text) && !startsEntry(next)) break;
+      block.push(next.text);
+    }
+    i = j - 1;
+
+    const text = block.join('\n');
+    const entries = [...text.matchAll(OPTION_ENTRY_RE)];
+    entries.forEach((entry, k) => {
+      const word = entry[1].trim();
+      const to = k + 1 < entries.length ? entries[k + 1].index : text.length;
+      const after = text.slice(entry.index + entry[0].length, to).trim();
+      if (!word || !(after.startsWith('=') || after.startsWith(':'))) return;
+      const description = after.slice(1).replace(/\s+/g, ' ').replace(/[;,]$/, '').trim();
+      if (description && !descriptions.has(word)) descriptions.set(word, description);
+    });
+  }
+  return descriptions;
 }
 
 /** Separate Q&A entries from the rest of an item's body lines. */
@@ -253,6 +302,12 @@ function parseItem(
   }
 
   const { qa, rest } = extractQa(bodyLines);
+  if (options.some(option => !option.description)) {
+    const fromBody = bodyOptionDescriptions(rest);
+    options = options.map(option =>
+      option.description ? option : { ...option, description: fromBody.get(option.word) ?? '' },
+    );
+  }
 
   return {
     id,

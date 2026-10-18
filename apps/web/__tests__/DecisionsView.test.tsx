@@ -247,7 +247,7 @@ describe('DecisionsView card content', () => {
       writable: false,
     }));
     const options = within(within(card('Q')).getByRole('list', { name: 'Options' })).getAllByRole('listitem');
-    expect(options.map(o => o.textContent)).toEqual(['acceptRecommendedmerge as is', 'reworksend back', 'hold']);
+    expect(options.map(o => o.textContent)).toEqual(['accept: merge as is Recommended', 'rework: send back', 'hold']);
     expect(screen.getAllByText('Recommended')).toHaveLength(1);
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

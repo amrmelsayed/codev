@@ -612,7 +612,10 @@ export interface DecisionStamp {
 export interface DecisionOption {
   /** The backticked word the owner chooses (and the tab writes). */
   word: string;
-  /** The text after `=`, or '' when absent. */
+  /**
+   * The text after `=` on the `**Your word:**` line; failing that, the word's entry in the
+   * item body's `**Options:**` (`(a) `word` = …`, `(a) `word`: …` or `- `word` = …`); else ''.
+   */
   description: string;
   /** The first option on the `**Your word:**` line. */
   recommended: boolean;

@@ -136,14 +136,37 @@ describe('writable cards', () => {
     show(makeDocument('v1', MERGE));
     const radios = within(card(MERGE.question)).getAllByRole('radio');
     expect(radios.map(r => (r as HTMLInputElement).value)).toEqual(['accept', 'rework', 'hold']);
-    expect(radios[0]).toHaveAccessibleName('accept Recommended merge as is');
-    expect(radios[1]).toHaveAccessibleName('rework send back');
+    // jsdom's name computation puts a space after the <code>; a browser doesn't (the e2e suite checks the exact name).
+    expect(radios[0]).toHaveAccessibleName(/^accept ?: merge as is Recommended$/);
+    expect(radios[1]).toHaveAccessibleName(/^rework ?: send back$/);
     expect(radios[2]).toHaveAccessibleName('hold');
     expect(radios.every(r => !(r as HTMLInputElement).checked)).toBe(true);
     expect(within(card(MERGE.question)).getByRole('group', { name: 'Your word' })).toBeInTheDocument();
     expect(commentBox(MERGE.question)).toHaveValue('');
     expect(commentBox(MERGE.question).placeholder).toMatch(/question/);
     expect(submitButton(MERGE.question)).toBeDisabled();
+  });
+
+  it('read each option inline as "word: what it does" when the words on the Your-word line are bare', () => {
+    // The parser fills these descriptions from the body's **Options:** entries; the body is untouched.
+    const bare = makeItem('ops-4', 'Raise the limit?', {
+      bodyMarkdown: '- **Options:** (a) `raised` = raise the limit now (b) `rotated` = rotate the key',
+      options: [
+        { word: 'raised', description: 'raise the limit now', recommended: true },
+        { word: 'rotated', description: 'rotate the key', recommended: false },
+        { word: 'wait', description: '', recommended: false },
+      ],
+    });
+    show(makeDocument('v1', bare));
+    const radios = within(card('Raise the limit?')).getAllByRole('radio');
+    expect(radios.map(r => r.closest('label')!.textContent)).toEqual([
+      ' raised: raise the limit now Recommended',
+      ' rotated: rotate the key',
+      ' wait',
+    ]);
+    expect(radios[0]).toHaveAccessibleName(/^raised ?: raise the limit now Recommended$/);
+    expect(card('Raise the limit?').querySelector('.decisions-card-body')!.textContent)
+      .toContain('Options: (a) raised = raise the limit now (b) rotated = rotate the key');
   });
 
   it('give a read-only card no controls, only the inert option list', () => {

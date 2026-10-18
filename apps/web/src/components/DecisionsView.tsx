@@ -235,6 +235,19 @@ function QaThread({ entries }: { entries: DecisionQaEntry[] }) {
   );
 }
 
+/** An option as it reads: "word: what it does", then the Recommended marker. */
+function OptionText({ option }: { option: DecisionOption }) {
+  return (
+    <>
+      <span className="decisions-option-term">
+        <code className="decisions-option-word">{option.word}</code>{option.description && ':'}
+      </span>
+      {option.description && <>{' '}<span className="decisions-option-desc">{option.description}</span></>}
+      {option.recommended && <>{' '}<span className="decisions-badge">Recommended</span></>}
+    </>
+  );
+}
+
 function OptionList({ options }: { options: DecisionOption[] }) {
   return (
     <div className="decisions-options">
@@ -242,9 +255,7 @@ function OptionList({ options }: { options: DecisionOption[] }) {
       <ul className="decisions-option-list" aria-label="Options">
         {options.map((option, index) => (
           <li key={`${option.word}#${index}`} className="decisions-option">
-            <code className="decisions-option-word">{option.word}</code>
-            {option.recommended && <span className="decisions-badge">Recommended</span>}
-            {option.description && <span className="decisions-option-desc">{option.description}</span>}
+            <OptionText option={option} />
           </li>
         ))}
       </ul>
@@ -287,9 +298,7 @@ function RulingForm({ item, draft, submitting, onEdit, onSubmit }: RulingFormPro
                 checked={word === option.word}
                 onChange={() => onEdit(item, { word: option.word })}
               />
-              {' '}<code className="decisions-option-word">{option.word}</code>
-              {option.recommended && <>{' '}<span className="decisions-badge">Recommended</span></>}
-              {option.description && <>{' '}<span className="decisions-option-desc">{option.description}</span></>}
+              {' '}<OptionText option={option} />
             </label>
           ))}
           {word !== undefined && (
