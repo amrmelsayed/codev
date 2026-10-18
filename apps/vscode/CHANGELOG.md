@@ -1,6 +1,6 @@
 # Change Log
 
-## [3.3.4] - 2026-09-17
+## [3.3.5] - 2026-10-18
 
 ### What's new
 
@@ -12,7 +12,6 @@
 - **Codev now activates in Restricted Mode.** Opening an untrusted folder used to leave the Codev sidebar inert and the status-bar item missing until you trusted the workspace, with Codev listed among the disabled extensions in the trust dialog. The extension now declares limited support for untrusted workspaces and activates immediately. Four settings a cloned repository could use to redirect or launch things (`codev.towerHost`, `codev.towerPort`, `codev.workspacePath`, `codev.autoStartTower`) are marked restricted: their workspace-scope values are ignored until the folder is trusted, and your user-level values apply instead. Everything else works as before.
 - **Choose whether a builder-row click expands the row.** A new setting, `codev.buildersClickExpands` (default on, so nothing changes until you flip it), controls what a single click on a builder in the Agents view does. On, the click opens the terminal and expands the row's changed-files list as before. Off, the click only opens the terminal and leaves the row as it was; use the chevron to open the file list. With the setting off, a row click also no longer collapses the other builders, since the accordion reacts to the chevron's expand, not the click.
 - **The agent-cycle keys open the first agent when nothing is open.** `ctrl+alt+n` / `ctrl+alt+p` used to show "no other agent terminal to cycle to" when no agent terminal had focus and the sidebar listed only one agent. They now open the first agent going forward and the last going back, whatever the roster size. The hint still appears when the only agent is already focused, and an empty roster now says "no agent terminals" instead of implying one is open.
-- **Cycle through agent terminals from the keyboard.** `ctrl+alt+n` / `ctrl+alt+p` move focus through the sidebar's Agents order: architects and builders exactly as the sidebar lists them. An agent whose terminal cannot open is skipped, so a dead session never wedges the cycle.
 
 ### Fixes
 
@@ -23,6 +22,15 @@
 - **Queued review comments are no longer lost on submit.** Submitting a review queue used to delete the comments the moment they were placed in the builder's prompt, before you pressed Enter there. If the prompt was cleared or the session died in between, the feedback was gone. Submitted comments now move to a sent list in the same per-builder file, and the next submit for that builder asks what to do with them: Mark Delivered (the default), Re-send, or cancel. A builder with only sent comments stays pickable, which is how lost feedback gets re-sent. Tracking which sent feedback the builder has acted on is the next step (#1771).
 - **Next and previous hunk continue from where you scrolled.** In a builder diff, stepping to the next or previous change used to be anchored to the cursor, so after scrolling away to read around a change the next step could jump back up. The step now starts from the visible viewport when the cursor is off screen, and a hunk that begins right at the viewport edge is not skipped. This applies to alt+F5 and shift+alt+F5 in builder diffs, to the new `Codev: Next Hunk` and `Codev: Previous Hunk` commands, and to the Stream Deck changes dial. Outside a builder diff the built-in behaviour is unchanged.
 - **Status-bar text is readable in light themes.** The dev chip ("Dev: <id>") and the "Reconnecting..." and "Offline" states used foreground colours that pair with a highlighted background the extension cannot set, so light themes drew them near-white on a light bar. All three now use the theme's normal status-bar foreground. Their icons still carry the state; in dark themes the only visible change is that these three items no longer render in a slightly different shade from their neighbours.
+
+## [3.3.4] - 2026-09-17
+
+### What's new
+
+- **Cycle through agent terminals from the keyboard.** `ctrl+alt+n` / `ctrl+alt+p` move focus through the sidebar's Agents order: architects and builders exactly as the sidebar lists them. An agent whose terminal cannot open is skipped, so a dead session never wedges the cycle.
+
+### Fixes
+
 - **Terminals come back after a laptop sleep.** Sleeping the machine used to burn every terminal tab's reconnect budget against the suspended network stack, leaving a permanent "unable to reconnect" banner while Tower was healthy. Refocusing the window now re-arms reconnects for every tab, and a tab that gave up for a transient reason reconnects on its own. When the budget really is exhausted, the banner checks Tower first and says which case you are in: Tower unreachable, or Tower up and a click will retry. A session that no longer exists on Tower still gives up immediately, as before.
 
 ## [3.3.3] - 2026-09-05
