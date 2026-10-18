@@ -23,6 +23,7 @@ let origHome: string | undefined;
 let workspace: string;
 let decisionsFile: string;
 let log: ReturnType<typeof vi.fn>;
+let notify: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'decisions-routes-')));
@@ -32,6 +33,7 @@ beforeEach(() => {
   decisionsFile = path.join(workspace, DEFAULT_DECISIONS_FILE);
   fs.mkdirSync(path.dirname(decisionsFile), { recursive: true });
   log = vi.fn();
+  notify = vi.fn(async () => {});
 });
 
 afterEach(() => {
@@ -69,7 +71,7 @@ async function get(ws = workspace) {
 
 async function rule(body: unknown, ws = workspace) {
   const r = makeRes();
-  await handleDecisionsRule(makeReq(body), r.res, ws, log);
+  await handleDecisionsRule(makeReq(body), r.res, ws, log, notify);
   return { status: r.status(), body: r.json() };
 }
 
@@ -179,6 +181,33 @@ describe('POST decisions/rule', () => {
     expect(log).toHaveBeenCalledWith('INFO', expect.stringContaining('main-11'));
   });
 
+  describe('telling the hub architect (#1828)', () => {
+    it('sends one notice, after the ruling is on disk', async () => {
+      let onDisk = '';
+      notify.mockImplementation(async () => { onDisk = fs.readFileSync(decisionsFile, 'utf8'); });
+      expect((await rule({ id: 'main-11', word: 'accept', comment: COMMENT, fingerprint: fingerprintOf(FIXTURE, 'main-11') })).status).toBe(200);
+      expect(notify.mock.calls).toEqual([[`RULED main-11: accept\n${COMMENT}`]]);
+      expect(onDisk).toBe(fixtureRuledWith(`accept\n\n${COMMENT}\n`));
+    });
+
+    it('sends a comment-only submit as a QUESTION', async () => {
+      await rule({ id: 'main-11', comment: `  ${COMMENT}\n`, fingerprint: fingerprintOf(FIXTURE, 'main-11') });
+      expect(notify.mock.calls).toEqual([[`QUESTION main-11:\n${COMMENT}`]]);
+    });
+
+    it('logs a failed notice and leaves the ruling response unchanged', async () => {
+      const request = { id: 'main-11', word: 'accept', fingerprint: fingerprintOf(FIXTURE, 'main-11') };
+      const told = await rule(request);
+      fs.writeFileSync(decisionsFile, FIXTURE);
+      notify.mockRejectedValueOnce(new Error('no architect registered'));
+      const untold = await rule(request);
+      expect(untold).toEqual(told);
+      expect(untold.status).toBe(200);
+      expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(fixtureRuledWith('accept\n'));
+      expect(log).toHaveBeenCalledWith('WARN', expect.stringContaining('no architect registered'));
+    });
+  });
+
   it('never takes the file path from the request', async () => {
     const outside = path.join(tmpDir, 'outside.md');
     fs.writeFileSync(outside, FIXTURE);
@@ -210,6 +239,7 @@ describe('POST decisions/rule', () => {
       expect(result.body).toEqual({ ok: false, code, message: expect.any(String) });
       expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(FIXTURE);
       expect(log).toHaveBeenCalledWith('WARN', expect.stringContaining(code));
+      expect(notify).not.toHaveBeenCalled();
     });
   }
 
@@ -289,6 +319,7 @@ describe('POST decisions/rule', () => {
     expect(refused.body.code).toBe('already-ruled');
     const winner = first.status === 200 ? 'accept' : 'rework';
     expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(fixtureRuledWith(`${winner}\n`));
+    expect(notify.mock.calls).toEqual([[`RULED main-11: ${winner}`]]);
   });
 
   it('replaces the file by rename: a new inode, and nothing written in place', async () => {
@@ -307,6 +338,7 @@ describe('POST decisions/rule', () => {
     expect(rename).toHaveBeenCalledOnce();
     expect(fs.readFileSync(decisionsFile, 'utf8')).toBe(FIXTURE);
     expect(fs.readdirSync(path.dirname(decisionsFile))).toEqual(['pending-decisions.md']);
+    expect(notify).not.toHaveBeenCalled();
 
     // The failure does not wedge the file's write queue.
     expect((await rule(request)).status).toBe(200);

@@ -952,6 +952,8 @@ The file is `codev/state/pending-decisions.md` unless `dashboard.decisionsFile` 
 
 The tab appears once the file exists (within about 5 seconds of a change to the setting), and then stays for the page session: if the file is deleted while the tab is open, the tab says so and keeps any unsent draft. A reload of a workspace without the file shows no tab. A submit is refused, with a message on the card and the draft kept, when the item has changed or been ruled since the tab showed it. Tower applies one write to a file at a time and replaces the file atomically (a temporary file renamed over it).
 
+After each ruling is written, Tower tells the workspace's hub architect, the one named `main`, in one mailbox message delivered like an `afx send architect`: `RULED <id>: <word>`, or `QUESTION <id>:` for a comment-only submit, with the comment on the lines after it, under a `[USER via Decisions tab]` header. Like any message it waits for a clear prompt, and it waits for `main` to come back if `main` is not running. A workspace with no architect named `main` gets no notice: Tower logs a warning naming the workspace and does not pick another architect. A failed send is logged and leaves the ruling as written: the file is still the source of truth, and a ruling typed into the file by hand reaches the hub only when it scans the file.
+
 ### Porch check overrides
 
 Protocol checks default to the npm toolchain (`npm run build`, `npm test`). Override them per check name under `porch.checks` instead of forking `protocol.json`:

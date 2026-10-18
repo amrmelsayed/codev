@@ -29,12 +29,13 @@ const execAsync = promisify(exec);
 import type { SessionManager } from '../../terminal/session-manager.js';
 import type { PtySessionInfo } from '../../terminal/pty-session.js';
 import type { BuilderSpawnedPayload, DashboardState, ArchitectState, TowerVersionInfo, HeldMessage } from '@cluesmith/codev-types';
-import { getBuilders, setArchitectByName } from '../state.js';
+import { getArchitectByName, getBuilders, setArchitectByName } from '../state.js';
+import { DEFAULT_ARCHITECT_NAME } from '../utils/architect-name.js';
 import { DEFAULT_COLS, defaultSessionOptions } from '../../terminal/index.js';
 import type { SSEClient, WorkspaceTerminals } from './tower-types.js';
 import type { TerminalManager } from '../../terminal/pty-manager.js';
 import { parseJsonBody, isRequestAllowed, isAllowedOrigin, isAllowedHost, getExpectedKey, escapeHtml } from '../utils/server-utils.js';
-import { TOWER_KEY_HEADER, LEGACY_WEB_KEY_HEADER, VSCODE_USER_SENDER } from '@cluesmith/codev-types';
+import { TOWER_KEY_HEADER, LEGACY_WEB_KEY_HEADER, VSCODE_USER_SENDER, DECISIONS_TAB_SENDER } from '@cluesmith/codev-types';
 import {
   isRateLimited,
   normalizeWorkspacePath,
@@ -61,7 +62,9 @@ import {
   formatArchitectToBuilderMessage,
   formatBuilderMessage,
   formatUserViaVsCodeMessage,
+  formatUserViaDecisionsTabMessage,
   isSafeSenderId,
+  messageLimitError,
   messageTooLargeError,
   MAX_MESSAGE_BYTES,
 } from '../utils/message-format.js';
@@ -385,6 +388,9 @@ export async function handleRequest(
     res.end('Not found');
   } catch (err) {
     ctx.log('ERROR', `Request error: ${(err as Error).message}`);
+    // A handler may fail after it has answered (the Decisions route keeps working past its
+    // `res.end()`); a second writeHead would throw ERR_HTTP_HEADERS_SENT out of here.
+    if (res.headersSent) return;
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: (err as Error).message }));
   }
@@ -1601,6 +1607,8 @@ function formatMessageForTarget(
   // #1494: a human's approval relayed by the VS Code extension gets its own
   // header, so the architect can tell it from a peer-architect instruction.
   if (isArchitectTarget && from === VSCODE_USER_SENDER) return formatUserViaVsCodeMessage(toAgent, message, undefined, raw);
+  // #1828: likewise the owner's ruling relayed by the Decisions tab — never a builder frame.
+  if (isArchitectTarget && from === DECISIONS_TAB_SENDER) return formatUserViaDecisionsTabMessage(toAgent, message, raw);
   if (isArchitectTarget && from) return formatBuilderMessage(from, toAgent, message, undefined, raw); // builder → architect
   // any → builder: thread the sender so an `architect:<name>` origin is named in the
   // header (issue #1478) instead of collapsing to a bare `ARCHITECT INSTRUCTION`.
@@ -1671,6 +1679,45 @@ export async function deliverCronMessage(
 
   log('WARN', `Cron '${task.name}': target '${task.target}' not found — message not delivered`);
   return { outcome: 'unresolved', reason: null, detail: null, mailboxId: null };
+}
+
+/**
+ * Tell a workspace's hub architect about a ruling the owner just wrote from the
+ * Decisions tab (#1828). The hub is the architect registered as `main` and no other:
+ * the registry's "first registered" order is by name (#1633), so a workspace without
+ * `main` gets no notice rather than a guess, and a `main` that is offline holds it
+ * (`no-live-pty`). One mailbox row is persisted, then offered to the same gated delivery
+ * `handleSend` uses; a busy line holds it for the backstop. Throws, persisting nothing,
+ * when `main` is not registered or the notice is over the send limit.
+ */
+async function notifyHubOfRuling(workspacePath: string, message: string, log: RouteContext['log']): Promise<void> {
+  const tooLarge = messageLimitError(message);
+  if (tooLarge) throw new Error(tooLarge);
+  const toAgent = DEFAULT_ARCHITECT_NAME;
+  if (!getArchitectByName(workspacePath, toAgent)) {
+    throw new Error(`no architect named '${toAgent}' is registered in workspace ${workspacePath}`);
+  }
+
+  const db = getGlobalDb();
+  const row = enqueueMailbox(db, {
+    workspacePath,
+    toAgent,
+    body: message,
+    formattedMessage: formatMessageForTarget(true, DECISIONS_TAB_SENDER, toAgent, message, false),
+    fromAgent: DECISIONS_TAB_SENDER,
+    fromWorkspace: workspacePath,
+  });
+  const ports = makeDeliveryPorts(log);
+  ports.onHeldStateChange();
+  try {
+    const outcome = await deliverAgentMailSerialized(ports, db, workspacePath, toAgent);
+    getMailboxDrainer().noteOutcome(workspacePath, toAgent, outcome);
+  } catch (err) {
+    log('ERROR', `Decisions notice delivery errored for ${toAgent} (row ${row.id.slice(0, 8)}... stays held): ${(err as Error).message}`);
+  }
+  const stored = getMailboxById(db, row.id);
+  const fate = stored?.status === 'delivered' ? 'delivered' : `held (${stored?.reason ?? 'unknown'})`;
+  log('INFO', `Decisions notice ${fate} → ${toAgent} @ ${path.basename(workspacePath)} (mailbox ${row.id.slice(0, 8)}...)`);
 }
 
 /**
@@ -2925,7 +2972,7 @@ async function handleWorkspaceRoutes(
       return handleDecisionsGet(res, workspacePath);
     }
     if (req.method === 'POST' && apiPath === 'decisions/rule') {
-      return handleDecisionsRule(req, res, workspacePath, ctx.log);
+      return handleDecisionsRule(req, res, workspacePath, ctx.log, message => notifyHubOfRuling(workspacePath, message, ctx.log));
     }
 
     // GET /api/annotate/:tabId/* — Serve rich annotator template and sub-APIs
