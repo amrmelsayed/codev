@@ -35,6 +35,10 @@ describe('formatUserViaDecisionsTabMessage', () => {
     expect(frame).toMatch(/^### \[USER via Decisions tab → main \| \d{4}-\d{2}-\d{2}T[^\]]+\] ###\nRULED main-11: accept\nship it\n#+$/);
   });
 
+  it('leaves a raw notice unframed', () => {
+    expect(formatUserViaDecisionsTabMessage('main', 'RULED main-11: accept', true)).toBe('RULED main-11: accept');
+  });
+
   it('refuses to frame a notice with no recipient', () => {
     expect(() => formatUserViaDecisionsTabMessage('', 'RULED main-11: accept')).toThrow(/recipient/);
   });

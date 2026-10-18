@@ -17,6 +17,8 @@ import Database from 'better-sqlite3';
 import { handleRequest } from '../servers/tower-routes.js';
 import { getWorkspaceTerminals } from '../servers/tower-terminals.js';
 import type { DbMailbox } from '../db/types.js';
+import { setArchitectByName } from '../state.js';
+import { DECISIONS_TAB_SENDER } from '@cluesmith/codev-types';
 import type { RouteContext } from '../servers/tower-routes.js';
 import { GLOBAL_SCHEMA } from '../db/schema.js';
 import * as mailbox from '../db/mailbox.js';
@@ -136,6 +138,9 @@ vi.mock('../servers/tower-messages.js', () => ({
 vi.mock('../db/index.js', async (importActual) => ({
   ...(await importActual<typeof import('../db/index.js')>()),
   getGlobalDb: () => sendDbHolder.db,
+  // getDb() aliases the global connection (Issue #1118), so the registry reads in state.ts
+  // see the same in-memory rows as the mailbox.
+  getDb: () => sendDbHolder.db,
 }));
 
 vi.mock('../servers/tower-utils.js', () => ({
@@ -203,9 +208,11 @@ function makeRes(): { res: http.ServerResponse; body: () => string; statusCode: 
   const hdrs: Record<string, string> = {};
 
   const res = {
+    headersSent: false,
     writeHead: vi.fn((status: number, h?: Record<string, string>) => {
       code = status;
       if (h) Object.assign(hdrs, h);
+      res.headersSent = true;
     }),
     setHeader: vi.fn((k: string, v: string) => { hdrs[k] = v; }),
     end: vi.fn((data?: string | Buffer) => {
@@ -801,6 +808,10 @@ describe('tower-routes', () => {
       // #1828: a submit tells the hub architect through the mailbox — one row, gated.
       describe('the hub notice (#1828)', () => {
         const allRows = () => sendDbHolder.db.prepare('SELECT * FROM mailbox').all() as DbMailbox[];
+        /** Register architects in the (in-memory) registry, in the order given. */
+        const register = (...names: string[]) => {
+          for (const name of names) setArchitectByName(workspace, name, { name, cmd: 'claude', startedAt: '2026-10-18T00:00:00.000Z' });
+        };
 
         /** Submit a ruling for main-11 against a fresh copy of `text`. */
         async function submit(ruling: Record<string, unknown>, ctx = makeCtx(), text = FIXTURE) {
@@ -837,11 +848,11 @@ describe('tower-routes', () => {
 
         it('delivers exactly one mailbox row to a live main architect through the gate', async () => {
           const writes = liveArchitects('main');
-          mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
+          register('main');
+          const ctx = makeCtx();
 
-          const { status } = await submit({ word: 'accept', comment: 'ship it\nno new limits' });
+          const { status } = await submit({ word: 'accept', comment: 'ship it\nno new limits' }, ctx);
           expect(status).toBe(200);
-          expect(mockResolveAgentInRegistry).toHaveBeenCalledWith('architect', workspace);
 
           const rows = allRows();
           expect(rows).toHaveLength(1);
@@ -854,17 +865,35 @@ describe('tower-routes', () => {
           });
           expect(rows[0].formatted_message).toMatch(/^### \[USER via Decisions tab → main \| .+\] ###\nRULED main-11: accept\n/);
           expect(writes.main.mock.calls.map(([data]) => data).join('')).toContain('RULED main-11: accept');
+          expect(ctx.log).toHaveBeenCalledWith('INFO', expect.stringMatching(/^Decisions notice delivered → main @ /));
         });
 
         it('holds the row for an offline main architect rather than telling a live sibling', async () => {
           const writes = liveArchitects('sibling');
-          mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
+          register('main', 'sibling');
+          const ctx = makeCtx();
 
-          expect((await submit({ comment: 'which branch?' })).status).toBe(200);
+          expect((await submit({ comment: 'which branch?' }, ctx)).status).toBe(200);
           const rows = allRows();
           expect(rows).toHaveLength(1);
           expect(rows[0]).toMatchObject({ to_agent: 'main', body: 'QUESTION main-11:\nwhich branch?', status: 'held', reason: 'no-live-pty' });
           expect(writes.sibling).not.toHaveBeenCalled();
+          expect(ctx.log).toHaveBeenCalledWith('INFO', expect.stringMatching(/^Decisions notice held \(no-live-pty\) → main @ /));
+        });
+
+        it('tells no architect when none is named main, whatever the registration order (#1633)', async () => {
+          // Registered zeta first, then alpha: neither "first registered" nor alphabetical
+          // order may stand in for the hub.
+          const writes = liveArchitects('zeta', 'alpha');
+          register('zeta', 'alpha');
+          const ctx = makeCtx();
+
+          expect((await submit({ word: 'accept' }, ctx)).status).toBe(200);
+          expect(fs.readFileSync(decisionsFile, 'utf8')).not.toBe(FIXTURE);
+          expect(allRows()).toHaveLength(0);
+          expect(writes.zeta).not.toHaveBeenCalled();
+          expect(writes.alpha).not.toHaveBeenCalled();
+          expect(ctx.log).toHaveBeenCalledWith('WARN', expect.stringContaining(`no architect named 'main' is registered in workspace ${workspace}`));
         });
 
         it('still writes the ruling, and logs, when the workspace has no architect', async () => {
@@ -877,8 +906,34 @@ describe('tower-routes', () => {
           expect(ctx.log).toHaveBeenCalledWith('WARN', expect.stringContaining('hub architect was not told'));
         });
 
-        it('refuses, persisting nothing, a notice over the send limit', async () => {
+        it('frames an /api/send from the Decisions-tab sender to an architect as the owner, never a builder', async () => {
+          mockParseJsonBody.mockResolvedValueOnce({ to: 'architect', message: 'RULED main-11: accept', workspace, from: DECISIONS_TAB_SENDER });
+          mockResolveTarget.mockReturnValue({ code: 'NOT_FOUND', message: 'no live terminal' });
           mockResolveAgentInRegistry.mockReturnValue({ workspacePath: workspace, agent: 'main', kind: 'architect' });
+          const { res, body } = makeRes();
+          await handleRequest(makeReq('POST', '/api/send'), res, makeCtx());
+
+          const row = mailbox.getById(sendDbHolder.db, JSON.parse(body()).mailboxId)!;
+          expect(row.formatted_message).toMatch(/^### \[USER via Decisions tab → main \| .+\] ###\nRULED main-11: accept\n#+$/);
+        });
+
+        it('does not answer twice when the route fails after its response', async () => {
+          // No `main`, so the notice fails; a log sink that throws on that WARN makes the route
+          // itself throw after res.end(), into handleRequest's catch.
+          const ctx = makeCtx({ log: vi.fn((level: string) => { if (level === 'WARN') throw new Error('log sink down'); }) });
+          fs.writeFileSync(decisionsFile, FIXTURE);
+          const item = (await request('GET', 'api/decisions')).body.document.items.find((i: { id: string }) => i.id === 'main-11');
+          mockParseJsonBody.mockResolvedValueOnce({ id: 'main-11', word: 'accept', fingerprint: item.fingerprint });
+          const { res, statusCode } = makeRes();
+          await handleRequest(makeReq('POST', `/workspace/${encoded}/api/decisions/rule`), res, ctx);
+
+          expect(ctx.log).toHaveBeenCalledWith('ERROR', 'Request error: log sink down');
+          expect(res.writeHead).toHaveBeenCalledOnce();
+          expect(statusCode()).toBe(200);
+        });
+
+        it('refuses, persisting nothing, a notice over the send limit', async () => {
+          register('main');
           const word = 'x'.repeat(MAX_MESSAGE_BYTES);
           const text = FIXTURE.replace('**Your word:** `accept`', `**Your word:** \`${word}\``);
           expect(text).not.toBe(FIXTURE);

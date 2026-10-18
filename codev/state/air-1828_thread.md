@@ -37,3 +37,21 @@
   `spliceRuling`, and WARN (cron's level for an unresolved target) instead of ERROR when the
   hub is not told. Left for the architect: a follow-up for the hub-side half of the owner's
   ruling (stop watching the file) — it lives outside this repo.
+
+## 2026-10-18 — architect integration review, round 1
+
+- (1) codex: `resolveAgentInRegistry`'s "first registered" is alphabetical by id (#1633;
+  `getArchitects` is `ORDER BY id`), and my tests mocked the resolver so could not see it.
+  Architect decision: NO fallback. `notifyHubOfRuling` now requires `getArchitectByName(ws,
+  'main')`; absent → throw → route logs WARN naming the workspace, response untouched. The
+  tower-routes test DB mock now aliases `getDb` too (as #1118 does in production), so the hub
+  tests seed the REAL registry via `setArchitectByName`. Regression: zeta then alpha registered
+  and both live → zero rows, neither written. Mutation with a `getArchitects()[0]` fallback
+  fails it.
+- (2) INFO log of the outcome: `Decisions notice delivered|held (<reason>) → main @ <ws>`.
+- (3) `DECISIONS_TAB_SENDER` moved to codev-types beside `VSCODE_USER_SENDER`;
+  `formatMessageForTarget` maps it to `[USER via Decisions tab]` (so an `/api/send` with that
+  `from` is never a BUILDER frame), and the notice is framed through `formatMessageForTarget`.
+- (4) `handleRequest`'s catch returns once `res.headersSent` — the Decisions route is the first
+  to keep awaiting after `res.end()`. Test drives a real post-response throw (a log sink that
+  throws on the WARN); mutation without the guard fails it.

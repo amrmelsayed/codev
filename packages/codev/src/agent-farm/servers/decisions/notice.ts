@@ -7,9 +7,6 @@
 
 import type { RulingRequest } from './splice.js';
 
-/** The mailbox sender identity of a Decisions-tab notice. */
-export const DECISIONS_TAB_SENDER = 'decisions-tab';
-
 /** Tell the hub architect `message`. May throw; the route logs the failure. */
 export type RulingNotifier = (message: string) => Promise<void>;
 
