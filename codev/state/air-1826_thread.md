@@ -25,3 +25,21 @@
   the risk-triage precedent.
 - Test: `decision-protocol-doc.test.ts` runs the doc's own markdown examples through the
   parser, splice and notice, plus twin/link checks across both trees.
+
+## 2026-10-18 — PR #1832, CMAP round 1 (codex REQUEST_CHANGES, claude APPROVE)
+
+- Fixed (codex): the file skeleton's header said to rule "on" the `**Your word:**` line, but
+  the tab reads only the lines under it, so a word typed on the line leaves the card open.
+  Header now says "on the line under"; §3 says the hub scans "the lines under". A new test
+  pins both behaviours.
+- Fixed (codex): the `## Ruled` one-liner carried `<what happened>` before DONE supplies it.
+  Now `- **<id>** · <time> <zone> · <question> → `<word>``, and DONE appends
+  ` → DONE <time> <zone>: <what happened>`.
+- Rebutted (codex): over AIR's 300 LOC. There is no runtime code; the length is the doc the
+  issue asks for (~180 lines), its mirror (two-trees rule) and its test. Flagged to the
+  architect rather than trimmed silently.
+- Applied (claude, non-blocking): test pins every zone the doc names to `stamp.ts`; §4 says
+  creating the file is what makes the tab appear; §3 says the Tower notice reaches only an
+  architect named `main`.
+- Porch's first `tests` check failed with truncated output; three later full runs on the same
+  commit passed. Unidentified; recorded under Flaky Tests in the PR body.

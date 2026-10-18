@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { parseDecisions } from '../servers/decisions/parse.js';
 import { spliceRuling } from '../servers/decisions/splice.js';
 import { rulingNotice } from '../servers/decisions/notice.js';
+import { resolveStamp } from '../servers/decisions/stamp.js';
 
 const REPO = resolve(import.meta.dirname, '../../../../..');
 const read = (rel: string) => readFileSync(resolve(REPO, rel), 'utf8');
@@ -124,9 +125,32 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(item.options.map(o => o.description)[0]).toBe('refresh the sign-in in the background and keep the page');
   });
 
+  it("a word typed by hand where the file's header says rules the item; on the word line itself it does not", () => {
+    expect(fileSkeleton).toContain("one word on the line under an item's **Your word:** line");
+    const wordLine = '**Your word:** `retry` / `signout` / `hold`';
+    const under = parseDecisions(posted(example.replace(wordLine, `${wordLine}\nretry`))).items[0];
+    expect(under).toMatchObject({ currentRuling: 'retry', writable: false });
+    const onLine = parseDecisions(posted(example.replace(wordLine, `${wordLine} retry`))).items[0];
+    expect(onLine).toMatchObject({ currentRuling: '', writable: true });
+  });
+
   it('no time in the doc assumes a zone: every example time carries one, and none is written as PT-only', () => {
     expect(doc).not.toMatch(/(?:am|pm) PT\b/);
     for (const b of blocks) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
+  });
+
+  it('every zone the doc names converts, and the ambiguous abbreviations it names do not', () => {
+    const zones = ['PT', 'MT', 'CT', 'ET', 'AKT', 'HT', 'UTC', 'GMT', 'EST', 'EDT', 'CET', 'CEST', 'JST', 'AEST', 'AEDT', 'CST',
+      '+05:30', 'UTC+5:30', 'GMT-3', 'Europe/Berlin'];
+    for (const zone of zones) {
+      expect(doc).toContain(`\`${zone}\``);
+      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`).instant, zone).not.toBeNull();
+    }
+    expect(resolveStamp('2026-01-15 9:00 am CST').instant).toBe('2026-01-15T15:00:00.000Z');
+    for (const zone of ['IST', 'BST', 'AST']) {
+      expect(doc).toContain(`\`${zone}\``);
+      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`).unconvertedReason, zone).toBe('unknown-zone');
+    }
   });
 });
 

@@ -106,18 +106,20 @@ A worked example, a choice with bare words on the word line:
    `New decision from <name>: <id> — <question>`, plus `[urgent]` if marked.
 2. **Learn of rulings.** The owner rules in the tab, by typing in the file, or in chat. A ruling
    made in the tab reaches the hub as a message from Tower: `RULED <id>: <word>`, or
-   `QUESTION <id>:` when no word was chosen, with the comment on the lines after it. A ruling
-   typed into the file reaches the hub when the owner says so in chat (a short agreed word,
-   such as `ddu` for "decisions doc updated") or when the hub's own watch on the file sees the
-   change. Either way the hub scans every open item for text after its `**Your word:**` line
-   and replies with one line per ruling found. A word in chat counts the same.
+   `QUESTION <id>:` when no word was chosen, with the comment on the lines after it. The notice
+   goes only to an architect named `main`, and waits for it to come back if it is not running;
+   a workspace without one gets no notice, so its hub must scan the file. A ruling typed
+   into the file reaches the hub when the owner says so in chat (a short agreed word, such as
+   `ddu` for "decisions doc updated") or when the hub's own watch on the file sees the change.
+   Either way the hub scans every open item for text on the lines under its `**Your word:**`
+   line and replies with one line per ruling found. A word in chat counts the same.
 3. **Relay and record.** For each ruling the hub relays at once,
    `afx send architect:<name> 'RULING <id>: <word> (owner, <time> <zone>)'`, and moves the
    item out of `## Open` into `## Ruled` as one line:
-   ``- **<id>** · <time> <zone> · <question> → `<word>` → <what happened>``.
+   ``- **<id>** · <time> <zone> · <question> → `<word>` ``.
    A ruling that carries a question goes through 3b first.
 4. **Done.** The architect acts and replies `DONE <id>: <one line of what happened>`; the hub
-   appends it to the item's line in `## Ruled`.
+   appends ` → DONE <time> <zone>: <what happened>` to the item's line in `## Ruled`.
 5. If the owner rules in chat to another architect directly, that architect sends the hub
    `RULED <id>: <word> (owner, <time> <zone>, in chat)`, and the hub records it the same way.
 6. The hub's own asks use the same format, under `main-<n>`.
@@ -161,10 +163,13 @@ A second question gets a second pair of lines under the first.
 
 ## 4. The file
 
+Create it at `codev/state/pending-decisions.md`, or at the path `dashboard.decisionsFile` names;
+the Decisions tab appears once the file exists.
+
 ```markdown
 # Pending owner decisions — all architects (hub: main)
 
-Rule inline: one word on an item's **Your word:** line, or in the Decisions tab.
+Rule inline: one word on the line under an item's **Your word:** line, or in the Decisions tab.
 Newest first. Only main edits this file; architects send items with `afx send architect:main 'DECISION …'`.
 
 _Status: 0 open._
