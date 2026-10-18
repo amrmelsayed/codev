@@ -827,6 +827,7 @@ packages/codev/dashboard/
 │   │   ├── WorkView.tsx         # Work view: builders, PRs, backlog (Spec 0126)
 │   │   ├── StatisticsView.tsx  # Statistics tab: GitHub, Builder, Consultation metrics (Spec 456)
 │   │   ├── TeamView.tsx         # Team tab: member cards, messages, GitHub activity, review-blocking (Spec 587, 694)
+│   │   ├── DecisionsView.tsx    # Decisions tab: open items as cards, ruling form, held drafts (Spec 1819)
 │   │   ├── BuilderCard.tsx      # Builder card with phase/gate indicators (Spec 0126)
 │   │   ├── PRList.tsx           # Pending PR list with review status (Spec 0126)
 │   │   ├── BacklogList.tsx      # Backlog grouped by readiness (Spec 0126)
@@ -839,6 +840,7 @@ packages/codev/dashboard/
 │   │   ├── useOverview.ts       # Overview data polling (Spec 0126)
 │   │   ├── useStatistics.ts    # Statistics data fetching with tab activation refresh (Spec 456)
 │   │   ├── useTeam.ts           # Team data fetching with fetch-on-activation (Spec 587)
+│   │   ├── useDecisions.ts      # Decisions file polling while the tab is active and visible (Spec 1819)
 │   │   └── useMediaQuery.ts     # Responsive breakpoints
 │   ├── lib/
 │   │   ├── api.ts               # REST client + getTerminalWsPath() + overview API
@@ -894,6 +896,15 @@ packages/codev/dashboard/
 - Graceful degradation: shows member cards without GitHub data when API unavailable
 - Backend: `team.ts` (parsing), `team-github.ts` (GraphQL), `MessageChannel` interface for extensibility
 - CLI: `team list`, `team message`, `team update`, `team add` (standalone `team` CLI; `afx team` is deprecated). Hourly cron via `.af-cron/team-update.yaml`
+
+**Decisions View** (Spec 1819):
+- A view of the workspace's pending-decisions file (`dashboard.decisionsFile`, workspace-relative, default `codev/state/pending-decisions.md`) that writes the owner's word back into it. The file is the only state: no store, no database.
+- Conditional, then sticky tab: `decisionsEnabled` in `DashboardState` (set by `decisionsFilePresent()` in `/api/state`) adds it; `useTabs` keeps it for the page session, so a file deleted while the tab is open shows not-found and any held drafts instead of the tab vanishing. The flag reuses the configured path for up to 5 s (`/api/state` is polled every second); a config error makes it false, is logged once per workspace, and never fails `/api/state`.
+- Routes: `GET /api/decisions` → `{ ok: true, document }` (the parsed `DecisionsDocument`); `POST /api/decisions/rule` with `{ id, fingerprint, word?, comment? }` → the re-parsed document. Both answer refusals as `{ ok: false, code, message }` with a status from `DECISIONS_REFUSAL_STATUS` (400 input, 404 not-found, 409 the file's state, 422 a structure the splice would break, 500 config or I/O). Wire types in `packages/types/src/api.ts`.
+- Server-side parsing (`servers/decisions/`): `grammar.ts` (a CommonMark subset: ATX headings and fences), `parse.ts` (items, options, the Q&A thread, the current ruling, a per-item SHA-256 fingerprint), `stamp.ts` (item timestamps to instants by `Intl` offset probing; ambiguous abbreviations and DST gaps/folds stay unconverted), `splice.ts` (pure: inserts the word and comment on the lines after `**Your word:**`, refuses anything else, and re-parses to verify).
+- Writes (`file.ts`): the path is canonicalized (symlinks followed) on every read and write and refused outside the workspace; one `KeyedSerializer` per canonical path, so of two concurrent submits to an item the second refuses as already ruled; the file is replaced atomically by an fsynced temporary file renamed over it, keeping its mode and any symlink.
+- Race-safe polling (`useDecisions(isActive)`): a 2 s poll only while the tab is active and the page visible, skipping a tick while a fetch is in flight; a generation counter, bumped by each fetch and by `applyDocument` (a write's returned document), drops stale responses, so an old poll cannot overwrite a newer document.
+- `DecisionsView` keeps drafts by item id, reconciled against every document; a draft whose item stops being writable (ruled elsewhere, moved out of `## Open`, duplicated, file gone) is held, copyable, until discarded. Bodies render through `MarkdownView` from `@cluesmith/codev-artifact-canvas`; only literal `http(s)` links open, in a new tab, and other links are inert.
 
 **Responsive Design**:
 - Desktop (>768px): Split-pane layout with file browser sidebar

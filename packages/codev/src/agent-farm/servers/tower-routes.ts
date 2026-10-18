@@ -49,6 +49,8 @@ import { handleIdeApi } from './ide-server.js';
 import { matchIdePrefix, forwardIdeHttp } from './ide-forward.js';
 import { getWorktreeConfig, getActivityHooks } from '../utils/config.js';
 import { ensureCodevConfigWatcher } from './codev-config-watcher.js';
+import { handleDecisionsGet, handleDecisionsRule } from './decisions/routes.js';
+import { decisionsFilePresent } from './decisions/file.js';
 import { hasTeam, loadTeamMembers, loadMessages, type TeamMember, type TeamMessage } from '../../lib/team.js';
 import { fetchTeamGitHubData, type TeamMemberGitHubData } from '../../lib/team-github.js';
 import { resolveTarget, resolveAgentInRegistry, broadcastMessage, isResolveError, type ResolveResult } from './tower-messages.js';
@@ -2825,7 +2827,7 @@ async function handleWorkspaceRoutes(
 
     // GET /api/state - Return workspace state (architect, builders, shells)
     if (req.method === 'GET' && (apiPath === 'state' || apiPath === '')) {
-      return handleWorkspaceState(res, workspacePath);
+      return handleWorkspaceState(res, ctx, workspacePath);
     }
 
     // POST /api/tabs/shell - Create a new shell terminal
@@ -2915,6 +2917,15 @@ async function handleWorkspaceRoutes(
     // GET /api/team - Return team members with GitHub data + messages (Spec 587)
     if (req.method === 'GET' && apiPath === 'team') {
       return handleWorkspaceTeam(res, workspacePath);
+    }
+
+    // GET /api/decisions, POST /api/decisions/rule — the Decisions tab (Spec 1819).
+    // The file is the configured one; neither route takes a path from the request.
+    if (req.method === 'GET' && apiPath === 'decisions') {
+      return handleDecisionsGet(res, workspacePath);
+    }
+    if (req.method === 'POST' && apiPath === 'decisions/rule') {
+      return handleDecisionsRule(req, res, workspacePath, ctx.log);
     }
 
     // GET /api/annotate/:tabId/* — Serve rich annotator template and sub-APIs
@@ -3043,6 +3054,7 @@ async function handleWorkspaceRoutes(
 
 async function handleWorkspaceState(
   res: http.ServerResponse,
+  ctx: RouteContext,
   workspacePath: string,
 ): Promise<void> {
   // Rehydrate wsTerminals (SQLite sync + shellper reconnect) before reading.
@@ -3062,6 +3074,7 @@ async function handleWorkspaceState(
     version,
     hostname: (() => { try { return readCloudConfig()?.tower_name; } catch { return undefined; } })(),
     teamEnabled: await hasTeam(path.join(workspacePath, 'codev', 'team')),
+    decisionsEnabled: await decisionsFilePresent(workspacePath, ctx.log),
   };
 
   // Spec 761: build the architects collection from entry.architects (skip dead

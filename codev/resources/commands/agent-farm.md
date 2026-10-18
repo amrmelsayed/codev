@@ -1162,6 +1162,26 @@ refreshes the snapshot from the main workspace.
 
 Both are Tower-global (they apply to the whole Tower, not per-project) and optional — omit them to use the defaults above.
 
+### Decisions tab
+
+When a workspace has a pending-decisions file, the dashboard shows a **Decisions** tab (Spec 1819). The tab is a view of that file. Each item under `## Open` becomes a card with a click box per option (the first option, the recommended one, is marked) and a comment box. Submitting writes the chosen word, then the comment, on the lines right after the item's `**Your word:**` line, exactly as the owner would type them, and changes nothing else. `## Ruled` is shown below as a collapsed, read-only list. The file is the only state. While the tab is open it re-reads the file every 2 seconds, so edits made elsewhere appear without a reload, and an unsent draft survives them.
+
+The file is `codev/state/pending-decisions.md` unless `dashboard.decisionsFile` names another:
+
+```json
+{
+  "dashboard": {
+    "decisionsFile": "codev/state/pending-decisions.md"
+  }
+}
+```
+
+- **Relative to the workspace root.** An absolute path, or anything but a non-empty string, is a configuration error: the tab does not appear, and Tower logs the error once.
+- **Inside the workspace.** The path is resolved with symlinks followed on every read and write, and a path that leads outside the workspace (directly, through `..`, or through a symlink) is refused. A symlinked decisions file keeps its link: the ruling is written to its in-workspace target.
+- **Layers.** Like the other settings, it can be set globally in `~/.codev/config.json`, for the team in the project's `.codev/config.json`, or per engineer in `.codev/config.local.json`. Project settings override global ones, and project-local settings override both.
+
+The tab appears once the file exists (within about 5 seconds of a change to the setting), and then stays for the page session: if the file is deleted while the tab is open, the tab says so and keeps any unsent draft. A reload of a workspace without the file shows no tab. A submit is refused, with a message on the card and the draft kept, when the item has changed or been ruled since the tab showed it. Tower applies one write to a file at a time and replaces the file atomically (a temporary file renamed over it).
+
 ### Language-Agnostic Porch Checks
 
 By default, porch protocol checks use `npm run build` and `npm test`. Non-Node.js projects can override these via the `porch.checks` section in `.codev/config.json`:
