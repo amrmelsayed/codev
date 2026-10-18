@@ -20,7 +20,7 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
 
 - [x] A workspace whose decisions file exists shows a **Decisions** tab on desktop and in the mobile layout; a workspace without it shows none (Phase 4; e2e in Phase 7). The tab appears when the file exists and then stays for the page session (see Deviations).
 - [x] Each `## Open` item is a card in file order with id, local-time timestamp, question and markdown body; `http(s)` links open in a new browser tab and no click navigates the dashboard away (Phase 5; e2e link test in Phase 7).
-- [x] Each writable card shows one radio per option, in order, with descriptions; the first is marked *Recommended* (Phase 6; read-only cards keep Phase 5's inert option list).
+- [x] Each writable card shows one radio per option, in order, with descriptions; the first is marked *Recommended* (Phase 6; read-only cards keep Phase 5's inert option list). Each option reads inline as "word: description". When the Your-word line carries bare words, the description comes from the body's **Options:** entry (owner's change at the PR gate).
 - [x] One comment box and Submit per writable card; Submit is disabled until a word is chosen or the comment is non-blank, and while that card's submit is in flight (Phase 6).
 - [x] A submit inserts exactly the bytes defined in "Writing (the splice)", unit-tested byte for byte for word, comment, word + comment and multi-line comment, plus a 500-case property test that every original byte is kept in order (Phase 2). The e2e tests check the file on disk equals the original plus only the inserted lines (Phase 7).
 - [x] Every refusal returns a specific code and message, leaves the file byte-identical, shows the message on the card and keeps the draft (Phases 2, 3, 6).
@@ -63,6 +63,12 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
   - browser suite 9/9 locally on a fresh build, 0 shellpers left;
   - a server already listening on the suite's port now fails the run ("http://localhost:14101 is already used") instead of being reused;
   - dashboard-e2e [39061143299](https://github.com/cluesmith/codev/actions/runs/39061143299) on `fb1bcbc71`: success. Decisions 9/9, no retries; main suite 66 passed, 4 skipped, 1 flaky (the same pre-existing `spec-823` N=3 test).
+- **After the PR gate's inline-options change (`d6e1aae76`):**
+  - codev unit 6461 passed / 48 skipped; web 501 passed / 1 skipped; type-checks clean;
+  - dashboard-e2e [39106067568](https://github.com/cluesmith/codev/actions/runs/39106067568): success. Decisions 9/9, including the bare-word item read in Chromium as "raise: bump the timeout Recommended" / "split: split the suite" / "hold"; main suite 67 passed, 4 skipped, none flaky;
+  - the architect checked the change on a throwaway Tower before relaying the human's approval.
+
+  The embedded screenshots come from the earlier run, before options read "word: description" with the badge after.
 
 ## Deviations from Plan
 
@@ -109,6 +115,11 @@ the web suite (499 passed / 1 skipped) and the 9-test browser suite all pass.
 - **PR review round:**
   - Links are made inert on the anchors themselves, not only in the click handler. Every `MarkdownView` in the view renders through a `DecisionsMarkdown` wrapper that removes the `href` from non-`http(s)` anchors and gives `http(s)` anchors `target="_blank" rel="noopener noreferrer"`. This covers a middle-click, the context menu and the keyboard. The shared renderer is still unchanged.
   - `playwright.decisions.config.ts` no longer reuses a server already on its port.
+- **PR gate (owner's change request after trying the tab):**
+  - On an item whose `**Your word:**` line carries bare words (`raised` / `rotated` / `wait`), the radios showed only the words, and the owner had to look back up at the body's **Options:** line.
+  - The parser now fills a bare option's description from the body's **Options:** entry for that word, in the forms `(a) `w` = …`, `(a) `w`: …` and a `- `w` = …` list. The Your-word line's own `= …` still wins, and a word with neither stays bare. The body is shown unchanged.
+  - Every option now reads "word: description", with the Recommended badge after it.
+  - The spec's Parsing section and test scenarios are updated. The e2e fixture's `ops-3` item now has this shape, so the browser suite and the screenshots exercise it.
 
 The owner's plan-time format question (YAML/JSON/hybrid instead of markdown) was answered in the plan's Format Evaluation: keep markdown. The plan was approved on that basis.
 

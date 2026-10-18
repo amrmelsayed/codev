@@ -172,3 +172,10 @@ Addressed all points in the spec:
 - (codex) Added frontmatter to the spec and plan (`approved: 2026-10-17`, `validated: [codex, claude]`) and committed the three untracked `-context.md` files (main tracks 25 such files from other projects).
 - (claude) `playwright.decisions.config.ts` declares its own `webServer` with `reuseExistingServer: false`. Watched it fail: with a server already on 14101, the run fails with "already used".
 - Not changed, recorded as follow-ups: setext promotion of the Your-word line by a `---`/`===` comment in other viewers; a typed `read-failed` refusal. `--retries 3` kept (it mirrors the main step, and Playwright reports a retried pass as flaky).
+
+## 2026-10-18 · PR gate: owner's inline-options change, then approval
+
+- The human tried the tab and asked, through the architect, that bare words on a Your-word line (`raised` / `rotated` / `wait`) read with their meaning. The parser now fills a bare option's description from the body's **Options:** entry (`(a) \`w\` = …`, `(a) \`w\`: …`, `- \`w\` = …` list); the line's own `= …` wins, and a word with neither stays bare. Every option reads "word: description", with the Recommended badge after it. Spec Parsing section updated; parser tests for the three forms plus edge cases (fences, Q&A entries, text after the Your-word line, wrapped and blank-separated lists); a component test; the e2e fixture's ops-3 item has bare words. Commit `d6e1aae76`.
+- jsdom's accessible-name computation puts a space after the `<code>` ("accept : …"), unlike a browser, so the component tests tolerate that space and the e2e suite checks the exact names in Chromium.
+- Local browser runs were blocked for a while: the architect's hung `playwright install` left the shared Chromium cache incomplete. I installed a headless shell into my scratchpad instead (`PLAYWRIGHT_BROWSERS_PATH`), and moved my local port to 14819 so it couldn't collide with their run on 14101.
+- dashboard-e2e run 39106067568 green (Decisions 9/9). The architect verified the change on a throwaway Tower and relayed the human's pr approval.
