@@ -179,3 +179,9 @@ Addressed all points in the spec:
 - jsdom's accessible-name computation puts a space after the `<code>` ("accept : …"), unlike a browser, so the component tests tolerate that space and the e2e suite checks the exact names in Chromium.
 - Local browser runs were blocked for a while: the architect's hung `playwright install` left the shared Chromium cache incomplete. I installed a headless shell into my scratchpad instead (`PLAYWRIGHT_BROWSERS_PATH`), and moved my local port to 14819 so it couldn't collide with their run on 14101.
 - dashboard-e2e run 39106067568 green (Decisions 9/9). The architect verified the change on a throwaway Tower and relayed the human's pr approval.
+
+## 2026-10-18 · Verify: approved by the architect
+
+- Merged with `--merge --admin` at 2c9e8ee23 after all 7 PR checks passed. The merge was blocked only for REVIEW_REQUIRED; the human authorized `--admin` for that case through the architect. Issue #1819 auto-closed.
+- Post-merge, in this worktree with origin/main pulled in: build exit 0; codev decisions + tower-routes suites 329 passed; web decisions suites 118 passed. No local browser run: the shared Playwright `chromium-1217` was incomplete, and a scratchpad install stalled after the download.
+- **Verify evidence (architect, live environment):** merged main built and installed locally; the production Tower on 4100, restarted after the install, reports `decisionsEnabled=true` for an adopter workspace whose real `pending-decisions.md` it serves; `GET api/decisions` answers `ok: true` with the new parser. Bare-word options resolved from the body on the architect's throwaway run of d6e1aae76. dashboard-e2e run 39106067568 covers the browser path.
