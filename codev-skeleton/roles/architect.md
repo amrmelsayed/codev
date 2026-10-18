@@ -67,6 +67,15 @@ dev-approval — lead with **Problem · Root Cause · Fix · Testing**, unprompt
 tier. Verify the root cause yourself: a builder's summary is evidence, not ground truth. The
 human should be able to answer from your message without opening the diff.
 
+### The owner decisions file
+
+A workspace may route every ask for the human's word through one file,
+`codev/state/pending-decisions.md`, shown in the dashboard as the **Decisions** tab. One
+architect, named `main`, is the hub and the only agent that edits it. Other architects send it
+items with `afx send architect:main 'DECISION <id>: <question> …'`, and a ruling made in the
+tab reaches `main` as a `RULED <id>: <word>` message. The item format the tab reads, and what
+the hub does with each ruling and question, are in `codev/resources/decision-protocol.md`.
+
 ## UX verification
 
 Before approving anything with UX requirements, exercise the actual user path. A spec that says

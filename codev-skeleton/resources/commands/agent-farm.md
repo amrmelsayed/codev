@@ -936,6 +936,8 @@ Both are Tower-global (they apply to the whole Tower, not per-project) and optio
 
 When a workspace has a pending-decisions file, the dashboard shows a **Decisions** tab (Spec 1819). The tab is a view of that file. Each item under `## Open` becomes a card with a click box per option (the first option, the recommended one, is marked) and a comment box. Submitting writes the chosen word, then the comment, on the lines right after the item's `**Your word:**` line, exactly as the owner would type them, and changes nothing else. `## Ruled` is shown below as a collapsed, read-only list. The file is the only state. While the tab is open it re-reads the file every 2 seconds, so edits made elsewhere appear without a reload, and an unsent draft survives them.
 
+The file's format and the process around it are in [`decision-protocol.md`](../decision-protocol.md): one hub architect, `main`, is the only agent that edits the file, other architects send it their items, and the hub relays each ruling. The tab reads exactly the item format that document describes.
+
 The file is `codev/state/pending-decisions.md` unless `dashboard.decisionsFile` names another:
 
 ```json
