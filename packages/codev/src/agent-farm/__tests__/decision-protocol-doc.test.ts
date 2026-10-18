@@ -92,6 +92,9 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(after.writable).toBe(false);
     expect(rulingNotice(request)).toBe('RULED web-4: retry\nShip it after the release.');
     expect(doc).toContain('`RULED <id>: <word>`');
+    // The comment survives the hub's relay and its `## Ruled` record, not only the notice.
+    expect(doc).toMatch(/'RULING <id>: <word> \(owner, <time> <zone>\)'`, with the owner's\s+comment verbatim/);
+    expect(doc).toContain('→ `<word>` — "<comment>"');
   });
 
   it("the owner's question blocks the card until the hub lifts it into a You asked / answer pair (3c)", () => {

@@ -114,9 +114,10 @@ A worked example, a choice with bare words on the word line:
    Either way the hub scans every open item for text on the lines under its `**Your word:**`
    line and replies with one line per ruling found. A word in chat counts the same.
 3. **Relay and record.** For each ruling the hub relays at once,
-   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> <zone>)'`, and moves the
-   item out of `## Open` into `## Ruled` as one line:
-   ``- **<id>** · <time> <zone> · <question> → `<word>` ``.
+   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> <zone>)'`, with the owner's
+   comment verbatim on the lines after it when there is one, and moves the item out of
+   `## Open` into `## Ruled` as one line, the comment quoted after the word when there is one:
+   ``- **<id>** · <time> <zone> · <question> → `<word>` — "<comment>"``.
    A ruling that carries a question goes through 3b first.
 4. **Done.** The architect acts and replies `DONE <id>: <one line of what happened>`; the hub
    appends ` → DONE <time> <zone>: <what happened>` to the item's line in `## Ruled`.

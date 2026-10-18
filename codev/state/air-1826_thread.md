@@ -43,3 +43,15 @@
   architect named `main`.
 - Porch's first `tests` check failed with truncated output; three later full runs on the same
   commit passed. Unidentified; recorded under Flaky Tests in the PR body.
+
+## 2026-10-18 — architect integration review on PR #1832
+
+- The owner's comment now survives the hub's `RULING` relay (verbatim, on the lines after it)
+  and the `## Ruled` record (quoted after the word). Before, a conditional ruling lost its
+  condition everywhere but Tower's notice. The doc test asserts both forms.
+- `roles/architect.md` section trimmed to three lines (what the file is, `main` is the hub,
+  pointer to the doc); the intake command and `RULED` format live only in the doc (Spec 1280
+  direction: keep the always-loaded role small).
+- Filed #1834 (area/scaffold): skeleton `resources/*.md` reference docs never reach adopter
+  repos; one generic fix, not per-file.
+- pr gate stays pending; the architect takes the merge word to the owner once CI is green.
