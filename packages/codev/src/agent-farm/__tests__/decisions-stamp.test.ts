@@ -102,6 +102,8 @@ describe('resolveStamp — unconverted, never guessed', () => {
     '2026-10-17 9:60 UTC',
     '2026-02-30 9:00 am UTC',
     '10:30 standup moved to the afternoon',
+    '10:30 standup?',
+    '6:30 pm tonight',
     'Should we ship the release?',
   ])('not a stamp: %s', raw => {
     expect(resolveStamp(raw)).toBeNull();
@@ -185,6 +187,13 @@ describe("resolveStamp — the file's zone and time-only stamps (Issue #1836)", 
     for (const zone of ['IST', 'BST', 'AST']) {
       expect(resolveStamp('6:30 pm', zone), zone).toEqual({ raw: '6:30 pm', instant: null, timeOnly: true, unconvertedReason: 'unknown-zone' });
       expect(resolveStamp(`2026-10-17 6:30 pm ${zone}`, 'PT')?.unconvertedReason, zone).toBe('unknown-zone');
+    }
+  });
+
+  it('warns for a time-only stamp whose written zone is shaped like one, known or not', () => {
+    at('2026-10-19T18:00:00.000Z');
+    for (const zone of ['IST', 'XYZ', 'Not/AZone', '+15:00']) {
+      expect(resolveStamp(`6:30 pm ${zone}`, 'PT')?.unconvertedReason, zone).toBe('unknown-zone');
     }
   });
 

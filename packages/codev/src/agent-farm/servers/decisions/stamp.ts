@@ -64,6 +64,8 @@ const FIXED_ZONES: Record<string, number> = {
 
 const STAMP_RE = /^(?:(\d{4})-(\d{2})-(\d{2})\s+)?(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?:\s+(\S+))?$/i;
 const OFFSET_RE = /^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$/;
+/** Shaped like a zone (an abbreviation, an Area/Location name, an offset), known or not. */
+const ZONE_LIKE_RE = /^(?:[A-Z]{2,5}|[A-Z][A-Za-z_]*(?:\/[A-Za-z0-9_+-]+)+|(?:UTC|GMT)?[+-]\d{1,2}(?::?\d{2})?)$/;
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -179,7 +181,11 @@ export function resolveStamp(raw: string, fileZone: string | null = null): Decis
   const zoneName = zoneText ?? fileZone;
   if (!zoneName) return stamp;
   const zone = parseZone(zoneName);
-  if (!zone) return { ...stamp, unconvertedReason: 'unknown-zone' };
+  if (!zone) {
+    // A bare time and a word that is no zone (`10:30 standup?`) is a question, not a stamp.
+    if (timeOnly && zoneText !== undefined && !ZONE_LIKE_RE.test(zoneText)) return null;
+    return { ...stamp, unconvertedReason: 'unknown-zone' };
+  }
 
   if (timeOnly) dateMs = Math.floor(wallClockAt(Date.now(), zone) / DAY_MS) * DAY_MS;
   const wallMs = dateMs + (hour * 60 + minute) * MINUTE_MS;

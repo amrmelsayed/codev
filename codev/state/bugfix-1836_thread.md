@@ -34,3 +34,9 @@ Option (a): a time-only stamp is today in the file's zone at read time; the `## 
 Tests: 25 new/changed server tests and 2 web tests fail on HEAD's source and pass with the fix. Full codev unit suite green (6511). Playwright Decisions suite 11/11 on a throwaway Tower, including two new cases (zoned file: `6:30 PM PDT`, no stamp keeps its question, full stamp dated, no "Not converted"; unzoned file: `6:30 pm` as written, only the IST card warns). Screenshots checked by eye.
 
 Not from this change: 74 web tests (Terminal*, VirtualKeyboard, architect-toolbar) fail locally on Node v26.3.1 because `localStorage` is undefined in jsdom there (Node's own experimental global shadows it); they do not touch the Decisions code.
+
+## PR #1837, CMAP round 1 (2026-10-19)
+
+- gemini APPROVE.
+- codex and claude REQUEST_CHANGES, same finding: `### main-4 · 10:30 standup?` read `standup?` as an unknown zone, so the card warned and the question came out empty. Fixed: when a time-only stamp names a zone the tab cannot resolve, it warns only if the word is shaped like a zone (`ZONE_LIKE_RE`: an all-caps abbreviation, an `Area/Location` name, or an offset); otherwise the text is not a stamp and stays in the question. Dated stamps keep warning for any unknown zone. Tests: `10:30 standup?` and `6:30 pm tonight` are not stamps; `IST`, `XYZ`, `Not/AZone`, `+15:00` after a bare time still warn.
+- Claude's non-blocking notes, left for the architect: an unparseable `_Zone:` line (`_Zone: Pacific Time_`) is silently no zone, and `_Zone: XYZ_` warns on each card with nothing pointing at the header line (a `DecisionsFileProblem` would be the home; follow-up); an as-written stamp renders in the normal stamp font, not monospace.

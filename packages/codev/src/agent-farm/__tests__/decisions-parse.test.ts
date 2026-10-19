@@ -248,8 +248,8 @@ describe('parseDecisions — headings', () => {
   });
 
   it('keeps a first part that is not a stamp in the question, as written (#1836)', () => {
-    const { items } = parseDecisions('## Open\n### a-4 · yesterday 9 am PT · Ship it?\n**Your word:** `y`\n');
-    expect(items[0]).toMatchObject({ stamp: null, question: 'yesterday 9 am PT · Ship it?' });
+    const { items } = parseDecisions('## Open\n### a-4 · yesterday 9 am PT · Ship it?\n**Your word:** `y`\n### a-5 · 10:30 standup?\n**Your word:** `y`\n');
+    expect(items.map(i => [i.stamp, i.question])).toEqual([[null, 'yesterday 9 am PT · Ship it?'], [null, '10:30 standup?']]);
   });
 
   describe("the file's `_Zone:` line (#1836)", () => {
