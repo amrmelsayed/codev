@@ -1,7 +1,7 @@
 id: bugfix-1836
 title: decisions-tab-a-time-only-stam
 protocol: bugfix
-phase: investigate
+phase: fix
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -11,4 +11,4 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-19T15:34:35.563Z'
-updated_at: '2026-10-19T15:34:35.563Z'
+updated_at: '2026-10-19T15:39:35.502Z'
