@@ -124,7 +124,9 @@ A worked example, a choice with bare words on the word line:
 
 1. **Post.** The hub puts the item at the top of `## Open`, updates the status line
    (`N open — <ids>`), and tells the owner in one chat line:
-   `New decision from <name>: <id> — <question>`, plus `[urgent]` if marked.
+   `New decision from <name>: <id> — <question>`, plus `[urgent]` if marked. An item whose
+   stamp is a bare time is read in the zone on the file's `_Zone: <zone>_` line, so the hub
+   keeps that line naming the zone its clock reads (section 4).
 2. **Learn of rulings.** The owner rules in the tab, by typing in the file, or in chat. A ruling
    made in the tab reaches the hub as a message from Tower: `RULED <id>: <word>`, or
    `QUESTION <id>:` when no word was chosen, with the comment on the lines after it. The notice
@@ -195,11 +197,13 @@ Rule inline: one word on the line under an item's **Your word:** line, or in the
 Newest first. Only main edits this file; architects send items with `afx send architect:main 'DECISION …'`.
 
 _Status: 0 open._
+_Zone: <zone>_
 
 ## Open
 
 ## Ruled
 ```
 
-Newest first in both sections. `## Open` holds only what still needs a word; `## Ruled` keeps
-one line per item.
+Replace `<zone>` with the zone the hub's clock reads (`PT`, `ET`, `Europe/Berlin`, …): it is the
+zone of every stamp that names none, bare times included. Newest first in both sections.
+`## Open` holds only what still needs a word; `## Ruled` keeps one line per item.

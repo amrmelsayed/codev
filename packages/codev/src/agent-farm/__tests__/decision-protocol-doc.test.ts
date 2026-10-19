@@ -37,7 +37,7 @@ const fileSkeleton = block('## Ruled');
 const template = block('<first word, recommended>');
 const example = block('### web-4');
 const qaPair = block('**You asked');
-const zoned = block('_Zone: ');
+const zoned = block('_Zone: ET_');
 
 /** The file skeleton with `item` posted at the top of `## Open`. */
 const posted = (item: string) => fileSkeleton.replace('## Open\n', `## Open\n\n${item}\n`);
@@ -143,7 +143,7 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
   it('no time in the doc assumes a zone: every example time carries one or its file names one, and none is written as PT-only', () => {
     expect(doc).not.toMatch(/(?:am|pm) PT\b/);
     expect(doc).not.toMatch(/_Zone: PT_/);
-    for (const b of blocks) if (!b.includes('_Zone: ')) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
+    for (const b of blocks) if (!b.includes('_Zone: ET_')) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
   });
 
   describe("the file-zone example: a bare time converts, a heading without a stamp keeps its question (#1836)", () => {
@@ -162,6 +162,18 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
       ]);
       expect(resolveStamp('9:40 pm', 'ET')).toEqual(items[0].stamp);
       expect(doc).toContain('`_Zone: <zone>_`');
+    });
+
+    it("the file template carries the zone line, and once it names a zone a bare time posted into it converts", () => {
+      expect(fileSkeleton).toContain('_Zone: <zone>_');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-01-15T17:00:00.000Z'));
+      const bareTime = example.replace('2026-10-17 9:40 pm ET', '9:40 pm');
+      const filled = parseDecisions(posted(bareTime).replace('_Zone: <zone>_', '_Zone: ET_')).items[0];
+      expect(filled.stamp).toEqual({ raw: '9:40 pm', instant: '2026-01-16T02:40:00.000Z', timeOnly: true });
+      // Left unfilled, the placeholder is no zone the tab knows: the card says so.
+      expect(parseDecisions(posted(bareTime)).items[0].stamp?.unconvertedReason).toBe('unknown-zone');
+      expect(doc).toMatch(/keeps that line naming the zone its clock reads/);
     });
 
     it('without the zone line, the bare time is shown as written with no reason', () => {

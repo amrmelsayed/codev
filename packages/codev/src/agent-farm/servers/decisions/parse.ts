@@ -1,8 +1,14 @@
 // Decisions file parser (Spec 1819).
 //
-// A pure function from the decisions file's text to its read model. The file is
-// the only state: this runs on every read, nothing is cached. Structure comes
-// from `grammar.ts`; this module adds the format's conventions:
+// A function from the decisions file's text, and the clock, to its read model. The
+// file is the only state: this runs on every read, nothing is cached. The clock
+// enters only through time-only stamps, which are read as today in their zone
+// (#1836), so the same text can parse to different instants on different days:
+//   - `version` (the client's cache key) hashes the text alone and does not cover
+//     that: a client keeps the instants it has until the file changes.
+//   - `splice.ts`'s `verify()` re-parses at a later moment than the parse it checks
+//     against; it is safe only because it compares no stamps.
+// Structure comes from `grammar.ts`; this module adds the format's conventions:
 //   - `## Open` / `## Ruled` sections; items are `###` headings inside `## Open`,
 //     running to the next heading of level 1–3 (or end of file).
 //   - item id = the heading's first token; ` · ` separates id, stamp and question. A first

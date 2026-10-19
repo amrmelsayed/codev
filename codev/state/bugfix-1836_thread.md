@@ -40,3 +40,10 @@ Not from this change: 74 web tests (Terminal*, VirtualKeyboard, architect-toolba
 - gemini APPROVE.
 - codex and claude REQUEST_CHANGES, same finding: `### main-4 · 10:30 standup?` read `standup?` as an unknown zone, so the card warned and the question came out empty. Fixed: when a time-only stamp names a zone the tab cannot resolve, it warns only if the word is shaped like a zone (`ZONE_LIKE_RE`: an all-caps abbreviation, an `Area/Location` name, or an offset); otherwise the text is not a stamp and stays in the question. Dated stamps keep warning for any unknown zone. Tests: `10:30 standup?` and `6:30 pm tonight` are not stamps; `IST`, `XYZ`, `Not/AZone`, `+15:00` after a bare time still warn.
 - Claude's non-blocking notes, left for the architect: an unparseable `_Zone:` line (`_Zone: Pacific Time_`) is silently no zone, and `_Zone: XYZ_` warns on each card with nothing pointing at the header line (a `DecisionsFileProblem` would be the home; follow-up); an as-written stamp renders in the normal stamp font, not monospace.
+- Re-review: codex APPROVE, claude APPROVE (gemini APPROVE in round 1). Claude cleared two risks: `splice.ts` never re-serializes a heading, and item fingerprints hash raw text, so a daily-changing time-only instant can't make submits fail.
+
+## Integration review (architect, 2026-10-19)
+
+- §4 file template now carries `_Zone: <zone>_` with a one-line note to replace it; §3 step 1 says the hub keeps that line naming the zone its clock reads. Doc test: the template carries the line; filled in (`ET`), a bare-time item converts; left as `<zone>`, the card warns unknown-zone.
+- `parse.ts` header no longer claims a pure function of the text: the clock enters through time-only stamps. Noted that `version` (the client's cache key) hashes the text only, so a client keeps the instants it has until the file changes, and that `verify()` in `splice.ts` is safe only because it compares no stamps.
+- Follow-up filed: #1838 (an unusable `_Zone:` header line reported once as a `DecisionsFileProblem`).
