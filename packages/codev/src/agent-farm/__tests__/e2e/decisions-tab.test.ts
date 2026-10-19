@@ -360,6 +360,58 @@ test.describe('Spec 1819: Decisions tab', () => {
   });
 });
 
+test.describe('Issue #1836: time-only and missing stamps carry no warning', () => {
+  const STAMPS = `# Pending owner decisions — all architects (hub: main)
+
+_Status: 3 open — main-14, main-13, main-12. Written 6:40 pm._
+_Zone: PT_
+
+## Open
+
+### main-14 · 6:30 pm · Ship the release tonight?
+
+**Your word:** \`ship\` / \`hold\`
+
+### main-13 · File the flaky test as a bug?
+
+**Your word:** \`file\` / \`hold\`
+
+### main-12 · 2026-10-17 9:38 pm PT · ${QUESTION.main}
+
+**Your word:** \`accept\` / \`hold\`
+
+## Ruled
+`;
+
+  test("a file zone converts a bare time to a time alone; a heading without a stamp keeps its question", async ({ page }) => {
+    const ws = makeWorkspace({ [DEFAULT_FILE]: STAMPS });
+    await openDecisions(page, ws);
+
+    const timeOnly = card(page, 'Ship the release tonight?').locator('time.decisions-stamp');
+    await expect(timeOnly).toHaveAttribute('title', '6:30 pm');
+    await expect(timeOnly).toHaveText(/\d:\d{2}/);
+    await expect(timeOnly).not.toHaveText(/2026|Oct/);
+    await expect(card(page, 'File the flaky test as a bug?').locator('.decisions-stamp')).toHaveCount(0);
+    await expect(card(page, QUESTION.main).locator('time.decisions-stamp')).toHaveText(/2026/);
+    await expect(page.locator('.decisions-view')).not.toContainText('Not converted');
+    await screenshot(page, 'decisions-stamps-zoned');
+  });
+
+  test('without a file zone a bare time is shown as written; only an ambiguous zone still warns', async ({ page }) => {
+    const ist = '### main-11 · 2026-10-17 9:30 pm IST · Keep the old export?\n\n**Your word:** `keep` / `hold`\n\n## Ruled\n';
+    const ws = makeWorkspace({ [DEFAULT_FILE]: STAMPS.replace('_Zone: PT_\n', '').replace('## Ruled\n', ist) });
+    await openDecisions(page, ws);
+
+    const timeOnly = card(page, 'Ship the release tonight?').locator('.decisions-stamp');
+    await expect(timeOnly).toHaveText('6:30 pm');
+    await expect(card(page, 'Ship the release tonight?')).not.toContainText('Not converted');
+    await expect(page.locator('.decisions-stamp-flag')).toHaveCount(1);
+    await expect(card(page, 'Keep the old export?').locator('.decisions-stamp-flag'))
+      .toHaveText('Not converted: the time zone is not one the tab recognizes');
+    await screenshot(page, 'decisions-stamps-unzoned');
+  });
+});
+
 test.describe('Spec 1819: Decisions tab at phone width', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 

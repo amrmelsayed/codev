@@ -56,17 +56,25 @@ per option and a comment box.
   heading, so inside an item use `####` or bold labels, never a higher heading. The file has
   exactly one `## Open`.
 - **The heading is id · stamp · question.** The first word is the id; ` · ` (space, middle dot,
-  space) separates the id, the stamp and the question. Open items that share an id are
-  read-only until the ids differ.
-- **The stamp carries its zone; nothing assumes one.** `YYYY-MM-DD h:mm am` (or `pm`), or 24-hour
-  `YYYY-MM-DD HH:mm`, then the zone the time was read in. The tab converts the stamp using only
-  that zone and shows it in the viewer's local time. It reads the North-American generic zones
-  `PT`, `MT`, `CT`, `ET`, `AKT` and `HT` (daylight saving follows the stamp's date), fixed
-  abbreviations such as `UTC`, `GMT`, `EST`/`EDT`, `CET`/`CEST`, `JST` and `AEST`/`AEDT` (`CST`
-  is North-American Central), offsets such as `+05:30`, `UTC+5:30` or `GMT-3`, and IANA names
-  such as `Europe/Berlin`. Any other zone, including ambiguous abbreviations such as `IST`,
-  `BST` and `AST`, is shown as written and marked not converted, as is a time the clocks
-  skipped or repeated that day.
+  space) separates the id, the stamp and the question. A heading without a stamp is id ·
+  question, and a first part the tab cannot read as a stamp stays in the question, shown as
+  written. Open items that share an id are read-only until the ids differ.
+- **The stamp carries its zone; nothing assumes one.** Write the full form: `YYYY-MM-DD h:mm am`
+  (or `pm`), or 24-hour `YYYY-MM-DD HH:mm`, then the zone the time was read in. The tab converts
+  the stamp using only that zone and shows its date and time in the viewer's local time. It
+  reads the North-American generic zones `PT`, `MT`, `CT`, `ET`, `AKT` and `HT` (daylight saving
+  follows the stamp's date), fixed abbreviations such as `UTC`, `GMT`, `EST`/`EDT`,
+  `CET`/`CEST`, `JST` and `AEST`/`AEDT` (`CST` is North-American Central), offsets such as
+  `+05:30`, `UTC+5:30` or `GMT-3`, and IANA names such as `Europe/Berlin`. Any other zone,
+  including ambiguous abbreviations such as `IST`, `BST` and `AST`, is shown as written and
+  marked not converted, as is a time the clocks skipped or repeated that day.
+- **A file may name its zone once.** A line `_Zone: <zone>_` above `## Open`, from the same
+  list of zones, is the zone of every stamp that names none. A bare time, `h:mm am` or `HH:mm`,
+  is read as today in that zone when the tab reads the file, and shown as the time alone: as
+  written, converted to your clock, with no date because none was written. Without a file zone,
+  a stamp that names no zone is shown as written. A bare time is always read as today, so one
+  written before midnight and read after it lands on the wrong day: the full form stays the one
+  to write.
 - **Exactly one `**Your word:**` line**, starting a line, outside a code block. The options are
   the backticked words on it, separated by ` / `. The first is the recommended one, and the tab
   marks it. A description follows a word after ` = ` and runs to the next ` / ` before a
@@ -84,6 +92,19 @@ per option and a comment box.
   a blank line, exactly as the owner would type them. Once any text follows the line, typed by
   hand or written by the tab, the card shows it as the current ruling and takes no new submit.
 - **`## Ruled`** is shown read-only, as written.
+
+In a file that names its zone, a bare time converts, and a heading without a stamp is an id
+and a question (the item bodies are left out here):
+
+```markdown
+_Zone: ET_
+
+## Open
+
+### web-6 · 9:40 pm · Should the export keep the old column names?
+
+### web-5 · Should the nightly report move to the morning?
+```
 
 A worked example, a choice with bare words on the word line:
 

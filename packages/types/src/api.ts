@@ -599,14 +599,23 @@ export interface TeamApiResponse {
 
 // --- Decisions (GET/POST /workspace/:path/api/decisions…, Spec 1819) ---
 
-/** A heading timestamp, resolved to an instant only from the zone written in it. */
+/**
+ * A heading timestamp, resolved to an instant only from the zone written in it or, failing
+ * that, the file's `_Zone: …_` line.
+ */
 export interface DecisionStamp {
   /** The stamp exactly as written in the heading. */
   raw: string;
   /** ISO-8601 UTC instant, or null when the stamp could not be converted. */
   instant: string | null;
-  /** Why `instant` is null. */
-  unconvertedReason?: 'unrecognized-format' | 'unknown-zone' | 'nonexistent-time' | 'ambiguous-time';
+  /** The stamp gives a time but no date (it was read as today): show the time alone. */
+  timeOnly?: true;
+  /**
+   * Why `instant` is null, when the stamp names a zone the tab cannot use or a time the
+   * clocks skipped or repeated. Absent with a null instant: no zone is known, so the stamp
+   * is shown as written.
+   */
+  unconvertedReason?: 'unknown-zone' | 'nonexistent-time' | 'ambiguous-time';
 }
 
 export interface DecisionOption {

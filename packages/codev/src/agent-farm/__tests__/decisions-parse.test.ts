@@ -2,7 +2,7 @@
  * Spec 1819 — decisions file parser and structural grammar.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { classifyLines } from '../servers/decisions/grammar.js';
@@ -242,10 +242,55 @@ describe('parseDecisions — headings', () => {
     expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([['a-1', null, 'Plain question']]);
   });
 
-  it('reads the part after a single separator as the stamp, shown unconverted when it is not one', () => {
-    const { items } = parseDecisions('## Open\n### a-2 · Only a question\n**Your word:** `y`\n');
-    expect(items[0].stamp).toEqual({ raw: 'Only a question', instant: null, unconvertedReason: 'unrecognized-format' });
-    expect(items[0].question).toBe('');
+  it('reads a heading with no stamp as id and question: the question is not read as a stamp (#1836)', () => {
+    const { items } = parseDecisions('## Open\n### a-2 · Only a question\n**Your word:** `y`\n### a-3 · Is A · B ok?\n**Your word:** `y`\n');
+    expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([['a-2', null, 'Only a question'], ['a-3', null, 'Is A · B ok?']]);
+  });
+
+  it('keeps a first part that is not a stamp in the question, as written (#1836)', () => {
+    const { items } = parseDecisions('## Open\n### a-4 · yesterday 9 am PT · Ship it?\n**Your word:** `y`\n');
+    expect(items[0]).toMatchObject({ stamp: null, question: 'yesterday 9 am PT · Ship it?' });
+  });
+
+  describe("the file's `_Zone:` line (#1836)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const file = (header: string, heading: string): string =>
+      `# Decisions\n\n${header}\n\n## Open\n\n### ${heading}\n\n**Your word:** \`y\`\n\n## Ruled\n`;
+
+    it('converts a time-only stamp as today in the zone the header names', () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-19T18:00:00.000Z'));
+      const [item] = parseDecisions(file('_Status: 1 open._\n_Zone: PT_', 'main-3 · 6:30 pm · Ship it?')).items;
+      expect(item.stamp).toEqual({ raw: '6:30 pm', instant: '2026-10-20T01:30:00.000Z', timeOnly: true });
+      expect(item.question).toBe('Ship it?');
+      expect(parseDecisions(file('_Zone: America/Los_Angeles._', 'main-3 · 6:30 pm · Ship it?')).items[0].stamp?.instant)
+        .toBe('2026-10-20T01:30:00.000Z');
+    });
+
+    it('shows a time-only stamp as written, with no reason, when the file names no zone', () => {
+      const [item] = parseDecisions(file('_Status: 1 open._', 'main-3 · 6:30 pm · Ship it?')).items;
+      expect(item.stamp).toEqual({ raw: '6:30 pm', instant: null, timeOnly: true });
+      expect(item.question).toBe('Ship it?');
+    });
+
+    it('reads the zone only from the header, and only when it is named once', () => {
+      const late = '# Decisions\n\n## Open\n\n_Zone: PT_\n\n### main-3 · 6:30 pm · Ship it?\n\n**Your word:** `y`\n';
+      expect(parseDecisions(late).items[0].stamp?.instant).toBeNull();
+      const fenced = file('```\n_Zone: PT_\n```', 'main-3 · 6:30 pm · Ship it?');
+      expect(parseDecisions(fenced).items[0].stamp?.instant).toBeNull();
+      const twice = file('_Zone: PT_\n_Zone: ET_', 'main-3 · 6:30 pm · Ship it?');
+      expect(parseDecisions(twice).items[0].stamp?.instant).toBeNull();
+    });
+
+    it("leaves a full stamp's own zone, and an ambiguous file zone's warning, in place", () => {
+      const full = parseDecisions(file('_Zone: PT_', 'main-3 · 2026-10-17 9:40 pm ET · Ship it?')).items[0];
+      expect(full.stamp).toEqual({ raw: '2026-10-17 9:40 pm ET', instant: '2026-10-18T01:40:00.000Z' });
+      const ist = parseDecisions(file('_Zone: IST_', 'main-3 · 6:30 pm · Ship it?')).items[0];
+      expect(ist.stamp?.unconvertedReason).toBe('unknown-zone');
+    });
   });
 
   it('accepts indented item headings and keeps level-4 headings in the body', () => {
