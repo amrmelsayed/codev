@@ -491,6 +491,21 @@ Dismissal is CLI-only; the dashboard and VSCode held-count indicators surface th
 
 ---
 
+### afx decisions init
+
+Turn on the dashboard's Decisions tab (Issue #1840).
+
+```bash
+afx decisions init [--path <file>]
+```
+
+**Options:**
+- `--path <file>` - File to create, relative to the workspace root (default: `dashboard.decisionsFile`, else `codev/state/pending-decisions.md`)
+
+Creates the decisions file from its template and prints the sentence to tell the main architect. It never replaces an existing file, and refuses a path outside the workspace. See [Decisions tab](#decisions-tab).
+
+---
+
 ### afx interrupt
 
 Interrupt a builder mid-turn by sending an ESC keystroke to its PTY.
@@ -933,6 +948,8 @@ afx spawn 42 --protocol spir --builder-cmd "claude --model haiku"
 Both are Tower-global (they apply to the whole Tower, not per-project) and optional — omit them to use the defaults above.
 
 ### Decisions tab
+
+Turn the tab on with `afx decisions init`. It creates the decisions file from its template, prints where it went, and gives the one sentence to tell the main architect: "Route every ask for my word through the decisions file." It refuses a file that already exists, because that file holds the owner's rulings, and a path outside the workspace. `--path <file>` creates another file, relative to the workspace root; the tab shows it once `dashboard.decisionsFile` names it.
 
 When a workspace has a pending-decisions file, the dashboard shows a **Decisions** tab (Spec 1819). The tab is a view of that file. Each item under `## Open` becomes a card with a click box per option (the first option, the recommended one, is marked) and a comment box. Submitting writes the chosen word, then the comment, on the lines right after the item's `**Your word:**` line, exactly as the owner would type them, and changes nothing else. `## Ruled` is shown below as a collapsed, read-only list. The file is the only state. While the tab is open it re-reads the file every 2 seconds, so edits made elsewhere appear without a reload, and an unsent draft survives them.
 

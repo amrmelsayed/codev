@@ -28,6 +28,7 @@
 
 import { test, expect } from './tower-auth.js';
 import type { Locator, Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -43,6 +44,7 @@ if (!TOWER_PORT || TOWER_PORT === '4100') {
 const TOWER_URL = `http://localhost:${TOWER_PORT}`;
 const REPO_ROOT = resolve(import.meta.dirname, '../../../../../../');
 const DEFAULT_FILE = 'codev/state/pending-decisions.md';
+const AFX = resolve(import.meta.dirname, '../../../../bin/afx.js');
 
 const QUESTION = {
   main: 'Merge the onboarding scan fix?',
@@ -357,6 +359,25 @@ test.describe('Spec 1819: Decisions tab', () => {
     await expect(page).toHaveTitle(new RegExp(`^${basename(ws.root)}( on .+)? overview$`), { timeout: 15_000 });
     await expect(page.getByRole('tab', { name: 'Work' })).toBeVisible();
     await expect(page.getByRole('tab', { name: /Decisions/ })).toHaveCount(0);
+  });
+
+  test('afx decisions init turns the tab on in an open dashboard, without a reload (#1840)', async ({ page }) => {
+    const ws = makeWorkspace({ 'codev/README.md': '# a workspace that has not used decisions\n' });
+    await page.goto(ws.url);
+    await expect(page.getByRole('tab', { name: 'Work' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: /Decisions/ })).toHaveCount(0);
+    await page.evaluate(() => { (window as { loadedOnce?: boolean }).loadedOnce = true; });
+
+    const out = execFileSync(process.execPath, [AFX, 'decisions', 'init'], { cwd: ws.root, encoding: 'utf8' });
+    expect(out).toContain(`Created ${DEFAULT_FILE}`);
+    expect(out).toContain('Tell your main architect: "Route every ask for my word through the decisions file."');
+
+    const tab = page.getByRole('tab', { name: /Decisions/ });
+    await expect(tab).toBeVisible({ timeout: 10_000 });
+    expect(await page.evaluate(() => (window as { loadedOnce?: boolean }).loadedOnce)).toBe(true);
+    await tab.click();
+    await expect(page.locator('.decisions-path')).toHaveText(DEFAULT_FILE);
+    await screenshot(page, 'decisions-init-tab');
   });
 });
 
