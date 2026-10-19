@@ -47,3 +47,10 @@ Not from this change: 74 web tests (Terminal*, VirtualKeyboard, architect-toolba
 - §4 file template now carries `_Zone: <zone>_` with a one-line note to replace it; §3 step 1 says the hub keeps that line naming the zone its clock reads. Doc test: the template carries the line; filled in (`ET`), a bare-time item converts; left as `<zone>`, the card warns unknown-zone.
 - `parse.ts` header no longer claims a pure function of the text: the clock enters through time-only stamps. Noted that `version` (the client's cache key) hashes the text only, so a client keeps the instants it has until the file changes, and that `verify()` in `splice.ts` is safe only because it compares no stamps.
 - Follow-up filed: #1838 (an unusable `_Zone:` header line reported once as a `DecisionsFileProblem`).
+
+## Owner ruling: everything in UTC (relayed by the architect, 2026-10-19)
+
+- §4 file template ships `_Zone: UTC_`, and the note says the line stays UTC (a person typing a time in another zone writes the zone after it).
+- Stamp guidance: agents write `YYYY-MM-DD HH:mm UTC` (24-hour, `date -u '+%Y-%m-%d %H:%M UTC'`); §2's template heading and the worked example (`web-4 · 2026-10-18 01:40 UTC`, the same instant as before) use it; the file-zone example is `_Zone: UTC_` + `01:40`. Other zones stay documented as accepted for anything a person types. §3 step 1: the stamp is in UTC and the `_Zone: UTC_` line stays UTC.
+- Doc test: every dated example stamp must be `YYYY-MM-DD HH:mm UTC`; the template line converts a bare time in UTC; a human-typed `4:40 pm ET` in the same file keeps its own zone. The unfilled-`<zone>` case moved to a parser test on a literal.
+- Left as written, flagged to the architect: the Q&A example times (`10:05 pm ET`) and §3's "every time it writes carries its zone, read from the clock (`date`)". These are times the hub writes, not stamps, and the tab shows them as written, not converted.

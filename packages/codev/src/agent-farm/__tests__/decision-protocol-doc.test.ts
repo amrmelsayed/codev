@@ -37,7 +37,7 @@ const fileSkeleton = block('## Ruled');
 const template = block('<first word, recommended>');
 const example = block('### web-4');
 const qaPair = block('**You asked');
-const zoned = block('_Zone: ET_');
+const zoned = block('### web-6');
 
 /** The file skeleton with `item` posted at the top of `## Open`. */
 const posted = (item: string) => fileSkeleton.replace('## Open\n', `## Open\n\n${item}\n`);
@@ -54,7 +54,7 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(item.id).toBe('<name>-<n>');
     // The stamp placeholder is not a stamp, so it stays in the question as written.
     expect(item.stamp).toBeNull();
-    expect(item.question).toMatch(/^<YYYY-MM-DD h:mm am\/pm ZONE> · <The question the owner answers/);
+    expect(item.question).toMatch(/^<YYYY-MM-DD HH:mm UTC> · <The question the owner answers/);
     expect(item.options).toEqual([
       { word: '<first word, recommended>', description: '', recommended: true },
       { word: '<second word>', description: '', recommended: false },
@@ -78,8 +78,17 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
 
   it("the worked example's stamp converts using only the zone it carries", () => {
     const [item] = parseDecisions(posted(example)).items;
-    // 9:40 pm US Eastern on 2026-10-17 is daylight time, UTC-4.
-    expect(item.stamp).toEqual({ raw: '2026-10-17 9:40 pm ET', instant: '2026-10-18T01:40:00.000Z' });
+    expect(item.stamp).toEqual({ raw: '2026-10-18 01:40 UTC', instant: '2026-10-18T01:40:00.000Z' });
+  });
+
+  it('agents write stamps as YYYY-MM-DD HH:mm UTC: every dated example stamp is that form, and the command the doc gives prints it', () => {
+    const stamps = blocks.flatMap(b => [...b.matchAll(/^### \S+ · (\d{4}-\d{2}-\d{2} [^·]*?) · /gm)].map(m => m[1]));
+    expect(stamps.length).toBeGreaterThan(0);
+    for (const stamp of stamps) expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$/);
+    expect(template).toContain('### <name>-<n> · <YYYY-MM-DD HH:mm UTC> · ');
+    expect(doc).toContain("`date -u '+%Y-%m-%d %H:%M UTC'`");
+    // What that command prints at 01:05 UTC.
+    expect(resolveStamp('2026-10-18 01:05 UTC')).toEqual({ raw: '2026-10-18 01:05 UTC', instant: '2026-10-18T01:05:00.000Z' });
   });
 
   it('a submit writes the word and comment after the word line, the notice names them, and the card is then ruled', () => {
@@ -143,7 +152,7 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
   it('no time in the doc assumes a zone: every example time carries one or its file names one, and none is written as PT-only', () => {
     expect(doc).not.toMatch(/(?:am|pm) PT\b/);
     expect(doc).not.toMatch(/_Zone: PT_/);
-    for (const b of blocks) if (!b.includes('_Zone: ET_')) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
+    for (const b of blocks) if (!b.includes('_Zone: ')) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
   });
 
   describe("the file-zone example: a bare time converts, a heading without a stamp keeps its question (#1836)", () => {
@@ -153,32 +162,33 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
 
     it('reads the bare time as today in the file zone, with no reason on either heading', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
-      // Noon on 2026-01-15 in New York: standard time, UTC-5.
       vi.setSystemTime(new Date('2026-01-15T17:00:00.000Z'));
       const items = parseDecisions(zoned).items;
       expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([
-        ['web-6', { raw: '9:40 pm', instant: '2026-01-16T02:40:00.000Z', timeOnly: true }, 'Should the export keep the old column names?'],
+        ['web-6', { raw: '01:40', instant: '2026-01-15T01:40:00.000Z', timeOnly: true }, 'Should the export keep the old column names?'],
         ['web-5', null, 'Should the nightly report move to the morning?'],
       ]);
-      expect(resolveStamp('9:40 pm', 'ET')).toEqual(items[0].stamp);
+      expect(resolveStamp('01:40', 'UTC')).toEqual(items[0].stamp);
       expect(doc).toContain('`_Zone: <zone>_`');
     });
 
-    it("the file template carries the zone line, and once it names a zone a bare time posted into it converts", () => {
-      expect(fileSkeleton).toContain('_Zone: <zone>_');
+    it('the file template ships `_Zone: UTC_`, and a bare time posted into it converts in UTC', () => {
+      expect(fileSkeleton).toContain('_Status: 0 open._\n_Zone: UTC_\n');
+      expect(doc).toContain('The `_Zone: UTC_` line stays UTC.');
+      expect(doc).toContain('the file\'s `_Zone: UTC_` line stays UTC (section 4)');
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2026-01-15T17:00:00.000Z'));
-      const bareTime = example.replace('2026-10-17 9:40 pm ET', '9:40 pm');
-      const filled = parseDecisions(posted(bareTime).replace('_Zone: <zone>_', '_Zone: ET_')).items[0];
-      expect(filled.stamp).toEqual({ raw: '9:40 pm', instant: '2026-01-16T02:40:00.000Z', timeOnly: true });
-      // Left unfilled, the placeholder is no zone the tab knows: the card says so.
-      expect(parseDecisions(posted(bareTime)).items[0].stamp?.unconvertedReason).toBe('unknown-zone');
-      expect(doc).toMatch(/keeps that line naming the zone its clock reads/);
+      const bareTime = example.replace('2026-10-18 01:40 UTC', '21:40');
+      const [item] = parseDecisions(posted(bareTime)).items;
+      expect(item.stamp).toEqual({ raw: '21:40', instant: '2026-01-15T21:40:00.000Z', timeOnly: true });
+      // A person's time in another zone, typed into the same file, keeps its own zone.
+      const typed = parseDecisions(posted(example.replace('2026-10-18 01:40 UTC', '4:40 pm ET'))).items[0];
+      expect(typed.stamp).toEqual({ raw: '4:40 pm ET', instant: '2026-01-15T21:40:00.000Z', timeOnly: true });
     });
 
     it('without the zone line, the bare time is shown as written with no reason', () => {
       const [item] = parseDecisions(zoned.replace(/^_Zone: .*\n/m, '')).items;
-      expect(item.stamp).toEqual({ raw: '9:40 pm', instant: null, timeOnly: true });
+      expect(item.stamp).toEqual({ raw: '01:40', instant: null, timeOnly: true });
     });
   });
 

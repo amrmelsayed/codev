@@ -290,6 +290,8 @@ describe('parseDecisions — headings', () => {
       expect(full.stamp).toEqual({ raw: '2026-10-17 9:40 pm ET', instant: '2026-10-18T01:40:00.000Z' });
       const ist = parseDecisions(file('_Zone: IST_', 'main-3 · 6:30 pm · Ship it?')).items[0];
       expect(ist.stamp?.unconvertedReason).toBe('unknown-zone');
+      const placeholder = parseDecisions(file('_Zone: <zone>_', 'main-3 · 6:30 pm · Ship it?')).items[0];
+      expect(placeholder.stamp?.unconvertedReason).toBe('unknown-zone');
     });
   });
 
