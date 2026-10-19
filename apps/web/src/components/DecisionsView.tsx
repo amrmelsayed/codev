@@ -76,7 +76,6 @@ const ITEM_PROBLEM_TEXT: Record<DecisionItemProblem, ReactNode> = {
 };
 
 const UNCONVERTED_TEXT: Record<NonNullable<DecisionStamp['unconvertedReason']>, string> = {
-  'unrecognized-format': 'the date or time is not in a recognized format',
   'unknown-zone': 'the time zone is not one the tab recognizes',
   'nonexistent-time': 'that time does not exist on that date in that zone (the clocks skipped it)',
   'ambiguous-time': 'that time happens twice on that date in that zone (the clocks went back)',
@@ -90,6 +89,13 @@ export const STAMP_FORMAT: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZoneName: 'short',
+};
+
+/** A stamp written without a date: the time alone, so the tab never shows a date nobody wrote. */
+export const STAMP_TIME_FORMAT: Intl.DateTimeFormatOptions = {
   hour: 'numeric',
   minute: '2-digit',
   timeZoneName: 'short',
@@ -202,15 +208,16 @@ function Stamp({ stamp }: { stamp: DecisionStamp }) {
   if (stamp.instant) {
     return (
       <time className="decisions-stamp" dateTime={stamp.instant} title={stamp.raw}>
-        {new Date(stamp.instant).toLocaleString(undefined, STAMP_FORMAT)}
+        {new Date(stamp.instant).toLocaleString(undefined, stamp.timeOnly ? STAMP_TIME_FORMAT : STAMP_FORMAT)}
       </time>
     );
   }
+  if (!stamp.unconvertedReason) return <span className="decisions-stamp">{stamp.raw}</span>;
   return (
     <span className="decisions-stamp decisions-stamp-unconverted">
       {stamp.raw}
       <span className="decisions-stamp-flag">
-        Not converted{stamp.unconvertedReason && `: ${UNCONVERTED_TEXT[stamp.unconvertedReason]}`}
+        Not converted: {UNCONVERTED_TEXT[stamp.unconvertedReason]}
       </span>
     </span>
   );

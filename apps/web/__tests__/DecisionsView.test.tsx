@@ -14,7 +14,7 @@ vi.mock('../src/hooks/useDecisions.js', () => ({
   useDecisions: (isActive: boolean) => mockUseDecisions(isActive),
 }));
 
-import { DecisionsView, STAMP_FORMAT } from '../src/components/DecisionsView.js';
+import { DecisionsView, STAMP_FORMAT, STAMP_TIME_FORMAT } from '../src/components/DecisionsView.js';
 
 /** The viewer's zone for every test here: neither the stamps' zone (PT) nor UTC. */
 const VIEWER_TZ = 'America/New_York';
@@ -171,7 +171,6 @@ describe('DecisionsView card stamps', () => {
   });
 
   it.each([
-    ['unrecognized-format', '2026-10-17 25:61 PT', 'Not converted: the date or time is not in a recognized format'],
     ['unknown-zone', '2026-10-17 1:30 am IST', 'Not converted: the time zone is not one the tab recognizes'],
     ['nonexistent-time', '2026-03-08 2:30 am PT', 'Not converted: that time does not exist on that date in that zone (the clocks skipped it)'],
     ['ambiguous-time', '2026-11-01 1:30 am PT', 'Not converted: that time happens twice on that date in that zone (the clocks went back)'],
@@ -180,6 +179,24 @@ describe('DecisionsView card stamps', () => {
     const c = card('Q');
     expect(within(c).getByText(raw, { exact: false })).toHaveTextContent(`${raw}${text}`);
     expect(c.querySelector('time')).toBeNull();
+  });
+
+  it('shows a time-only stamp as the converted time alone, with no date (#1836)', () => {
+    const instant = '2026-10-20T01:30:00.000Z';
+    showItems(makeItem('main-12', 'Q', { stamp: { raw: '6:30 pm', instant, timeOnly: true } }));
+    const time = within(card('Q')).getByText((_, el) => el?.tagName === 'TIME');
+    const timeAlone = new Intl.DateTimeFormat(undefined, { ...STAMP_TIME_FORMAT, timeZone: VIEWER_TZ }).format(new Date(instant));
+    expect(time.textContent).toBe(timeAlone);
+    expect(time.textContent).not.toMatch(/Oct|2026/);
+    expect(time).toHaveAttribute('title', '6:30 pm');
+  });
+
+  it('shows a stamp with no zone known as written, with no warning (#1836)', () => {
+    showItems(makeItem('main-12', 'Q', { stamp: { raw: '6:30 pm', instant: null, timeOnly: true } }));
+    const c = card('Q');
+    expect(c.querySelector('.decisions-stamp')).toHaveTextContent(/^6:30 pm$/);
+    expect(c).not.toHaveTextContent('Not converted');
+    expect(c.querySelector('.decisions-stamp-flag')).toBeNull();
   });
 
   it('shows no stamp for a heading without one', () => {

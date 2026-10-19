@@ -1,11 +1,20 @@
 // Decisions file parser (Spec 1819).
 //
-// A pure function from the decisions file's text to its read model. The file is
-// the only state: this runs on every read, nothing is cached. Structure comes
-// from `grammar.ts`; this module adds the format's conventions:
+// A function from the decisions file's text, and the clock, to its read model. The
+// file is the only state: this runs on every read, nothing is cached. The clock
+// enters only through time-only stamps, which are read as today in their zone
+// (#1836), so the same text can parse to different instants on different days:
+//   - `version` (the client's cache key) hashes the text alone and does not cover
+//     that: a client keeps the instants it has until the file changes.
+//   - `splice.ts`'s `verify()` re-parses at a later moment than the parse it checks
+//     against; it is safe only because it compares no stamps.
+// Structure comes from `grammar.ts`; this module adds the format's conventions:
 //   - `## Open` / `## Ruled` sections; items are `###` headings inside `## Open`,
 //     running to the next heading of level 1–3 (or end of file).
-//   - item id = the heading's first token; ` · ` separates id, stamp and question.
+//   - item id = the heading's first token; ` · ` separates id, stamp and question. A first
+//     part that is not a stamp belongs to the question.
+//   - a `_Zone: <zone>_` line in the header (above the first `##`) is the zone of every
+//     stamp that names none.
 //   - options = backticked words on the `**Your word:**` line, first recommended; an
 //     option with no `= …` there takes its description from the body's `**Options:**`.
 //   - current ruling = everything after the `**Your word:**` line, verbatim.
@@ -19,6 +28,7 @@ import type {
   DecisionItemProblem,
   DecisionOption,
   DecisionQaEntry,
+  DecisionStamp,
   DecisionsDocument,
   DecisionsFileProblem,
 } from '@cluesmith/codev-types';
@@ -49,6 +59,7 @@ export interface ParsedDecisions {
 }
 
 const SEPARATOR = ' · ';
+const ZONE_LINE_RE = /^ {0,3}_Zone:[ \t]*(\S+?)\.?_[ \t]*$/;
 const ASKED_RE = /^ {0,3}- \*\*You asked \(([^)]*)\):\*\*[ \t]*(.*)$/;
 const ANSWER_RE = /^ {0,3}- \*\*(.+?)['’]s answer \(([^)]*)\):\*\*[ \t]*(.*)$/;
 const CONTINUATION_INDENT_RE = /^(?: {2}|\t)/;
@@ -76,16 +87,33 @@ function joinTrimmed(lines: SourceLine[]): string {
 }
 
 /**
- * Split a heading's text into id, stamp text and question: the first token is the id;
- * after a ` · `, the first part is the stamp and the rest (re-joined) the question. A
- * heading without separators has a question and no stamp.
+ * The file's zone: the one `_Zone: <zone>_` line above the first `##` heading. None, or
+ * more than one, gives no file zone.
  */
-function splitHeading(headingText: string): { id: string; stampText: string | null; question: string } {
+function fileZone(lines: SourceLine[]): string | null {
+  const zones: string[] = [];
+  for (const line of lines) {
+    if (line.headingLevel >= 2) break;
+    const zone = line.fenced ? null : ZONE_LINE_RE.exec(line.text);
+    if (zone) zones.push(zone[1]);
+  }
+  return zones.length === 1 ? zones[0] : null;
+}
+
+/**
+ * Split a heading's text into id, stamp and question: the first token is the id; after a
+ * ` · `, the first part is the stamp and the rest (re-joined) the question. A heading
+ * without separators, or whose first part is not a stamp, has a question and no stamp.
+ */
+function splitHeading(headingText: string, zone: string | null): { id: string; stamp: DecisionStamp | null; question: string } {
   const id = headingText.split(/\s+/)[0] ?? '';
   const rest = headingText.slice(id.length);
-  if (!rest.startsWith(SEPARATOR)) return { id, stampText: null, question: rest.trim() };
-  const [stampText, ...questionParts] = rest.slice(SEPARATOR.length).split(SEPARATOR);
-  return { id, stampText: stampText.trim(), question: questionParts.join(SEPARATOR).trim() };
+  if (!rest.startsWith(SEPARATOR)) return { id, stamp: null, question: rest.trim() };
+  const afterId = rest.slice(SEPARATOR.length);
+  const [stampText, ...questionParts] = afterId.split(SEPARATOR);
+  const stamp = resolveStamp(stampText.trim(), zone);
+  if (!stamp) return { id, stamp: null, question: afterId.trim() };
+  return { id, stamp, question: questionParts.join(SEPARATOR).trim() };
 }
 
 /**
@@ -236,6 +264,7 @@ export function parseDecisions(text: string): ParsedDecisions {
   if (ruledHeadings.length > 1) problems.push('ruled-multiple');
 
   const offsetOf = (lineIndex: number): number => (lineIndex < lines.length ? lines[lineIndex].start : text.length);
+  const zone = fileZone(lines);
 
   const items: ParsedItem[] = [];
   for (const open of openHeadings) {
@@ -249,7 +278,7 @@ export function parseDecisions(text: string): ParsedDecisions {
           break;
         }
       }
-      items.push(parseItem(text, lines, i, endLine, offsetOf));
+      items.push(parseItem(text, lines, i, endLine, offsetOf, zone));
       i = endLine - 1;
     }
   }
@@ -274,9 +303,10 @@ function parseItem(
   headingLine: number,
   endLine: number,
   offsetOf: (lineIndex: number) => number,
+  zone: string | null,
 ): ParsedItem {
   const heading = lines[headingLine];
-  const { id, stampText, question } = splitHeading(heading.headingText);
+  const { id, stamp, question } = splitHeading(heading.headingText, zone);
   const start = heading.start;
   const end = offsetOf(endLine);
   const itemLines = lines.slice(headingLine + 1, endLine);
@@ -311,7 +341,7 @@ function parseItem(
 
   return {
     id,
-    stamp: stampText === null ? null : resolveStamp(stampText),
+    stamp,
     question,
     bodyMarkdown: joinTrimmed(rest),
     options,

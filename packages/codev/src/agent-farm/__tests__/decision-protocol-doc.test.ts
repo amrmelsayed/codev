@@ -7,7 +7,7 @@
  * checks are the standing "grep both trees" lesson, executed.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseDecisions } from '../servers/decisions/parse.js';
@@ -37,6 +37,7 @@ const fileSkeleton = block('## Ruled');
 const template = block('<first word, recommended>');
 const example = block('### web-4');
 const qaPair = block('**You asked');
+const zoned = block('### web-6');
 
 /** The file skeleton with `item` posted at the top of `## Open`. */
 const posted = (item: string) => fileSkeleton.replace('## Open\n', `## Open\n\n${item}\n`);
@@ -51,7 +52,9 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
   it('the item template reads its id, question and options; the first option is recommended', () => {
     const [item] = parseDecisions(posted(template)).items;
     expect(item.id).toBe('<name>-<n>');
-    expect(item.question).toMatch(/^<The question the owner answers/);
+    // The stamp placeholder is not a stamp, so it stays in the question as written.
+    expect(item.stamp).toBeNull();
+    expect(item.question).toMatch(/^<YYYY-MM-DD HH:mm UTC> · <The question the owner answers/);
     expect(item.options).toEqual([
       { word: '<first word, recommended>', description: '', recommended: true },
       { word: '<second word>', description: '', recommended: false },
@@ -75,8 +78,17 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
 
   it("the worked example's stamp converts using only the zone it carries", () => {
     const [item] = parseDecisions(posted(example)).items;
-    // 9:40 pm US Eastern on 2026-10-17 is daylight time, UTC-4.
-    expect(item.stamp).toEqual({ raw: '2026-10-17 9:40 pm ET', instant: '2026-10-18T01:40:00.000Z' });
+    expect(item.stamp).toEqual({ raw: '2026-10-18 01:40 UTC', instant: '2026-10-18T01:40:00.000Z' });
+  });
+
+  it('agents write stamps as YYYY-MM-DD HH:mm UTC: every dated example stamp is that form, and the command the doc gives prints it', () => {
+    const stamps = blocks.flatMap(b => [...b.matchAll(/^### \S+ · (\d{4}-\d{2}-\d{2} [^·]*?) · /gm)].map(m => m[1]));
+    expect(stamps.length).toBeGreaterThan(0);
+    for (const stamp of stamps) expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$/);
+    expect(template).toContain('### <name>-<n> · <YYYY-MM-DD HH:mm UTC> · ');
+    expect(doc).toContain("`date -u '+%Y-%m-%d %H:%M UTC'`");
+    // What that command prints at 01:05 UTC.
+    expect(resolveStamp('2026-10-18 01:05 UTC')).toEqual({ raw: '2026-10-18 01:05 UTC', instant: '2026-10-18T01:05:00.000Z' });
   });
 
   it('a submit writes the word and comment after the word line, the notice names them, and the card is then ruled', () => {
@@ -93,7 +105,7 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(rulingNotice(request)).toBe('RULED web-4: retry\nShip it after the release.');
     expect(doc).toContain('`RULED <id>: <word>`');
     // The comment survives the hub's relay and its `## Ruled` record, not only the notice.
-    expect(doc).toMatch(/'RULING <id>: <word> \(owner, <time> <zone>\)'`, with the owner's\s+comment verbatim/);
+    expect(doc).toMatch(/'RULING <id>: <word> \(owner, <time> UTC\)'`, with the owner's\s+comment verbatim/);
     expect(doc).toContain('→ `<word>` — "<comment>"');
   });
 
@@ -114,11 +126,11 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     const [item] = parseDecisions(answered).items;
     expect(item).toMatchObject({ problems: [], writable: true, currentRuling: '' });
     expect(item.qa).toEqual([
-      { kind: 'asked', time: '10:05 pm ET', markdown: `"${question}"`, answered: true },
+      { kind: 'asked', time: '02:05 UTC', markdown: `"${question}"`, answered: true },
       {
         kind: 'answer',
         name: 'Web',
-        time: '10:12 pm ET',
+        time: '02:12 UTC',
         markdown:
           'No. A refresh that fails still signs the user out and says why.\n' +
           'Main checked the test that forces a failed refresh: it signs out and shows the message.',
@@ -137,9 +149,55 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(onLine).toMatchObject({ currentRuling: '', writable: true });
   });
 
-  it('no time in the doc assumes a zone: every example time carries one, and none is written as PT-only', () => {
+  it('every time the hub writes is UTC: no placeholder leaves the zone open, and the doc gives the command', () => {
+    expect(doc).not.toContain('<time> <zone>');
+    expect(doc).toContain("`date -u '+%H:%M UTC'`");
+    for (const b of blocks) {
+      for (const [, time] of b.matchAll(/\*\*(?:You asked|.+?'s answer) \(([^)]*)\):\*\*/g)) expect(time).toMatch(/^\d{2}:\d{2} UTC$/);
+    }
+  });
+
+  it('no time in the doc assumes a zone: every example time carries one or its file names one, and none is written as PT-only', () => {
     expect(doc).not.toMatch(/(?:am|pm) PT\b/);
-    for (const b of blocks) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
+    expect(doc).not.toMatch(/_Zone: PT_/);
+    for (const b of blocks) if (!b.includes('_Zone: ')) expect(b).not.toMatch(/\d{1,2}:\d{2} (?:am|pm)(?! [A-Z])/);
+  });
+
+  describe("the file-zone example: a bare time converts, a heading without a stamp keeps its question (#1836)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('reads the bare time as today in the file zone, with no reason on either heading', () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-01-15T17:00:00.000Z'));
+      const items = parseDecisions(zoned).items;
+      expect(items.map(i => [i.id, i.stamp, i.question])).toEqual([
+        ['web-6', { raw: '01:40', instant: '2026-01-15T01:40:00.000Z', timeOnly: true }, 'Should the export keep the old column names?'],
+        ['web-5', null, 'Should the nightly report move to the morning?'],
+      ]);
+      expect(resolveStamp('01:40', 'UTC')).toEqual(items[0].stamp);
+      expect(doc).toContain('`_Zone: <zone>_`');
+    });
+
+    it('the file template ships `_Zone: UTC_`, and a bare time posted into it converts in UTC', () => {
+      expect(fileSkeleton).toContain('_Status: 0 open._\n_Zone: UTC_\n');
+      expect(doc).toContain('The `_Zone: UTC_` line stays UTC.');
+      expect(doc).toContain('the file\'s `_Zone: UTC_` line stays UTC (section 4)');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-01-15T17:00:00.000Z'));
+      const bareTime = example.replace('2026-10-18 01:40 UTC', '21:40');
+      const [item] = parseDecisions(posted(bareTime)).items;
+      expect(item.stamp).toEqual({ raw: '21:40', instant: '2026-01-15T21:40:00.000Z', timeOnly: true });
+      // A person's time in another zone, typed into the same file, keeps its own zone.
+      const typed = parseDecisions(posted(example.replace('2026-10-18 01:40 UTC', '4:40 pm ET'))).items[0];
+      expect(typed.stamp).toEqual({ raw: '4:40 pm ET', instant: '2026-01-15T21:40:00.000Z', timeOnly: true });
+    });
+
+    it('without the zone line, the bare time is shown as written with no reason', () => {
+      const [item] = parseDecisions(zoned.replace(/^_Zone: .*\n/m, '')).items;
+      expect(item.stamp).toEqual({ raw: '01:40', instant: null, timeOnly: true });
+    });
   });
 
   it('every zone the doc names converts, and the ambiguous abbreviations it names do not', () => {
@@ -147,12 +205,12 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
       '+05:30', 'UTC+5:30', 'GMT-3', 'Europe/Berlin'];
     for (const zone of zones) {
       expect(doc).toContain(`\`${zone}\``);
-      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`).instant, zone).not.toBeNull();
+      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`)?.instant, zone).not.toBeNull();
     }
-    expect(resolveStamp('2026-01-15 9:00 am CST').instant).toBe('2026-01-15T15:00:00.000Z');
+    expect(resolveStamp('2026-01-15 9:00 am CST')?.instant).toBe('2026-01-15T15:00:00.000Z');
     for (const zone of ['IST', 'BST', 'AST']) {
       expect(doc).toContain(`\`${zone}\``);
-      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`).unconvertedReason, zone).toBe('unknown-zone');
+      expect(resolveStamp(`2026-01-15 9:00 am ${zone}`)?.unconvertedReason, zone).toBe('unknown-zone');
     }
   });
 });

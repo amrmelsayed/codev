@@ -1,9 +1,11 @@
-// Decision heading timestamps (Spec 1819).
+// Decision heading timestamps (Spec 1819, Issue #1836).
 //
-// A stamp is `YYYY-MM-DD h:mm am|pm <ZONE>` or `YYYY-MM-DD HH:mm <ZONE>`. It is
-// resolved to an absolute instant using ONLY the zone written in it — nothing here
-// defaults to, or special-cases, any zone. Anything not in the accepted forms is
-// returned unconverted with a reason, so the tab shows it verbatim.
+// A stamp is `[YYYY-MM-DD] h:mm am|pm [ZONE]` or `[YYYY-MM-DD] HH:mm [ZONE]`. It is
+// resolved to an absolute instant using the zone written in it or, failing that, the
+// file's `_Zone: …_` line — nothing here defaults to, or special-cases, any zone. A
+// stamp without a date is today in its zone. A stamp with no zone at all is returned
+// unconverted with no reason, so the tab shows it as written; text in none of these
+// forms is not a stamp at all (null).
 //
 // IANA and generic zones are resolved with the runtime's built-in `Intl` time-zone
 // data by offset probing: the wall-clock time is tried against every offset the
@@ -60,8 +62,10 @@ const FIXED_ZONES: Record<string, number> = {
   NZDT: 13 * 60,
 };
 
-const STAMP_RE = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s*(am|pm))?\s+(\S.*?)\s*$/i;
+const STAMP_RE = /^(?:(\d{4})-(\d{2})-(\d{2})\s+)?(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?:\s+(\S+))?$/i;
 const OFFSET_RE = /^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$/;
+/** Shaped like a zone (an abbreviation, an Area/Location name, an offset), known or not. */
+const ZONE_LIKE_RE = /^(?:[A-Z]{2,5}|[A-Z][A-Za-z_]*(?:\/[A-Za-z0-9_+-]+)+|(?:UTC|GMT)?[+-]\d{1,2}(?::?\d{2})?)$/;
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -134,44 +138,64 @@ function instantsForWallClock(wallMs: number, zone: string): number[] {
   return [...instants].sort((a, b) => a - b);
 }
 
-/** Resolve a heading stamp to an instant using only the zone written in it. */
-export function resolveStamp(raw: string): DecisionStamp {
+/** The wall-clock time in `zone` at the given instant, as if UTC. */
+function wallClockAt(instantMs: number, zone: Zone): number {
+  const offsetMinutes = zone.kind === 'fixed' ? zone.offsetMinutes : offsetAt(instantMs, zone.name);
+  return instantMs + offsetMinutes * MINUTE_MS;
+}
+
+/**
+ * Resolve a heading stamp to an instant, using the zone written in it or else `fileZone`.
+ * A stamp without a date takes today's date in that zone. Returns null for text that is not
+ * a stamp.
+ */
+export function resolveStamp(raw: string, fileZone: string | null = null): DecisionStamp | null {
   const m = STAMP_RE.exec(raw.trim());
-  if (!m) return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
+  if (!m) return null;
 
   const [, y, mo, d, h, mi, meridiem, zoneText] = m;
-  // `12:10 am` with no zone backtracks to read `am` as the zone; it has none.
-  if (/^(am|pm)$/i.test(zoneText)) return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
-  const year = Number(y);
-  const month = Number(mo);
-  const day = Number(d);
   let hour = Number(h);
   const minute = Number(mi);
 
   if (meridiem) {
-    if (hour < 1 || hour > 12) return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
+    if (hour < 1 || hour > 12) return null;
     const pm = meridiem.toLowerCase() === 'pm';
     hour = (hour % 12) + (pm ? 12 : 0);
   } else if (hour > 23) {
-    return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
+    return null;
   }
-  if (minute > 59) return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
+  if (minute > 59) return null;
 
-  const wallMs = Date.UTC(year, month - 1, day, hour, minute);
-  const check = new Date(wallMs);
-  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
-    return { raw, instant: null, unconvertedReason: 'unrecognized-format' };
+  const timeOnly = y === undefined;
+  let dateMs = 0;
+  if (!timeOnly) {
+    const year = Number(y);
+    const month = Number(mo);
+    const day = Number(d);
+    dateMs = Date.UTC(year, month - 1, day);
+    const check = new Date(dateMs);
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null;
   }
 
-  const zone = parseZone(zoneText);
-  if (!zone) return { raw, instant: null, unconvertedReason: 'unknown-zone' };
+  const stamp: DecisionStamp = timeOnly ? { raw, instant: null, timeOnly: true } : { raw, instant: null };
+  const zoneName = zoneText ?? fileZone;
+  if (!zoneName) return stamp;
+  const zone = parseZone(zoneName);
+  if (!zone) {
+    // A bare time and a word that is no zone (`10:30 standup?`) is a question, not a stamp.
+    if (timeOnly && zoneText !== undefined && !ZONE_LIKE_RE.test(zoneText)) return null;
+    return { ...stamp, unconvertedReason: 'unknown-zone' };
+  }
+
+  if (timeOnly) dateMs = Math.floor(wallClockAt(Date.now(), zone) / DAY_MS) * DAY_MS;
+  const wallMs = dateMs + (hour * 60 + minute) * MINUTE_MS;
 
   if (zone.kind === 'fixed') {
-    return { raw, instant: new Date(wallMs - zone.offsetMinutes * MINUTE_MS).toISOString() };
+    return { ...stamp, instant: new Date(wallMs - zone.offsetMinutes * MINUTE_MS).toISOString() };
   }
 
   const instants = instantsForWallClock(wallMs, zone.name);
-  if (instants.length === 0) return { raw, instant: null, unconvertedReason: 'nonexistent-time' };
-  if (instants.length > 1) return { raw, instant: null, unconvertedReason: 'ambiguous-time' };
-  return { raw, instant: new Date(instants[0]).toISOString() };
+  if (instants.length === 0) return { ...stamp, unconvertedReason: 'nonexistent-time' };
+  if (instants.length > 1) return { ...stamp, unconvertedReason: 'ambiguous-time' };
+  return { ...stamp, instant: new Date(instants[0]).toISOString() };
 }

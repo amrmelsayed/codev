@@ -30,7 +30,7 @@ and never reuses a number.
 ## 2. The item
 
 ```markdown
-### <name>-<n> · <YYYY-MM-DD h:mm am/pm ZONE> · <The question the owner answers, naming the thing by what it does>
+### <name>-<n> · <YYYY-MM-DD HH:mm UTC> · <The question the owner answers, naming the thing by what it does>
 
 - **Problem:** (or **Context:**) what is wrong or undecided, as the owner would see it. One to three sentences.
 - **Root cause:** why, for a fix.
@@ -44,8 +44,10 @@ and never reuses a number.
 **Your word:** `<first word, recommended>` / `<second word>` / `hold`
 ```
 
-Delete labels that do not apply; never rename them. The hub bounces a malformed item back,
-naming what is missing, and does not post it.
+The stamp is when the item was written, in UTC on the 24-hour clock, as
+`date -u '+%Y-%m-%d %H:%M UTC'` prints it; the tab shows it in each viewer's own time. Delete
+labels that do not apply; never rename them. The hub bounces a malformed item back, naming
+what is missing, and does not post it.
 
 ### What the tab reads
 
@@ -56,17 +58,26 @@ per option and a comment box.
   heading, so inside an item use `####` or bold labels, never a higher heading. The file has
   exactly one `## Open`.
 - **The heading is id · stamp · question.** The first word is the id; ` · ` (space, middle dot,
-  space) separates the id, the stamp and the question. Open items that share an id are
-  read-only until the ids differ.
-- **The stamp carries its zone; nothing assumes one.** `YYYY-MM-DD h:mm am` (or `pm`), or 24-hour
-  `YYYY-MM-DD HH:mm`, then the zone the time was read in. The tab converts the stamp using only
-  that zone and shows it in the viewer's local time. It reads the North-American generic zones
-  `PT`, `MT`, `CT`, `ET`, `AKT` and `HT` (daylight saving follows the stamp's date), fixed
-  abbreviations such as `UTC`, `GMT`, `EST`/`EDT`, `CET`/`CEST`, `JST` and `AEST`/`AEDT` (`CST`
-  is North-American Central), offsets such as `+05:30`, `UTC+5:30` or `GMT-3`, and IANA names
-  such as `Europe/Berlin`. Any other zone, including ambiguous abbreviations such as `IST`,
-  `BST` and `AST`, is shown as written and marked not converted, as is a time the clocks
-  skipped or repeated that day.
+  space) separates the id, the stamp and the question. A heading without a stamp is id ·
+  question, and a first part the tab cannot read as a stamp stays in the question, shown as
+  written. Open items that share an id are read-only until the ids differ.
+- **The stamp carries its zone; nothing assumes one.** Agents write it as `YYYY-MM-DD HH:mm UTC`,
+  24-hour and in UTC (section 2). The tab converts the stamp using only the zone written in it
+  and shows its date and time in the viewer's local time. For anything a person types it also
+  reads `YYYY-MM-DD h:mm am` (or `pm`), or 24-hour `YYYY-MM-DD HH:mm`, then the zone the time
+  was read in: the North-American generic zones `PT`, `MT`, `CT`, `ET`, `AKT` and `HT`
+  (daylight saving follows the stamp's date), fixed abbreviations such as `UTC`, `GMT`,
+  `EST`/`EDT`, `CET`/`CEST`, `JST` and `AEST`/`AEDT` (`CST` is North-American Central), offsets
+  such as `+05:30`, `UTC+5:30` or `GMT-3`, and IANA names such as `Europe/Berlin`. Any other
+  zone, including ambiguous abbreviations such as `IST`, `BST` and `AST`, is shown as written
+  and marked not converted, as is a time the clocks skipped or repeated that day.
+- **A file may name its zone once.** A line `_Zone: <zone>_` above `## Open`, from the same
+  list of zones, is the zone of every stamp that names none; the file template's is
+  `_Zone: UTC_` (section 4). A bare time, `h:mm am` or `HH:mm`, is read as today in that zone
+  when the tab reads the file, and shown as the time alone: as written, converted to your
+  clock, with no date because none was written. Without a file zone, a stamp that names no
+  zone is shown as written. A bare time is always read as today, so one written before
+  midnight and read after it lands on the wrong day: the full form stays the one to write.
 - **Exactly one `**Your word:**` line**, starting a line, outside a code block. The options are
   the backticked words on it, separated by ` / `. The first is the recommended one, and the tab
   marks it. A description follows a word after ` = ` and runs to the next ` / ` before a
@@ -85,10 +96,23 @@ per option and a comment box.
   hand or written by the tab, the card shows it as the current ruling and takes no new submit.
 - **`## Ruled`** is shown read-only, as written.
 
+In a file that names its zone, a bare time converts, and a heading without a stamp is an id
+and a question (the item bodies are left out here):
+
+```markdown
+_Zone: UTC_
+
+## Open
+
+### web-6 · 01:40 · Should the export keep the old column names?
+
+### web-5 · Should the nightly report move to the morning?
+```
+
 A worked example, a choice with bare words on the word line:
 
 ```markdown
-### web-4 · 2026-10-17 9:40 pm ET · When a session expires mid-edit, should the login fix keep the page or sign the user out?
+### web-4 · 2026-10-18 01:40 UTC · When a session expires mid-edit, should the login fix keep the page or sign the user out?
 
 - **Context:** users whose session expires while they edit lose their draft when the page reloads.
 - **Options:** (a) `retry` = refresh the sign-in in the background and keep the page (b) `signout` = sign the user out and keep the draft on this device
@@ -103,7 +127,8 @@ A worked example, a choice with bare words on the word line:
 
 1. **Post.** The hub puts the item at the top of `## Open`, updates the status line
    (`N open — <ids>`), and tells the owner in one chat line:
-   `New decision from <name>: <id> — <question>`, plus `[urgent]` if marked.
+   `New decision from <name>: <id> — <question>`, plus `[urgent]` if marked. The item's
+   stamp is in UTC (section 2), and the file's `_Zone: UTC_` line stays UTC (section 4).
 2. **Learn of rulings.** The owner rules in the tab, by typing in the file, or in chat. A ruling
    made in the tab reaches the hub as a message from Tower: `RULED <id>: <word>`, or
    `QUESTION <id>:` when no word was chosen, with the comment on the lines after it. The notice
@@ -114,20 +139,22 @@ A worked example, a choice with bare words on the word line:
    Either way the hub scans every open item for text on the lines under its `**Your word:**`
    line and replies with one line per ruling found. A word in chat counts the same.
 3. **Relay and record.** For each ruling the hub relays at once,
-   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> <zone>)'`, with the owner's
+   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> UTC)'`, with the owner's
    comment verbatim on the lines after it when there is one, and moves the item out of
    `## Open` into `## Ruled` as one line, the comment quoted after the word when there is one:
-   ``- **<id>** · <time> <zone> · <question> → `<word>` — "<comment>"``.
+   ``- **<id>** · <time> UTC · <question> → `<word>` — "<comment>"``.
    A ruling that carries a question goes through 3b first.
 4. **Done.** The architect acts and replies `DONE <id>: <one line of what happened>`; the hub
-   appends ` → DONE <time> <zone>: <what happened>` to the item's line in `## Ruled`.
+   appends ` → DONE <time> UTC: <what happened>` to the item's line in `## Ruled`.
 5. If the owner rules in chat to another architect directly, that architect sends the hub
-   `RULED <id>: <word> (owner, <time> <zone>, in chat)`, and the hub records it the same way.
+   `RULED <id>: <word> (owner, <time> UTC, in chat)`, and the hub records it the same way.
 6. The hub's own asks use the same format, under `main-<n>`.
 
 The hub writes the file as little as possible: one write per scan, recording every ruling
 found, and new items in batches. It re-reads the file immediately before each write. Every
-time it writes carries its zone, read from the clock (`date`).
+time it writes, in the file or in a message, is UTC on the 24-hour clock, read from the clock
+with `date -u '+%H:%M UTC'`: that is the `<time> UTC` above, and the Q&A times in 3c. A stamp
+adds the date (section 2).
 
 ### 3b. A ruling that carries a question comes back as an item
 
@@ -150,8 +177,8 @@ line, or in chat), the hub, in order:
    adding its own check where it can make one:
 
    ```markdown
-   - **You asked (10:05 pm ET):** "Could retry hide a real sign-out from the user?"
-   - **Web's answer (10:12 pm ET):** No. A refresh that fails still signs the user out and says why.
+   - **You asked (02:05 UTC):** "Could retry hide a real sign-out from the user?"
+   - **Web's answer (02:12 UTC):** No. A refresh that fails still signs the user out and says why.
      Main checked the test that forces a failed refresh: it signs out and shows the message.
    ```
 
@@ -174,11 +201,14 @@ Rule inline: one word on the line under an item's **Your word:** line, or in the
 Newest first. Only main edits this file; architects send items with `afx send architect:main 'DECISION …'`.
 
 _Status: 0 open._
+_Zone: UTC_
 
 ## Open
 
 ## Ruled
 ```
 
-Newest first in both sections. `## Open` holds only what still needs a word; `## Ruled` keeps
-one line per item.
+The `_Zone: UTC_` line stays UTC. Agents write every stamp in UTC, and the line is the zone of
+any stamp that names none, bare times included; a person who types a time in another zone
+writes the zone after it. Newest first in both sections.
+`## Open` holds only what still needs a word; `## Ruled` keeps one line per item.
