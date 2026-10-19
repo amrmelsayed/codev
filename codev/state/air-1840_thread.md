@@ -33,3 +33,9 @@ Fixed:
 
 Not taken: listing the command in the afx skill's "Other commands" block (optional; that list is
 already incomplete). `_Status:`/`_Zone:` order kept, which claude agreed with.
+
+## 2026-10-19 — architect review
+
+Architect (main) approved the integration review and asked for one line in the afx skill's
+"Other commands" block: added to all four copies (`.claude`/`.codex`, both trees; each pair kept
+byte-identical). pr gate stays pending; the architect takes the merge word to the owner.
