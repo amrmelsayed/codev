@@ -139,20 +139,22 @@ A worked example, a choice with bare words on the word line:
    Either way the hub scans every open item for text on the lines under its `**Your word:**`
    line and replies with one line per ruling found. A word in chat counts the same.
 3. **Relay and record.** For each ruling the hub relays at once,
-   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> <zone>)'`, with the owner's
+   `afx send architect:<name> 'RULING <id>: <word> (owner, <time> UTC)'`, with the owner's
    comment verbatim on the lines after it when there is one, and moves the item out of
    `## Open` into `## Ruled` as one line, the comment quoted after the word when there is one:
-   ``- **<id>** · <time> <zone> · <question> → `<word>` — "<comment>"``.
+   ``- **<id>** · <time> UTC · <question> → `<word>` — "<comment>"``.
    A ruling that carries a question goes through 3b first.
 4. **Done.** The architect acts and replies `DONE <id>: <one line of what happened>`; the hub
-   appends ` → DONE <time> <zone>: <what happened>` to the item's line in `## Ruled`.
+   appends ` → DONE <time> UTC: <what happened>` to the item's line in `## Ruled`.
 5. If the owner rules in chat to another architect directly, that architect sends the hub
-   `RULED <id>: <word> (owner, <time> <zone>, in chat)`, and the hub records it the same way.
+   `RULED <id>: <word> (owner, <time> UTC, in chat)`, and the hub records it the same way.
 6. The hub's own asks use the same format, under `main-<n>`.
 
 The hub writes the file as little as possible: one write per scan, recording every ruling
 found, and new items in batches. It re-reads the file immediately before each write. Every
-time it writes carries its zone, read from the clock (`date`).
+time it writes, in the file or in a message, is UTC on the 24-hour clock, read from the clock
+with `date -u '+%H:%M UTC'`: that is the `<time> UTC` above, and the Q&A times in 3c. A stamp
+adds the date (section 2).
 
 ### 3b. A ruling that carries a question comes back as an item
 
@@ -175,8 +177,8 @@ line, or in chat), the hub, in order:
    adding its own check where it can make one:
 
    ```markdown
-   - **You asked (10:05 pm ET):** "Could retry hide a real sign-out from the user?"
-   - **Web's answer (10:12 pm ET):** No. A refresh that fails still signs the user out and says why.
+   - **You asked (02:05 UTC):** "Could retry hide a real sign-out from the user?"
+   - **Web's answer (02:12 UTC):** No. A refresh that fails still signs the user out and says why.
      Main checked the test that forces a failed refresh: it signs out and shows the message.
    ```
 

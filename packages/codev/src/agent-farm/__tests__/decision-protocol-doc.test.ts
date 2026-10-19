@@ -105,7 +105,7 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(rulingNotice(request)).toBe('RULED web-4: retry\nShip it after the release.');
     expect(doc).toContain('`RULED <id>: <word>`');
     // The comment survives the hub's relay and its `## Ruled` record, not only the notice.
-    expect(doc).toMatch(/'RULING <id>: <word> \(owner, <time> <zone>\)'`, with the owner's\s+comment verbatim/);
+    expect(doc).toMatch(/'RULING <id>: <word> \(owner, <time> UTC\)'`, with the owner's\s+comment verbatim/);
     expect(doc).toContain('→ `<word>` — "<comment>"');
   });
 
@@ -126,11 +126,11 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     const [item] = parseDecisions(answered).items;
     expect(item).toMatchObject({ problems: [], writable: true, currentRuling: '' });
     expect(item.qa).toEqual([
-      { kind: 'asked', time: '10:05 pm ET', markdown: `"${question}"`, answered: true },
+      { kind: 'asked', time: '02:05 UTC', markdown: `"${question}"`, answered: true },
       {
         kind: 'answer',
         name: 'Web',
-        time: '10:12 pm ET',
+        time: '02:12 UTC',
         markdown:
           'No. A refresh that fails still signs the user out and says why.\n' +
           'Main checked the test that forces a failed refresh: it signs out and shows the message.',
@@ -147,6 +147,14 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     expect(under).toMatchObject({ currentRuling: 'retry', writable: false });
     const onLine = parseDecisions(posted(example.replace(wordLine, `${wordLine} retry`))).items[0];
     expect(onLine).toMatchObject({ currentRuling: '', writable: true });
+  });
+
+  it('every time the hub writes is UTC: no placeholder leaves the zone open, and the doc gives the command', () => {
+    expect(doc).not.toContain('<time> <zone>');
+    expect(doc).toContain("`date -u '+%H:%M UTC'`");
+    for (const b of blocks) {
+      for (const [, time] of b.matchAll(/\*\*(?:You asked|.+?'s answer) \(([^)]*)\):\*\*/g)) expect(time).toMatch(/^\d{2}:\d{2} UTC$/);
+    }
   });
 
   it('no time in the doc assumes a zone: every example time carries one or its file names one, and none is written as PT-only', () => {
