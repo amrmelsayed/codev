@@ -191,8 +191,9 @@ A second question gets a second pair of lines under the first.
 
 ## 4. The file
 
-Create it at `codev/state/pending-decisions.md`, or at the path `dashboard.decisionsFile` names;
-the Decisions tab appears once the file exists.
+Create it with `afx decisions init`, which writes the template below to
+`codev/state/pending-decisions.md`, or to the path `dashboard.decisionsFile` names, and never
+replaces a file that is already there. The Decisions tab appears once the file exists.
 
 ```markdown
 # Pending owner decisions — all architects (hub: main)

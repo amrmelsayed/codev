@@ -70,8 +70,8 @@ human should be able to answer from your message without opening the diff.
 ### The owner decisions file
 
 A workspace may collect every ask for the human's word in `codev/state/pending-decisions.md`,
-the dashboard's **Decisions** tab, with one architect named `main` as the hub and its only
-editor. The process and the item format are in `codev/resources/decision-protocol.md`.
+the dashboard's **Decisions** tab, with the architect `main` as hub and only editor. When the
+owner asks to use decisions, run `afx decisions init` and follow `codev/resources/decision-protocol.md`.
 
 ## UX verification
 

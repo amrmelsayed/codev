@@ -890,6 +890,25 @@ export async function runAgentFarm(args: string[]): Promise<void> {
       }
     });
 
+  // Decisions commands (Issue #1840) — the owner decisions file behind the Decisions tab
+  const decisionsCmd = program
+    .command('decisions')
+    .description("The owner decisions file behind the dashboard's Decisions tab");
+
+  decisionsCmd
+    .command('init')
+    .description('Create the decisions file from its template, which turns on the Decisions tab')
+    .option('--path <file>', 'File to create, relative to the workspace root (default: dashboard.decisionsFile, else codev/state/pending-decisions.md)')
+    .action(async (options) => {
+      const { decisionsInit } = await import('./commands/decisions.js');
+      try {
+        await decisionsInit({ path: options.path });
+      } catch (error) {
+        logger.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
   // Team commands (Spec 587) — deprecated in favor of standalone `team` CLI (Spec 599)
   const teamCmd = program
     .command('team')

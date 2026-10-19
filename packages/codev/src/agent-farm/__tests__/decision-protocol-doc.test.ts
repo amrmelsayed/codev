@@ -14,6 +14,7 @@ import { parseDecisions } from '../servers/decisions/parse.js';
 import { spliceRuling } from '../servers/decisions/splice.js';
 import { rulingNotice } from '../servers/decisions/notice.js';
 import { resolveStamp } from '../servers/decisions/stamp.js';
+import { DECISIONS_FILE_TEMPLATE } from '../servers/decisions/template.js';
 
 const REPO = resolve(import.meta.dirname, '../../../../..');
 const read = (rel: string) => readFileSync(resolve(REPO, rel), 'utf8');
@@ -47,6 +48,13 @@ describe('decision-protocol.md — its examples are what the tab parses', () => 
     const parsed = parseDecisions(fileSkeleton);
     expect(parsed.problems).toEqual([]);
     expect(parsed.items).toEqual([]);
+  });
+
+  it('the file skeleton is the template `afx decisions init` writes, and section 4 names the command above it (#1840)', () => {
+    expect(`${fileSkeleton}\n`).toBe(DECISIONS_FILE_TEMPLATE);
+    const section4 = doc.slice(doc.indexOf('## 4. The file\n'));
+    expect(section4.indexOf('`afx decisions init`')).toBeGreaterThan(0);
+    expect(section4.indexOf('`afx decisions init`')).toBeLessThan(section4.indexOf('```markdown'));
   });
 
   it('the item template reads its id, question and options; the first option is recommended', () => {
@@ -225,11 +233,13 @@ describe('decision-protocol.md — reaches both trees and is linked where adopte
       const rel = `${tree}/resources/commands/agent-farm.md`;
       const section = read(rel).match(/^### Decisions tab\n[\s\S]*?(?=^### )/m)?.[0] ?? '';
       expect(section).toContain('](../decision-protocol.md)');
+      expect(section.split('\n\n')[1]).toMatch(/^Turn the tab on with `afx decisions init`\./);
       expect(existsSync(resolve(REPO, dirname(rel), '../decision-protocol.md'))).toBe(true);
     });
 
     it(`${tree}: the architect role points at the doc`, () => {
       expect(read(`${tree}/roles/architect.md`)).toContain('`codev/resources/decision-protocol.md`');
+      expect(read(`${tree}/roles/architect.md`)).toContain('run `afx decisions init` and follow `codev/resources/decision-protocol.md`');
     });
   }
 
