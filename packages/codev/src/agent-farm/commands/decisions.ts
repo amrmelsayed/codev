@@ -41,13 +41,16 @@ export async function createDecisionsFile(options: DecisionsInitOptions = {}): P
   if (!target.inside) {
     throw new Error(`${target.displayPath} resolves outside the workspace (${target.canonicalPath}); the Decisions tab refuses it`);
   }
+  if (!configured.inside) {
+    throw new Error(`dashboard.decisionsFile (${configured.displayPath}) resolves outside the workspace; the Decisions tab refuses it`);
+  }
 
   await fsp.mkdir(path.dirname(target.canonicalPath), { recursive: true });
   try {
     await fsp.writeFile(target.canonicalPath, DECISIONS_FILE_TEMPLATE, { flag: 'wx' });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-    throw new Error(`${target.displayPath} already exists and holds the owner's rulings; it was left as it is`);
+    throw new Error(`${target.displayPath} already exists; init never replaces it, because a decisions file holds the owner's rulings`);
   }
   return { displayPath: target.displayPath, configuredPath: configured.displayPath };
 }
@@ -58,9 +61,10 @@ export async function decisionsInit(options: DecisionsInitOptions = {}): Promise
   if (displayPath === configuredPath) {
     logger.info('The Decisions tab appears in the dashboard within a few seconds.');
   } else {
+    const setting = JSON.stringify({ dashboard: { decisionsFile: displayPath } });
     logger.info(
-      `The Decisions tab reads ${configuredPath}. Set "dashboard.decisionsFile": "${displayPath}" ` +
-        'in .codev/config.json, and the tab appears within a few seconds.',
+      `The Decisions tab reads ${configuredPath}. Set ${setting} in .codev/config.json, ` +
+        'and the tab appears within a few seconds.',
     );
   }
   logger.info(`Tell your main architect: "${ARCHITECT_INSTRUCTION}"`);

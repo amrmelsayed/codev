@@ -682,6 +682,21 @@ Dismissal is CLI-only; the dashboard and VSCode held-count indicators surface th
 
 ---
 
+### afx decisions init
+
+Turn on the dashboard's Decisions tab (Issue #1840).
+
+```bash
+afx decisions init [--path <file>]
+```
+
+**Options:**
+- `--path <file>` - File to create, relative to the workspace root (default: `dashboard.decisionsFile`, else `codev/state/pending-decisions.md`)
+
+Creates the decisions file from its template and prints the sentence to tell the main architect. It never replaces an existing file, and refuses a path outside the workspace. See [Decisions tab](#decisions-tab).
+
+---
+
 ### afx interrupt
 
 Interrupt a builder mid-turn by sending an ESC keystroke to its PTY.

@@ -17,3 +17,19 @@
   setting that shows it instead. Writing config is not in the issue, so it does not.
 - Architect role: kept the section at three lines, as asked, by folding the doc pointer into the
   new sentence.
+
+## 2026-10-19 — PR #1841, CMAP round 1
+
+gemini=APPROVE, codex=REQUEST_CHANGES, claude=COMMENT (first run failed: `consult --type pr` from a
+builder needs `--issue 1840`; it could not infer the project).
+
+Fixed:
+- codex: the `--path` hint printed `"dashboard.decisionsFile": "…"`, which reads as a flat key; it
+  now prints the nested JSON `{"dashboard":{"decisionsFile":"…"}}`.
+- claude: an absolute config aborted `init --path`, but a config resolving outside the workspace
+  did not. Now any config the tab refuses is refused here too, `--path` or not (fail loud).
+- claude: added `### afx decisions init` to the command reference in both trees; the EEXIST message
+  no longer claims a directory "holds the owner's rulings".
+
+Not taken: listing the command in the afx skill's "Other commands" block (optional; that list is
+already incomplete). `_Status:`/`_Zone:` order kept, which claude agreed with.

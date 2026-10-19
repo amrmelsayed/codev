@@ -53,7 +53,7 @@ describe('afx decisions init', () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, 'the owner rulings\n');
     await expect(createDecisionsFile({ workspaceRoot: workspace })).rejects.toThrow(
-      `${DEFAULT_DECISIONS_FILE} already exists and holds the owner's rulings`,
+      `${DEFAULT_DECISIONS_FILE} already exists; init never replaces it`,
     );
     expect(read(DEFAULT_DECISIONS_FILE)).toBe('the owner rulings\n');
   });
@@ -82,6 +82,11 @@ describe('afx decisions init', () => {
     await expect(createDecisionsFile({ workspaceRoot: workspace })).rejects.toThrow('resolves outside the workspace');
     writeConfig({ dashboard: { decisionsFile: '../configured.md' } });
     await expect(createDecisionsFile({ workspaceRoot: workspace })).rejects.toThrow('resolves outside the workspace');
+    // The config the tab refuses is refused here even when --path names a good file.
+    await expect(createDecisionsFile({ workspaceRoot: workspace, path: 'owner.md' })).rejects.toThrow(
+      'dashboard.decisionsFile (../configured.md) resolves outside the workspace',
+    );
+    expect(fs.existsSync(path.join(workspace, 'owner.md'))).toBe(false);
     expect(fs.readdirSync(tmpDir).sort()).toEqual(['elsewhere', 'workspace']);
     expect(fs.readdirSync(path.join(tmpDir, 'elsewhere'))).toEqual([]);
   });
@@ -114,7 +119,9 @@ describe('afx decisions init', () => {
     await decisionsInit({ workspaceRoot: workspace, path: 'owner.md' });
     const printed = log.mock.calls.map(call => call.join(' ')).join('\n');
     expect(printed).toContain('Created owner.md');
-    expect(printed).toContain(`The Decisions tab reads ${DEFAULT_DECISIONS_FILE}. Set "dashboard.decisionsFile": "owner.md"`);
+    expect(printed).toContain(
+      `The Decisions tab reads ${DEFAULT_DECISIONS_FILE}. Set {"dashboard":{"decisionsFile":"owner.md"}} in .codev/config.json`,
+    );
     expect(printed).not.toContain('appears in the dashboard within a few seconds');
   });
 });
