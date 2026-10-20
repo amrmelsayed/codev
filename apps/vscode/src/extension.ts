@@ -51,6 +51,12 @@ import {
   type FontSizeDirection,
   type ConfigScope,
 } from './markdown-preview/font-size-control.js';
+import {
+	READING_AIDS_PLACEHOLDER,
+	initialActiveRow,
+	readingAidItems,
+	type ReadingAidItem,
+} from './markdown-preview/reading-aids.js';
 import { BuilderSpawnHandler } from './builder-spawn-handler.js';
 import { BuilderTerminalLinkProvider, ReconnectTerminalLinkProvider, IssueRefTerminalLinkProvider } from './terminal-link-provider.js';
 import { computeBuildersToClose, roleIdsFromBuilders } from './prune-builder-terminals.js';
@@ -182,6 +188,57 @@ async function stepMarkdownPreviewFontSize(direction: FontSizeDirection): Promis
 	const cfg = vscode.workspace.getConfiguration('codev.markdownPreview');
 	const next = steppedFontSize(cfg.get<number>('fontSize', 0), direction);
 	await cfg.update('fontSize', next, configTargetFor(resolveWriteScope(cfg.inspect('fontSize') ?? {})));
+}
+
+/**
+ * "Reading Aids…" (#1802): one QuickPick with a Highlight section and a Cursor section, the
+ * current choice of each checked. Picking a row writes that one setting to the scope it already
+ * lives in (same rule as the font-size buttons); the provider's config listener re-renders every
+ * open preview.
+ */
+async function pickMarkdownPreviewReadingAid(): Promise<void> {
+	const cfg = vscode.workspace.getConfiguration('codev.markdownPreview');
+	const rows = readingAidItems(cfg.get('hoverHighlight'), cfg.get('readingCursor'));
+	type Pick = vscode.QuickPickItem & { row?: ReadingAidItem };
+	const picks: Pick[] = [];
+	let section: string | undefined;
+	for (const row of rows) {
+		if (row.section !== section) {
+			section = row.section;
+			picks.push({ label: row.section, kind: vscode.QuickPickItemKind.Separator });
+		}
+		let icon = 'blank';
+		if (row.current) {
+			icon = 'check';
+		}
+		picks.push({ label: row.label, iconPath: new vscode.ThemeIcon(icon), row });
+	}
+	// createQuickPick (not showQuickPick) so the list can open on the current style.
+	const quickPick = vscode.window.createQuickPick<Pick>();
+	quickPick.title = 'Markdown Preview Reading Aids';
+	quickPick.placeholder = READING_AIDS_PLACEHOLDER;
+	quickPick.items = picks;
+	const start = initialActiveRow(rows);
+	const startPick = picks.find((p) => p.row !== undefined && p.row === start);
+	if (startPick) {
+		quickPick.activeItems = [startPick];
+	}
+	const chosen = await new Promise<Pick | undefined>((resolve) => {
+		quickPick.onDidAccept(() => {
+			resolve(quickPick.selectedItems[0]);
+			quickPick.hide();
+		});
+		quickPick.onDidHide(() => {
+			resolve(undefined);
+			quickPick.dispose();
+		});
+		quickPick.show();
+	});
+	if (!chosen?.row || chosen.row.current) {
+		return;
+	}
+	const { setting, value } = chosen.row;
+	await cfg.update(setting, value, configTargetFor(resolveWriteScope(cfg.inspect(setting) ?? {})));
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -1280,6 +1337,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			await cfg.update('fontSize', 0, configTargetFor(resolveWriteScope(cfg.inspect('fontSize') ?? {})));
 			await cfg.update('lineHeight', 0, configTargetFor(resolveWriteScope(cfg.inspect('lineHeight') ?? {})));
 		}),
+		// Reading aids (#1802): hover highlight + prose cursor, in the title-bar `…` menu.
+		reg('codev.markdownPreview.readingAids', pickMarkdownPreviewReadingAid),
 		regCli('codev.referenceIssueInArchitect', async (arg: IssueCommandArg) => {
 			// Inline-button action on a backlog row: open + focus the architect
 			// terminal, then type `#<id> "<title>" ` into its prompt without
