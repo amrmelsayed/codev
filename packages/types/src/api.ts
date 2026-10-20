@@ -91,6 +91,12 @@ export interface DashboardState {
   version?: string;
   hostname?: string;
   teamEnabled?: boolean;
+  /**
+   * Spec 1819: true when the workspace's decisions file (config
+   * `dashboard.decisionsFile`, default `codev/state/pending-decisions.md`)
+   * exists inside the workspace. Controls the Decisions tab's visibility.
+   */
+  decisionsEnabled?: boolean;
 }
 
 // --- Terminal Entry (returned by tower routes) ---
@@ -590,6 +596,120 @@ export interface TeamApiResponse {
   warnings?: string[];
   githubError?: string;
 }
+
+// --- Decisions (GET/POST /workspace/:path/api/decisions…, Spec 1819) ---
+
+/**
+ * A heading timestamp, resolved to an instant only from the zone written in it or, failing
+ * that, the file's `_Zone: …_` line.
+ */
+export interface DecisionStamp {
+  /** The stamp exactly as written in the heading. */
+  raw: string;
+  /** ISO-8601 UTC instant, or null when the stamp could not be converted. */
+  instant: string | null;
+  /** The stamp gives a time but no date (it was read as today): show the time alone. */
+  timeOnly?: true;
+  /**
+   * Why `instant` is null, when the stamp names a zone the tab cannot use or a time the
+   * clocks skipped or repeated. Absent with a null instant: no zone is known, so the stamp
+   * is shown as written.
+   */
+  unconvertedReason?: 'unknown-zone' | 'nonexistent-time' | 'ambiguous-time';
+}
+
+export interface DecisionOption {
+  /** The backticked word the owner chooses (and the tab writes). */
+  word: string;
+  /**
+   * The text after `=` on the `**Your word:**` line; failing that, the word's entry in the
+   * item body's `**Options:**` (`(a) `word` = …`, `(a) `word`: …` or `- `word` = …`); else ''.
+   */
+  description: string;
+  /** The first option on the `**Your word:**` line. */
+  recommended: boolean;
+}
+
+/** One `- **You asked (t):**` / `- **<Name>'s answer (t):**` entry from an item body. */
+export type DecisionQaEntry =
+  | { kind: 'asked'; time: string; markdown: string; answered: boolean }
+  | { kind: 'answer'; name: string; time: string; markdown: string };
+
+export type DecisionItemProblem =
+  | 'id-missing'
+  | 'duplicate-id'
+  | 'your-word-missing'
+  | 'your-word-multiple';
+
+export type DecisionsFileProblem = 'open-missing' | 'open-multiple' | 'ruled-multiple';
+
+export interface DecisionItem {
+  id: string;
+  stamp: DecisionStamp | null;
+  question: string;
+  /** Item body markdown (heading → `**Your word:**` line), Q&A entries removed. */
+  bodyMarkdown: string;
+  options: DecisionOption[];
+  /** Text after the `**Your word:**` line, trimmed, verbatim; '' when unruled. */
+  currentRuling: string;
+  qa: DecisionQaEntry[];
+  /** SHA-256 of the item's exact text (trailing blank lines excluded); echoed back on a ruling request. */
+  fingerprint: string;
+  problems: DecisionItemProblem[];
+  /** Whether the tab may write a ruling for this item. */
+  writable: boolean;
+}
+
+export interface DecisionsDocument {
+  /** Workspace-relative path of the decisions file. */
+  path: string;
+  /** SHA-256 of the whole file; changes whenever the file does. */
+  version: string;
+  /** `## Open` items, in file order. */
+  items: DecisionItem[];
+  /** `## Ruled` section content (markdown), '' when absent. */
+  ruledMarkdown: string;
+  problems: DecisionsFileProblem[];
+}
+
+export interface DecisionsRuleRequest {
+  id: string;
+  word?: string;
+  comment?: string;
+  fingerprint: string;
+}
+
+export type DecisionsRefusalCode =
+  | 'invalid-request'
+  | 'empty-ruling'
+  | 'comment-too-long'
+  | 'comment-heading'
+  | 'comment-fence'
+  | 'comment-your-word'
+  | 'open-multiple'
+  | 'heading-missing'
+  | 'heading-duplicate'
+  | 'your-word-missing'
+  | 'your-word-multiple'
+  | 'already-ruled'
+  | 'unknown-word'
+  | 'item-changed'
+  | 'structure-changed'
+  | 'not-utf8'
+  | 'write-failed'
+  | 'not-found'
+  | 'outside-workspace'
+  | 'config-error';
+
+/** GET …/api/decisions. */
+export type DecisionsReadResponse =
+  | { ok: true; document: DecisionsDocument }
+  | { ok: false; code: DecisionsRefusalCode; message: string };
+
+/** POST …/api/decisions/rule; on success, the document re-parsed from the bytes just written. */
+export type DecisionsRuleResponse =
+  | { ok: true; document: DecisionsDocument }
+  | { ok: false; code: DecisionsRefusalCode; message: string };
 
 // --- Tunnel (GET /api/tunnel/status) ---
 
