@@ -167,6 +167,23 @@ describe('AgentStateStore: ordering (SC17)', () => {
     expect(store.get(WS, ID)?.activity).toBe('needs-input');
   });
 
+  // Two same-session reports in one millisecond come from adjacent hooks of one
+  // turn step (PreToolUse and PermissionRequest, PermissionRequest and its
+  // permission_prompt Notification), which carry the same state, so arrival
+  // order is safe as the tie-break.
+  it('same-session reports with an equal hook time apply in arrival order (last writer wins)', () => {
+    const forward = makeStore();
+    forward.apply(WS, ID, event({ event: 'tool-activity', at: NOW - 100 }));
+    forward.apply(WS, ID, event({ event: 'turn-ended', at: NOW - 100 }));
+    expect(forward.get(WS, ID)?.activity).toBe('idle');
+
+    const reverse = makeStore();
+    reverse.apply(WS, ID, event({ event: 'turn-ended', at: NOW - 100 }));
+    reverse.apply(WS, ID, event({ event: 'tool-activity', at: NOW - 100 }));
+    expect(reverse.get(WS, ID)?.activity).toBe('working');
+    expect(reverse.get(WS, ID)?.latestHookAt).toBe(NOW - 100);
+  });
+
   it('a different session supersedes only with a newer hook time', () => {
     const store = makeStore();
     store.apply(WS, ID, event({ sessionId: 'new', event: 'session-started', at: NOW - 100 }));

@@ -12,13 +12,13 @@ Builders and architects are now served one attention state (`working`, `needs-in
 - [x] **SC4 idle** (Phases 3, 6): every turn end served `idle` within about 1 s.
 - [x] **SC5 no false alarm** (Phases 2, 8): a 5 min 34 s silent foreground tool stayed `working` throughout (S12); a background task held `working` through Claude's `idle_prompt` after the Phase 8 store fix (S13).
 - [x] **SC6 no stuck working** (Phase 2): Esc mid-tool fires no hook; the builder entered the waiting list at the first sample past 5 min of silence, not before (S14).
-- [x] **SC7 dead** (Phases 4, 5, 7): `/exit` served `dead` in 9 s (S16), Codex Ctrl+C in 8 s (S18); `/clear` and architect relaunch never flashed dead (S15, architect `/exit`); the dashboard card renders "Agent exited" in red with its own border, the extension row its own glyph.
+- [x] **SC7 dead** (Phases 4, 5, 7): `/exit` served `dead` in 9 s (S16), Codex Ctrl+C in 8 s (S18); `/clear` and architect relaunch never flashed dead (S15, architect `/exit`); the dashboard card renders "Agent exited" in red with its own border, the extension row its own glyph. Residual: a fully dropped architect session is #1856 (see Known Limitations).
 - [x] **SC8 blocked unchanged** (Phase 5): blocked reuses the overview's own `detectBlocked` result, ranked first.
 - [x] **SC9 fallback** (Phases 2, 6): Codex builder carries no reporter, served `null`, entered waiting by PTY silence (S18, SC9 run); the `null` path is regression-tested bit for bit against today's rule.
 - [x] **SC10 one predicate** (Phases 2, 7): every surface classifies through sdk `agentAttentionState` / `isIdleWaiting` / `deriveAttention`; `describeNeedsInput` gives one phrase everywhere.
 - [x] **SC11 in-memory state** (Phases 3, 4, 5): S17 restart: every agent was served `null` after the restart (no reported state survived, per the owner's in-memory ruling) until its next report restored it (`task-Tnj-` idle again at its next report); an exited agent was served `dead` from liveness alone with no reported state.
 - [x] **SC12 guard intact** (Phase 6): out-of-worktree Write denied by the guard with the reporter installed; both hook sets fired (S19).
-- [x] **SC13 architects** (Phases 5, 7): architect at a permission prompt listed under "architect main" in the rollups and tooltips (S20); idle architects never listed.
+- [x] **SC13 architects** (Phases 5, 7): architect at a permission prompt listed under "architect main" in the rollups and tooltips (S20); idle architects never listed. Residual: #1856.
 - [x] **SC14 completion** (Phases 1, 2): `complete`/`verified` never dead or waiting, unit-tested in core and sdk.
 - [x] **SC15 fail-open** (Phases 6, 8): SIGSTOP and SIGTERM on Tower did not delay turns, printed nothing into the TUI, left no reporter process behind; missing script is silent (shell wrapper).
 - [x] **SC16 validation and auth** (Phase 3): route tests for missing key, unknown event, over-limit fields and body, unknown agent.
@@ -44,6 +44,10 @@ Confirmed by main in the review phase:
 - `activityAt`: the last report that touched the served fields, so while `working` it also reads as "last seen active".
 - The 30-minute background-work bound anchors on `activityAt`, which a repeated claim-less turn end cannot extend.
 - The ordering watermark stays internal to the store; it is not on the wire.
+
+## Ordering Note: equal hook times
+
+A same-session report whose hook time equals the stored watermark is accepted and applied in arrival order (last writer wins); a different-session report needs a strictly newer time. This is safe because, per spec line 201 and the installed hook set, two same-session reports close enough to share a millisecond come from adjacent hooks of one turn step (`PreToolUse` and `PermissionRequest` about 10 ms apart, `PermissionRequest` and its `permission_prompt` notification), which map to the same state. State-changing steps of one turn (a tool's `PostToolUse`, then `Stop`) are separated by tool or model latency. Store test: "same-session reports with an equal hook time apply in arrival order (last writer wins)".
 
 ## Real-Session Run Log (Phase 8)
 
@@ -80,6 +84,8 @@ Setup: isolated Tower built from this branch (`CODEV_AGENT_FARM_DIR=<scratch>/af
 - **#1852** (pre-existing): the dashboard's Needs Attention list is replaced by the error when the PR fetch fails, hiding agent rows too.
 - **Startup dialogs**: an agent at a pre-session dialog (folder trust, external imports) reports nothing, so it is served `null` and today's rule applies.
 - **Deleted hooks directory**: if `~/.agent-farm/hooks` is deleted by hand, Claude fails with "Settings file not found" (exit 1), and baked builder loops relaunch every 2 s until the next `afx spawn --resume` or `afx workspace recover` reinstalls the files. Recovery is any Tower launch or `afx spawn --resume`.
+- **#1856** (SC7/SC13 residual): an architect whose session is dropped entirely (not in restart wait) vanishes from the overview instead of being served `dead`, because `liveArchitects` lists live sessions only. Scoped out at the spec (Codex iter 1) and deferred again at plan CMAP iter 1 (Gemini and Codex, rebutted as out of scope); restart-wait architects and every builder case are served `dead`.
+- **#1857**: the Stream Deck face is the deck's twin of the VS Code builder row but renders `blocked` and `active` only; the served needs-input, idle and dead states are #1857 (noted in `apps/streamdeck/src/face.ts`).
 - **Codex and OpenCode** report no lifecycle events; they get liveness (`dead`) and today's PTY rule. Codex reporter is #1796.
 
 ## Consultation Feedback
@@ -386,7 +392,7 @@ REQUEST_CHANGES
 #### Claude
 APPROVE
 - **Concern** (non-blocking): `/api/agent-lifecycle` not on the tunnel block list → **Addressed**: blocked in `tunnel-client.ts` (bare, workspace-scoped, percent-encoded), test added.
-- **Concern** (non-blocking): hooks-deletion crash loop → **N/A**: documented; bounded-relaunch guard proposed in the PR description.
+- **Concern** (non-blocking): hooks-deletion crash loop → **N/A**: documented; bounded-relaunch guard filed as #1855.
 - **Concern** (non-blocking): a served `idle` now counts as waiting at once on the status bar and badge → **N/A**: SC4 as approved; an intended behavior change, noisier than the 5-minute rule.
 - **Concern** (nit): some rebuttals untracked → **Addressed** (as Codex).
 
@@ -454,4 +460,6 @@ APPROVE
 - #1852: dashboard Needs Attention should keep agent rows when the PR fetch fails.
 - #1796: Codex lifecycle reporter.
 - Mailbox render gate (#1590, the #1583 family) can consume the same turn-ended events from the store instead of screen inference.
-- Optional: a one-line guard in the baked builder loop that stops relaunching after repeated immediate exits (proposed in the PR description only).
+- #1855: bounded-relaunch guard in the baked builder loop, so a deleted hooks directory cannot crash-loop every 2 s.
+- #1856: serve a dropped architect session as `dead` instead of dropping it from the overview.
+- #1857: Stream Deck face renders the served needs-input, idle and dead states.
