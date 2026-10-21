@@ -45,7 +45,9 @@ export interface ServedAgentState {
   alive: boolean | null;
   /** The latest accepted reported activity, or `null` when none has been reported. */
   activity: AgentActivity | null;
-  /** ISO hook time of the latest accepted report, or `null`. */
+  /**
+   * ISO hook time of the latest report applied to the served fields, or `null`. A claim-less turn end repeated while `backgroundWork` is held advances ordering only and does not move it.
+   */
   activityAt: string | null;
   /** True when the agent ended its turn with its own background work still running. */
   backgroundWork: boolean;
