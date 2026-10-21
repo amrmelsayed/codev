@@ -242,6 +242,23 @@ describe('classifyProjectGovernance and shouldOfferBootstrap', () => {
     expect(bootstrapEligibleFiles(statuses).map(file => file.name)).not.toContain('arch.md');
   });
 
+  it('a symlinked codev/ makes every governance file curated, named by the link', () => {
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'codev-1797-elsewhere-'));
+    try {
+      fs.mkdirSync(path.join(elsewhere, 'resources'));
+      for (const file of GOVERNANCE_FILES) {
+        fs.writeFileSync(path.join(elsewhere, 'resources', file.name), knownStarterTexts(file, templatesDir)[0]);
+      }
+      fs.symlinkSync(elsewhere, path.join(dir, 'codev'));
+      const statuses = classifyProjectGovernance(dir, templatesDir);
+      expect(statuses.every(status => status.class === 'curated')).toBe(true);
+      expect(statuses.map(status => status.pathKind)).toEqual(GOVERNANCE_FILES.map(() => 'inside a symlinked codev/'));
+      expect(bootstrapEligibleFiles(statuses)).toEqual([]);
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
   it('a directory where a governance file belongs is curated, never eligible', () => {
     writeStarters();
     fs.rmSync(path.join(dir, 'codev', 'resources', 'lessons-learned.md'));

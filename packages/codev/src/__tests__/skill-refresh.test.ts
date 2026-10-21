@@ -66,6 +66,17 @@ describe('skill hashing', () => {
     expect(classifySkill(path.join(project, '.claude/skills/demo'), path.join(skeleton, '.claude/skills/demo'), '.claude/skills/demo'))
       .toBe('not-regular');
   });
+
+  it.skipIf(process.getuid?.() === 0)('an unreadable skill directory is not-regular, not a thrown update', () => {
+    write(project, '.claude/skills/demo/SKILL.md', NEW);
+    const locked = path.join(project, '.claude/skills/demo');
+    fs.chmodSync(locked, 0o000);
+    try {
+      expect(classifySkill(locked, path.join(skeleton, '.claude/skills/demo'), '.claude/skills/demo')).toBe('not-regular');
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+  });
 });
 
 describe('refreshSkills', () => {

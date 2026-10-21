@@ -124,11 +124,37 @@ export function classifyGovernanceFile(content: string | null, starters: string[
 }
 
 /**
+ * The first directory on the way to `relPath` (relative to `root`, the file itself
+ * excluded) that exists but is not a real directory, described for a report (`a symlinked
+ * codev/`), else undefined. A missing directory is not irregular: it is simply created.
+ */
+export function irregularAncestor(root: string, relPath: string): string | undefined {
+  const parts = relPath.split(/[\\/]/).slice(0, -1);
+  let current = '';
+  for (const part of parts) {
+    current = current === '' ? part : `${current}/${part}`;
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(path.join(root, current));
+    } catch {
+      return undefined;
+    }
+    if (stat.isSymbolicLink()) return `a symlinked ${current}/`;
+    if (!stat.isDirectory()) return `${current}, which is not a directory`;
+  }
+  return undefined;
+}
+
+/**
  * What a governance path is when it is not a regular file (`a symlink`, `not a regular
  * file`), else undefined. Read with lstat, never through the link: change detection hashes
  * a symlink by its target, so a write through the link would go unseen.
  */
 export function governancePathKind(root: string, file: GovernanceFile): string | undefined {
+  // A symlinked `codev/` or `codev/resources/` would carry every write, and every read,
+  // outside the project just as surely as a symlinked file.
+  const ancestor = irregularAncestor(root, path.join('codev', 'resources', file.name));
+  if (ancestor !== undefined) return `inside ${ancestor}`;
   let stat: fs.Stats;
   try {
     stat = fs.lstatSync(path.join(root, 'codev', 'resources', file.name));
@@ -379,7 +405,8 @@ export type ViolationKind =
   | 'ambiguous-map-section'
   | 'unmapped-section'
   | 'too-many-cold-sections'
-  | 'missing-guidance';
+  | 'missing-guidance'
+  | 'not-regular';
 
 export interface Violation {
   kind: ViolationKind;

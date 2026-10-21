@@ -68,6 +68,8 @@ export function readSkillFiles(dir: string): SkillFile[] | null {
   if (!stat.isDirectory()) return null;
 
   const files: SkillFile[] = [];
+  // An unreadable directory or file reads as null, which classifies as not-regular: the
+  // skill is reported and left alone rather than ending the whole update.
   const walk = (current: string, prefix: string): void => {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (isIgnoredSkillFile(entry.name)) continue;
@@ -82,7 +84,11 @@ export function readSkillFiles(dir: string): SkillFile[] | null {
       }
     }
   };
-  walk(dir, '');
+  try {
+    walk(dir, '');
+  } catch {
+    return null;
+  }
   return files;
 }
 
@@ -121,7 +127,7 @@ export type SkillState =
   | 'edited'
   /**
    * A symlink or a file where the skill directory should be, or a directory holding a
-   * symlink. Left alone: a write could land outside the project.
+   * symlink, or one that cannot be read. Left alone: a write could land outside the project.
    */
   | 'not-regular';
 

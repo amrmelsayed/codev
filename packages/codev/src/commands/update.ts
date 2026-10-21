@@ -257,7 +257,7 @@ export async function update(options: UpdateOptions = {}): Promise<UpdateResult>
     }
     for (const skill of skillsResult.notRegular) {
       result.skipped.push(skill);
-      log(chalk.dim('  - (skipped, symlinked or not a directory)'), skill);
+      log(chalk.dim('  - (skipped, symlinked, unreadable, or not a directory)'), skill);
     }
 
     // Update root files (CLAUDE.md, AGENTS.md). A dry run reports the same outcome and

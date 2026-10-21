@@ -26,6 +26,8 @@ import {
   bootstrapEligibleFiles,
   classifyProjectFile,
   classifyProjectGovernance,
+  irregularAncestor,
+  governancePathKind,
   isNonEmptyRepo,
   knownStarterTexts,
   topLevelHeadings,
@@ -115,6 +117,7 @@ export type BootstrapOutcome =
   | 'dry-run'
   | 'manual'
   | 'declined'
+  | 'unsafe-path'
   | 'ran';
 
 export type FileStatus = GovernanceStatus;
@@ -208,7 +211,7 @@ const INLINE_REASONS: Record<Exclude<SkillState, 'current'>, string> = {
   missing: 'is missing',
   shipped: 'is an older version (`codev update` refreshes it)',
   edited: 'has local edits',
-  'not-regular': 'is a symlink, holds one, or is not a directory',
+  'not-regular': 'is a symlink, holds one, is unreadable, or is not a directory',
 };
 
 /**
@@ -426,6 +429,40 @@ function reportHasChanges(report: ChangeReport): boolean {
 }
 
 // =============================================================================
+// This command's own files
+// =============================================================================
+
+/**
+ * Why `relPath` (one of this command's files under `.consult/bootstrap-docs/`) cannot be
+ * written safely, else undefined. A symlinked `.consult/`, directory or file would carry the
+ * write outside the project, before change detection has started.
+ */
+function artifactPathProblem(root: string, relPath: string): string | undefined {
+  const ancestor = irregularAncestor(root, relPath);
+  if (ancestor !== undefined) return `${relPath} would be written through ${ancestor}`;
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(path.join(root, relPath));
+  } catch {
+    return undefined;
+  }
+  if (stat.isSymbolicLink()) return `${relPath} is a symlink`;
+  if (!stat.isFile()) return `${relPath} is not a regular file`;
+  return undefined;
+}
+
+/** Write one of this command's files, or return why it was not written. */
+function writeArtifact(root: string, relPath: string, content: string): string | undefined {
+  const problem = artifactPathProblem(root, relPath);
+  if (problem !== undefined) return problem;
+  const full = path.join(root, relPath);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.rmSync(full, { force: true });
+  fs.writeFileSync(full, content, { flag: 'wx' });
+  return undefined;
+}
+
+// =============================================================================
 // Validation
 // =============================================================================
 
@@ -436,6 +473,11 @@ function readIfExists(filePath: string): string | null {
 
 function validateDrafts(root: string, eligible: GovernanceFile[], templatesDir: string): DraftValidation[] {
   return eligible.map(file => {
+    // A draft the session replaced with a symlink is never read through.
+    const kind = governancePathKind(root, file);
+    if (kind !== undefined) {
+      return { name: file.name, state: 'written', violations: [{ kind: 'not-regular', message: `the draft is now ${kind}, so it was not read` }], unmappedInfo: [] };
+    }
     const content = readIfExists(path.join(root, governancePath(file.name)));
     if (content === null) return { name: file.name, state: 'deleted', violations: [], unmappedInfo: [] };
     if (classifyProjectFile(root, file, templatesDir) === 'placeholder') {
@@ -500,8 +542,11 @@ async function reviewDrafts(
     PROJECT_NAME: path.basename(root),
     DRAFTS: renderDrafts(root, written),
   });
-  fs.mkdirSync(path.join(root, REVIEW_DIR), { recursive: true });
-  fs.writeFileSync(path.join(root, REVIEW_PROMPT_FILE), prompt);
+  // consult writes each reviewer's feedback itself, so its paths are checked here too.
+  const reviewPaths = [REVIEW_PROMPT_FILE, ...REVIEW_MODELS.map(model => `${REVIEW_DIR}/${model}.md`)];
+  const blocked = reviewPaths.map(rel => artifactPathProblem(root, rel)).find(problem => problem !== undefined);
+  if (blocked !== undefined) return { ran: true, unavailable: blocked, reviewers: [] };
+  writeArtifact(root, REVIEW_PROMPT_FILE, prompt);
 
   deps.log('');
   deps.log(`Reviewing the drafts with ${REVIEW_MODELS.join(', ')} (feedback goes to ${REVIEW_DIR}/; nothing is applied)…`);
@@ -775,9 +820,12 @@ export async function runBootstrapDocs(
   }
 
   const prompt = buildPrompt(root, deps.skeletonDir, eligible.map(file => file.name), curated, skillSource);
-  const promptPath = path.join(root, PROMPT_FILE);
-  fs.mkdirSync(path.dirname(promptPath), { recursive: true });
-  fs.writeFileSync(promptPath, prompt);
+  const promptProblem = writeArtifact(root, PROMPT_FILE, prompt);
+  if (promptProblem !== undefined) {
+    log(chalk.red(`Cannot save the bootstrap prompt: ${escapeControlChars(promptProblem)}.`));
+    log('Nothing was launched. Make it a regular path inside the project, then run `codev bootstrap-docs` again.');
+    return { exitCode: 1, outcome: 'unsafe-path', files, launched: false };
+  }
 
   const promptBytes = Buffer.byteLength(prompt);
   if (!unavailable && promptBytes > MAX_PROMPT_BYTES) {
@@ -803,6 +851,7 @@ export async function runBootstrapDocs(
   log(`  It follows ${describeSkillSource(skillSource)}.`);
   log(`  It may write only: ${eligible.map(file => governancePath(file.name)).join(', ')}`);
   log('  It consumes model quota on your agent account.');
+  log(`  Afterwards the drafts are sent to ${REVIEW_MODELS.join(', ')} for review, through \`consult\`.`);
   log(`  ${describePermissions(launch, prompt)}`);
   log('  When it says the drafts are done, exit the session; Codev then checks what changed.');
 

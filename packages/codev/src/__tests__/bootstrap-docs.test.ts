@@ -845,3 +845,83 @@ describe('codev bootstrap-docs: draft review', () => {
     }
   });
 });
+
+describe('codev bootstrap-docs: symlinked paths', () => {
+  let outside: string;
+
+  beforeEach(() => {
+    outside = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-docs-outside-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('a symlinked .consult/ stops the run before anything is written or launched', async () => {
+    setUpGitProject();
+    fs.symlinkSync(outside, path.join(dir, '.consult'));
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts()));
+    expect(result.outcome).toBe('unsafe-path');
+    expect(result.exitCode).toBe(1);
+    expect(spawned).toEqual([]);
+    expect(fs.readdirSync(outside)).toEqual([]);
+    expect(output()).toContain('would be written through a symlinked .consult/');
+  });
+
+  it('a symlinked prompt file is never written through', async () => {
+    setUpGitProject();
+    const target = path.join(outside, 'victim.md');
+    fs.writeFileSync(target, 'keep me\n');
+    fs.mkdirSync(path.join(dir, REVIEW_DIR), { recursive: true });
+    fs.symlinkSync(target, path.join(dir, PROMPT_FILE));
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts()));
+    expect(result.outcome).toBe('unsafe-path');
+    expect(spawned).toEqual([]);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('keep me\n');
+  });
+
+  it('a symlinked reviewer output skips the review and is never written through', async () => {
+    setUpGitProject();
+    const target = path.join(outside, 'victim.md');
+    fs.writeFileSync(target, 'keep me\n');
+    fs.mkdirSync(path.join(dir, REVIEW_DIR), { recursive: true });
+    fs.symlinkSync(target, path.join(dir, REVIEW_DIR, 'codex.md'));
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts()));
+    expect(consulted).toEqual([]);
+    expect(result.review?.unavailable).toBe(`${REVIEW_DIR}/codex.md is a symlink`);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('keep me\n');
+    expect(fs.existsSync(path.join(dir, REVIEW_PROMPT_FILE))).toBe(false);
+  });
+
+  it('a symlinked codev/resources/ makes every file curated, so nothing is eligible', async () => {
+    git('init', '-q', '-b', 'main');
+    git('config', 'core.excludesFile', '/dev/null');
+    for (const [name, starter] of Object.entries(STARTERS)) {
+      fs.writeFileSync(path.join(outside, name), fs.readFileSync(path.join(templatesDir, starter), 'utf-8'));
+    }
+    fs.mkdirSync(path.join(dir, 'codev'));
+    fs.symlinkSync(outside, path.join(dir, 'codev', 'resources'));
+    write('src/main.ts', 'export const main = 1;\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'initial');
+
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => writeDrafts()));
+    expect(result.outcome).toBe('nothing-eligible');
+    expect(spawned).toEqual([]);
+    expect(output()).toContain('inside a symlinked codev/resources/');
+  });
+
+  it('a draft the session replaced with a symlink is reported, not read through', async () => {
+    setUpGitProject();
+    const target = path.join(outside, 'arch.md');
+    fs.writeFileSync(target, DRAFTS['arch.md']);
+    const result = await runBootstrapDocs({ cwd: dir }, deps(() => {
+      writeDrafts(['arch-critical.md', 'lessons-critical.md', 'lessons-learned.md']);
+      fs.rmSync(path.join(dir, resource('arch.md')));
+      fs.symlinkSync(target, path.join(dir, resource('arch.md')));
+    }));
+    const arch = result.validation?.find(draft => draft.name === 'arch.md');
+    expect(arch?.violations.map(violation => violation.kind)).toEqual(['not-regular']);
+    expect(result.exitCode).toBe(1);
+  });
+});
