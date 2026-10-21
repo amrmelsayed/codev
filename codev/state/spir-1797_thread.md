@@ -118,3 +118,5 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - An unreadable skill is skipped by `update`.
 - The launch statement discloses the three-model review.
 - Full suite: 323 files, 6709 passed; tsc clean.
+
+**Owner's manual adopt:** the skill folders were empty because an earlier install's files had been removed. `adopt` skipped existing folders even when empty (pre-existing), and `update` would have called them edited. Both now treat an empty skill folder as missing. Tested, and reproduced on a scratch repo: 20 folders filled.
