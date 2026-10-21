@@ -161,10 +161,21 @@ function matchesAuthor(item: IssueSearchItem, author: string, me: string | undef
   return !!item.author && item.author.toLowerCase() === target;
 }
 
+/**
+ * Sort key for an issue id: numbers numerically, as before; tracker keys
+ * (#1740) by project then number (`ENG-9` before `ENG-10`), via a zero-padded
+ * string. Keys sort after numbers in a mixed list.
+ */
+function idSortKey(id: string): number | string {
+  const key = id.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
+  if (key) { return `${key[1].toUpperCase()}-${key[2].padStart(12, '0')}`; }
+  return Number(id) || 0;
+}
+
 /** Numeric/string sort key per column; `age` uses negated time so larger = older. */
 function sortKey(item: IssueSearchItem, column: BacklogSortColumn): number | string {
   switch (column) {
-    case 'id': return Number(item.id) || 0;
+    case 'id': return idSortKey(item.id);
     case 'title': return item.title.toLowerCase();
     case 'area': return item.area.toLowerCase();
     case 'assignee': return (item.assignees?.[0] ?? '').toLowerCase();

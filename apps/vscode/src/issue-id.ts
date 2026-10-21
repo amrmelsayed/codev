@@ -41,3 +41,25 @@ export function acceptsIssueKeys(
   if (surface === 'explicit') { return true; }
   return !!data?.backlog?.some(item => isIssueKey(item.id));
 }
+
+/**
+ * How an issue id reads in labels and messages: `#42` for numbers (and any
+ * non-key id, as before), `ENG-123` for a canonical tracker key, which is
+ * never written with a `#`.
+ */
+export function issueRef(id: string): string {
+  if (/^[A-Z][A-Z0-9_]*-\d+$/.test(id)) { return id; }
+  return `#${id}`;
+}
+
+/**
+ * The id part of a terminal role id, for matching against overview builders:
+ * `builder-pir-eng-123` → `eng-123`, `builder-spir-126` → `126`. Splitting on
+ * the last `-` instead would turn a key into its digits and match the wrong
+ * builder (#1740).
+ */
+export function roleShortId(roleId: string): string {
+  const m = roleId.match(/^builder-[a-z]+-(.+)$/i);
+  if (m) { return m[1]; }
+  return roleId.split('-').pop() ?? roleId;
+}

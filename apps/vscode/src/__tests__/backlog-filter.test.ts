@@ -263,6 +263,12 @@ describe('searchBacklog — sort', () => {
     expect(searchBacklog(items, { sort: 'id', direction: 'asc' }).map(i => i.id)).toEqual(['2', '7', '10']);
   });
 
+  it('sorts tracker keys by project then number, after numbers (#1740)', () => {
+    const keyed = ['ENG-10', 'ENG-9', 'API-3', '42'].map(id => searchItem({ id, title: id, area: '', createdAt: '' }));
+    expect(searchBacklog(keyed, { sort: 'id', direction: 'asc' }).map(i => i.id)).toEqual(['42', 'API-3', 'ENG-9', 'ENG-10']);
+    expect(searchBacklog(keyed, { sort: 'id', direction: 'desc' }).map(i => i.id)).toEqual(['ENG-10', 'ENG-9', 'API-3', '42']);
+  });
+
   it('sorts by title case-insensitively (asc)', () => {
     expect(searchBacklog(items, { sort: 'title', direction: 'asc' }).map(i => i.title))
       .toEqual(['alpha', 'Beta', 'Gamma']);

@@ -91,6 +91,7 @@ import { runPreflight, recheckCli, isCliReady, showPreflightFeedback, probeTower
 import { detectIdeMode, decideActivationTier, activationPolicy, IDE_SIMULATION_ENV_VAR } from './ide-mode.js';
 import { detectWorkspace, detectWorkspacePath, detectIsBuilderWorktree } from './workspace-detector.js';
 import { loadWorktreeConfig, hasRunnableDevCommand } from './load-worktree-config.js';
+import { issueRef } from './issue-id.js';
 
 let connectionManager: ConnectionManager | null = null;
 let terminalManager: TerminalManager | null = null;
@@ -1322,8 +1323,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		reg('codev.copyBacklogIssueNumber', async (arg: vscode.TreeItem | undefined) => {
 			if (arg instanceof BacklogTreeItem) {
-				await vscode.env.clipboard.writeText(`#${arg.issueId}`);
-				vscode.window.showInformationMessage(`Codev: Copied #${arg.issueId}`);
+				await vscode.env.clipboard.writeText(issueRef(arg.issueId));
+				vscode.window.showInformationMessage(`Codev: Copied ${issueRef(arg.issueId)}`);
 			}
 		}),
 		reg('codev.viewBacklogIssue', (arg: vscode.TreeItem | string | undefined) =>
