@@ -88,7 +88,7 @@ Land the contract every later phase codes against, plus the single projection po
   - Output: `ServedAgentState | null`.
   - Precedence: blocked, then dead (never for `complete`/`verified`), then reported activity, then `null`.
   - It sets `source`, `since` and the raw inputs. It never parses `status.yaml` and holds no gate list.
-- `packages/core/package.json`: `./agent-state` export. `packages/core/src/__tests__/agent-state.test.ts` (new).
+- `packages/core/package.json`: `./agent-state` export. It imports only `@cluesmith/codev-types`, never `codev-sdk` (#1189; the core boundary test `no-sdk-import.test.ts` covers it). `packages/core/src/__tests__/agent-state.test.ts` (new).
 
 #### Deliverables
 
@@ -179,7 +179,7 @@ Give Tower the one write-only route and the in-memory store, with identity resol
   - Architect: name plus workspace, matched against the workspace's registered architects.
   - Returns the store key (the builder's lowercased role id, derived as above, or the architect's name) or `null`. It never throws: `detectCurrentBuilderId` throws by design (#1094), but the resolver uses only the shared row matcher, and the route maps `null` to a rejection.
   - **Cost.** Ingestion fires per tool call. Lookups use Tower's own `getGlobalDb()` handle, never a new readonly connection per call, behind a small memo keyed by the normalized path. The memo is invalidated when the builders or architects registry changes and bounded by a short TTL, so a newly spawned agent resolves on its first report.
-  - `detectCurrentBuilderId` in `commands/send.ts` is refactored to call the same row-matching helper, so builder identity has one lookup.
+  - `detectCurrentBuilderId` in `commands/send.ts` is refactored to call the same row-matching helper, so builder identity has one lookup (main confirmed this as the single-source-of-truth fix). Its identity precedence stays env-first then cwd (owner ruling on #1783, "keep as is"). The #1783 tests (`bugfix-1783-builder-identity-env.test.ts` and the send/whoami tests) must pass **unchanged**.
 - `packages/codev/src/agent-farm/servers/agent-state/route.ts` (new): `handleAgentLifecycle`.
   - `readBody(req, 8192)`.
   - Strict validation against the contract and its limits: unknown keys rejected, the event-name allowlist, lengths, a finite `at`.
@@ -190,7 +190,11 @@ Give Tower the one write-only route and the in-memory store, with identity resol
 - `packages/codev/src/agent-farm/servers/tower-routes.ts`: a `'POST /api/agent-lifecycle'` entry in `ROUTES`.
 - `packages/codev/src/agent-farm/servers/tower-server.ts`: wire the store's change event to `broadcastNotification({ type: 'overview-changed', ... })`.
 - `packages/codev/src/lib/agent-env.ts`: export `ARCHITECT_WORKSPACE_ENV = 'CODEV_ARCHITECT_WORKSPACE'` and strip it in `sanitizeAgentEnv`.
-- Tower session creation (`tower-routes.ts` terminal creation and the architect launch env in `tower-instances.ts`/`tower-terminals.ts`): set `CODEV_TOWER_PORT` to Tower's listening port on every agent session. It is set on the **final composed** session env, after `sanitizeAgentEnv` and after any client-supplied env is merged. At `tower-routes.ts:897`, sanitization runs only when the client supplies an env, so the port is added in both branches.
+- Tower session creation (`tower-routes.ts` terminal creation and the architect launch env in `tower-instances.ts`/`tower-terminals.ts`): set `CODEV_TOWER_PORT` to Tower's listening port on every agent session. Main's conditions (2026-10-21):
+  - It is set on the **final composed** env in **every** session-creation path (both `tower-routes.ts` branches, plus the `tower-instances.ts` and `tower-terminals.ts` architect launches), after `sanitizeAgentEnv` and after any client env merge, so Tower always overwrites an inherited value. At `tower-routes.ts:897`, sanitization runs only when the client supplies an env, which is why both branches need it.
+  - It is **not** added to `sanitizeAgentEnv`'s strip list: a nested `afx spawn` still goes through Tower, which overwrites it.
+  - The only default is `DEFAULT_TOWER_PORT` from `@cluesmith/codev-sdk/constants`, with no second constant. The generated reporter script embeds that value at generation time.
+  - The reporter connects to `127.0.0.1` only.
 - `packages/codev/src/agent-farm/servers/tower-instances.ts` (main and add-architect launch) and `tower-terminals.ts` (restart and reconnect): set `CODEV_ARCHITECT_WORKSPACE` beside `CODEV_ARCHITECT_NAME` at all four sites.
 - Tests (new): `agent-state/__tests__/store.test.ts`, `identity.test.ts`, `route.test.ts`, plus the `agent-env` test extension.
 
@@ -212,6 +216,8 @@ Give Tower the one write-only route and the in-memory store, with identity resol
   - `sanitizeAgentEnv` strips `CODEV_ARCHITECT_WORKSPACE`.
 - [ ] Test 6 (persistence half): ingestion writes nothing to `global.db`. A fresh store holds no state.
 - [ ] Every architect launch site sets the variable. A test asserts the four sites' env.
+- [ ] `CODEV_TOWER_PORT` is present on the final env of every session-creation path, overriding an inherited value, and is not stripped by `sanitizeAgentEnv`.
+- [ ] The #1783 identity tests pass unchanged. A new ingestion-side test resolves a differently spelled path to the same builder.
 
 #### Test Plan
 
@@ -315,10 +321,15 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
     - `SessionStart`, `UserPromptSubmit`, `PostToolUse` (all tools), `PreToolUse` matched to the question tool only, `PermissionRequest`, `Notification`, `Stop`. `SessionEnd` is not wired.
     - Every hook is `async: true` with a short `timeout`, and runs one identical command.
     - **The command fails silently even when the script is missing** (SC15). It is a shell wrapper, not a bare `node <path>`: `[ -f '<script>' ] && node '<script>' >/dev/null 2>&1; exit 0`. A deleted or never-written script, a missing `node`, or a crash produces no output and exit 0. The wrapper text is the same for every agent.
-  - **`ensureLifecycleReporterInstalled()`**: writes both files to `~/.agent-farm/hooks/` atomically, only when the content differs.
+  - **`ensureLifecycleReporterInstalled()`**: writes both files to the hooks directory (main's conditions, 2026-10-21):
+    - The directory derives from `AGENT_FARM_DIR` (`@cluesmith/codev-core/constants`), so it resolves under `USERPROFILE` on Windows (#1658).
+    - Each write is a temp file plus rename, done only when the content differs.
+    - Modes are set explicitly, not left to umask: directory `0700`, files `0600`.
+    - The `--settings` path handed to the harness is absolute.
+    - Neither file embeds a secret. The local key is read at hook time from its own file, never baked into the script or the settings.
 - `packages/codev/src/agent-farm/utils/harness.ts`:
   - The optional capability `buildLifecycleReporterInjection(settingsPath): { args: string[]; scriptFragment: string; env: Record<string, string> }`. It covers both launch shapes in one call (Constraint 17), following `buildResume`'s single-method dual-form precedent (`args` plus `scriptFragment`). The role injection's two-method pair is the other documented form; one method keeps the capability a single optional member whose absence means unsupported.
-  - `CLAUDE_HARNESS` implements it as `--settings '<path>'`. Codex and OpenCode do not.
+  - `CLAUDE_HARNESS` implements it as `--settings '<path>'`. Codex and OpenCode do not. Main reads Constraint 17 the same way. Absence means unsupported: there is no default in the interface, and the per-provider knowledge stays inside the provider, with no exported provider tables (the #1797 precedent).
 - `packages/codev/src/agent-farm/commands/spawn-worktree.ts`: both launch scripts (lines ~1164 and ~1255) append the fragment to the **base command**, before `withRole`, `initial` and `resume` are built, and merge its env into the exported block unconditionally (also when there is no role). Every loop form then carries the reporter: initial, resume, pinned fresh, unpinned fresh and crash resume. This covers `afx spawn`, `afx spawn --resume` and `afx workspace recover`, which regenerate or rerun these scripts.
 - `packages/codev/src/agent-farm/servers/tower-utils.ts`: the injection is applied in exactly two places, so no launch gets it twice:
   - **inside `buildArchitectArgs`**, on both its role and no-role branches. Every `resolveArchitectLaunch` return except the resume primary already spreads `buildArchitectArgs` (`tower-utils.ts:400`, `:423` fallback, `:438`), as do the crash-loop fallback, fresh launch and reconnect-restart builders;
@@ -337,6 +348,7 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
   - every Claude hook fixture maps to the expected neutral event with limits applied: `Stop` with and without background tasks, every Notification type, `PermissionRequest` for Bash, Write and the question tool, `PreToolUse` for the question tool, and each `SessionStart` source;
   - exit 0 and empty stdout when Tower is down, slow, or erroring, on malformed input, and with no identity;
   - the **exact generated hook command** (wrapper included), run through a shell after the script file is deleted: no stdout, no stderr, exit 0;
+  - the installer sets modes `0700`/`0600` regardless of umask, rewrites only on a content change, and leaves no secret in either file;
   - no request is made without identity.
 - [ ] Test 7: the injection is present in each of these forms. Codex, OpenCode and custom providers include none.
   - Claude builder: fresh, resume, and every loop branch.
