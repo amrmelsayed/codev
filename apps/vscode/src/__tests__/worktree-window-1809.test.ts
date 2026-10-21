@@ -5,9 +5,14 @@
  *   dev for its own builder even though its Tower workspace path is the parent.
  * - Activity hooks are suppressed in a worktree window: every event would carry
  *   the parent root and misreport the main workspace as focused.
+ * - Gate / mailbox toasts, status-bar counts and the activity-bar badge are off
+ *   there: they summarize (and the gate toast's Approve acts on) the PARENT's
+ *   builders, which surfaced as a burst of sibling-lane toasts at the dev gate.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const { openExternal } = vi.hoisted(() => ({ openExternal: vi.fn(async () => true) }));
 
@@ -51,5 +56,28 @@ describe('activity hooks in a builder-worktree window', () => {
     setActivityHooksSuppressed(false);
     fireActivity('/repo', 'window-focus');
     expect(openExternal).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Parent-scoped surfaces stay off in a builder-worktree window. extension.ts's
+// activate() can't be driven in a unit test, so pin the wiring at the source level
+// (the convention workspace.test.ts uses).
+describe('parent-scoped surfaces in a builder-worktree window', () => {
+  const EXT_SRC = readFileSync(resolve(__dirname, '../extension.ts'), 'utf8');
+
+  it('computes the window flag from the shared detector', () => {
+    expect(EXT_SRC).toMatch(/const isBuilderWorktreeWindow = detectIsBuilderWorktree\(\);/);
+  });
+
+  it('does not start gate or mailbox-escalation toasts there', () => {
+    expect(EXT_SRC).toMatch(
+      /if \(!isBuilderWorktreeWindow\) \{\s*activateGateToasts\(context, overviewCache\);[\s\S]*?activateMailboxEscalationToasts\(context, connectionManager, overviewCache\);\s*\}/,
+    );
+    expect(EXT_SRC.match(/activateGateToasts\(/g)).toHaveLength(1);
+  });
+
+  it('shows no parent builder counts in the status bar or the activity-bar badge', () => {
+    expect(EXT_SRC).toMatch(/const updateStatusBarCounts = \(\) => \{[\s\S]*?if \(isBuilderWorktreeWindow\) \{ return; \}/);
+    expect(EXT_SRC).toMatch(/if \(isBuilderWorktreeWindow \|\| connectionManager\?\.getState\(\) !== 'connected' \|\| !data\) \{\s*buildersView\.badge = undefined;/);
   });
 });

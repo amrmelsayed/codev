@@ -259,6 +259,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		hasCodevWorkspace: detectWorkspacePath() !== null,
 	});
 	const policy = activationPolicy(tier);
+	// #1809: a builder-worktree window attaches read-only to the PARENT
+	// workspace, so its overview data is the parent's builders. Surfaces that
+	// summarize or act on those builders (gate toasts with their Approve button,
+	// mailbox-escalation toasts, status-bar counts, the activity-bar badge) stay
+	// off in such a window; the parent's own window carries them. Computed once:
+	// a folder change restarts the extension host.
+	const isBuilderWorktreeWindow = detectIsBuilderWorktree();
 
 	// The two layer-model context keys (#1144). `codev.ideMode` is immutable
 	// for the window's lifetime (appName can't change in-process).
@@ -487,6 +494,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Each is shown only when > 0, with its own icon.
 	const updateStatusBarCounts = () => {
 		if (!statusBarItem || connectionManager?.getState() !== 'connected') { return; }
+		if (isBuilderWorktreeWindow) { return; }
 		const data = overviewCache.getData();
 		if (!data) { return; }
 		const builderCount = data.builders.length;
@@ -547,7 +555,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const updateActivityBadge = () => {
 		if (!buildersView) { return; }
 		const data = overviewCache.getData();
-		if (connectionManager?.getState() !== 'connected' || !data) {
+		if (isBuilderWorktreeWindow || connectionManager?.getState() !== 'connected' || !data) {
 			buildersView.badge = undefined;
 			return;
 		}
@@ -1736,12 +1744,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Toast on new gate-pending — surfaces blocked builders without forcing the
 	// user to watch the Builders tree. Respects `codev.gateToasts.enabled`.
-	activateGateToasts(context, overviewCache);
+	// Both toast families are the parent's in a builder-worktree window (#1809).
+	if (!isBuilderWorktreeWindow) {
+		activateGateToasts(context, overviewCache);
 
-	// Spec 1313 Phase 8: toast when a held message crosses the escalation age
-	// (the `mailbox-escalation` SSE event). Visibility only — read/dismiss via
-	// `afx inbox`. Respects `codev.mailboxEscalationToasts.enabled`.
-	activateMailboxEscalationToasts(context, connectionManager, overviewCache);
+		// Spec 1313 Phase 8: toast when a held message crosses the escalation age
+		// (the `mailbox-escalation` SSE event). Visibility only — read/dismiss via
+		// `afx inbox`. Respects `codev.mailboxEscalationToasts.enabled`.
+		activateMailboxEscalationToasts(context, connectionManager, overviewCache);
+	}
 
 	// Auto-open builder terminals on Tower spawn events
 	const builderSpawnHandler = new BuilderSpawnHandler(connectionManager, terminalManager, outputChannel);
