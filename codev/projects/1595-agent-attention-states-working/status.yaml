@@ -23,11 +23,11 @@ plan_phases:
     status: complete
   - id: phase_7
     title: Attention surfaces render agent state
-    status: in_progress
+    status: complete
   - id: phase_8
     title: Real-session verification and documentation
-    status: pending
-current_plan_phase: phase_7
+    status: in_progress
+current_plan_phase: phase_8
 gates:
   spec-approval:
     status: approved
@@ -41,8 +41,8 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 2
-build_complete: true
+iteration: 1
+build_complete: false
 history:
   - iteration: 1
     plan_phase: phase_1
@@ -141,7 +141,7 @@ history:
         file: >-
           /Users/amrmohamed/repos/cluesmith/codev/.builders/spir-1595/codev/projects/1595-agent-attention-states-working/1595-phase_7-iter1-claude.txt
 started_at: '2026-10-05T05:42:35.416Z'
-updated_at: '2026-10-21T07:44:27.189Z'
+updated_at: '2026-10-21T07:49:39.469Z'
 force_advanced:
   phase: plan
   iteration: 3
@@ -170,3 +170,5 @@ context_refreshes:
   - boundary: plan-phase:phase_7
     at: '2026-10-21T07:22:10.336Z'
     acknowledged_at: '2026-10-21T07:22:57.541Z'
+  - boundary: plan-phase:phase_8
+    at: '2026-10-21T07:49:39.469Z'
