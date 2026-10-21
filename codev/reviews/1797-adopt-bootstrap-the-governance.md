@@ -370,6 +370,19 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Concern**: the duplication question is still unanswered on the PR → **Deferred to the owner**: a reply is drafted and waiting for the owner's go-ahead
 - **Concern**: three or four rebuttal docs untracked → **Addressed**: committed
 
+### PR Review (Round 7, on the trimmed history step and main merge, head fe9853366)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: `governancePathKind` checked only the final file, so starters behind a symlinked `codev/` or `codev/resources/` stayed eligible and the agent's writes would leave the project → **Addressed**: `irregularAncestor` checks each directory on the way; a linked or non-directory ancestor makes every file under it curated (`inside a symlinked codev/resources/`). Unit and end-to-end tests
+- **Concern**: the prompt and review files under `.consult/bootstrap-docs/` were written with no symlink check → **Addressed**: `writeArtifact` refuses a linked or non-directory ancestor and a non-regular file, then writes with `wx`. A problem at the prompt path stops the run with exit 1 (`unsafe-path`) before anything launches. The reviewer output paths, which consult writes, are checked before the review; a problem there skips the review with the reason. Tests for a symlinked `.consult/`, prompt file and reviewer output, each leaving the outside target untouched
+#### Claude (APPROVE)
+- **Concern**: the pre-launch statement did not say the drafts go to three external models → **Addressed**: it now does
+- **Concern**: `readSkillFiles` can throw on an unreadable skill directory and abort `codev update` → **Addressed**: an unreadable skill is `not-regular`, reported and skipped. Test added
+- **Concern**: `validateDrafts` reads through a draft replaced by a symlink → **Addressed**: such a draft gets a `not-regular` violation and is not read
+- **Concern**: `SKIP_SUMMARY` couples to consult's prose → **Follow-up**: already listed below
+- **Concern**: the skill history pins every commit, not every release → **Rebutted**: as in round 5; release-only history would misclassify a copy installed from a local or pre-release build as edited. Size (134 hashes) is the only cost
+
 ## Lessons Learned
 
 ### What Went Well

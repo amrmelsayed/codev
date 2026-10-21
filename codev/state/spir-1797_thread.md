@@ -110,3 +110,11 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 **Owner direction (history verbosity), 2515db3b0:** merged main; resolved the lessons-learned.md conflict by keeping both sides; regenerated the shipped-skill hashes for main's afx and porch skill changes. The bootstrap-mode survey step now names the history sources and leaves the commands to the agent. Full suite: 323 files, 6702 passed; tsc clean.
 
 **Real-repo run 5 (trimmed step):** passed. The agent chose its own commands and still covered every source: tags across majors, merge bodies, eras and the start, scar tissue in its own words, deletions, churn, `-S` and `git show`. Validation passed, exit 0, all three reviewers ran, and the re-run was a no-op.
+
+**CMAP round 7 (fe9853366):** Gemini and Claude APPROVE; Codex REQUEST_CHANGES. The fixes:
+- A symlinked `codev/` or `codev/resources/` ancestor now makes every governance file under it curated.
+- `bootstrap-docs` no longer writes its own `.consult/bootstrap-docs/` files through a symlink: a bad prompt path stops the run with exit 1, and a bad reviewer path skips the review.
+- A draft replaced by a symlink is flagged, not read.
+- An unreadable skill is skipped by `update`.
+- The launch statement discloses the three-model review.
+- Full suite: 323 files, 6709 passed; tsc clean.
