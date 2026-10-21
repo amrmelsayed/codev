@@ -46,3 +46,5 @@
 - Registration source is Tower's terminal registry (`entry.builders`/`entry.architects`), workspace normalized, builder ids lowercased. The sweep drops liveness records and store entries for agents no longer registered (store gained `agents()`).
 - Singleton via `startAgentLiveness` / `stopAgentLiveness` / `getAgentLiveness` (phase 5 reads the last). Started in tower-server after reconcile; flips share the store's coalesced `overview-changed` broadcaster.
 - `PtySession.awaitingRestart` getter added (restart logic unchanged).
+- CMAP iter1: claude APPROVE, codex REQUEST_CHANGES (a failed census still advanced session-fact agents toward dead), gemini skipped (agy exit 3). Fixed: census failure is checked first, so every agent reads unknown. Added dedupe test and documented counter-on-unknown and `since` semantics.
+- Carry to phase 5: liveness keys builders by `entry.builders` key lowercased; the store keys by `builderRoleId`. They can diverge for a null or non-role-shaped terminal `role_id`, in which case the sweep drops that builder's reported state each sweep (graceful: PTY fallback). Settle in phase 5's key-join test.

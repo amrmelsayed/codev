@@ -197,6 +197,31 @@ describe('AgentLivenessTracker: unknown', () => {
     expect(h.tracker.get(WS, BUILDER)?.alive).toBe(false);
   });
 
+  it('a failed census publishes null even for agents decided by session facts alone', async () => {
+    const agents = [
+      { ...builder(undefined), agentId: 'builder-no-session' },
+      { ...builder(session({ status: 'exited' })), agentId: 'builder-exited' },
+      architect(session({ awaitingRestart: true })),
+    ];
+    const h = harness(agents, []);
+    await sweepToConfirmation(h.tracker);
+    for (const agent of agents) {
+      expect(h.tracker.get(agent.workspacePath, agent.agentId)?.alive).toBeNull();
+    }
+    expect(h.changes).toHaveLength(0);
+
+    // The failed sweeps counted nothing: one good sweep is still short of confirmation.
+    h.setProcesses(BACKGROUND);
+    await h.tracker.sweep();
+    for (const agent of agents) {
+      expect(h.tracker.get(agent.workspacePath, agent.agentId)?.alive).toBeNull();
+    }
+    await h.tracker.sweep();
+    for (const agent of agents) {
+      expect(h.tracker.get(agent.workspacePath, agent.agentId)?.alive).toBe(false);
+    }
+  });
+
   it('an unrecognized process shape is unknown', async () => {
     const h = harness([builder(session({ pid: -1 }))], BACKGROUND);
     await sweepToConfirmation(h.tracker);
@@ -228,6 +253,15 @@ describe('AgentLivenessTracker: sweep cost and registration', () => {
     const h = harness([], BACKGROUND);
     await h.tracker.sweep();
     expect(h.census).not.toHaveBeenCalled();
+  });
+
+  it('observes an agent registered twice under one key once, first entry winning', async () => {
+    const h = harness(
+      [builder(), builder(undefined)],
+      [...BACKGROUND, proc(SHELLPER, 1), proc(LOOP, SHELLPER), proc(AGENT, LOOP)],
+    );
+    await sweepToConfirmation(h.tracker);
+    expect(h.tracker.get(WS, BUILDER)?.alive).toBe(true);
   });
 
   it('drops the liveness and store entries of removed agents on the next sweep', async () => {

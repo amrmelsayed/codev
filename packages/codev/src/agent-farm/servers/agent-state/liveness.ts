@@ -19,9 +19,11 @@
  *
  * A transition to not alive is published only after `NOT_ALIVE_CONFIRMATIONS`
  * consecutive not-alive sweeps, so a transient gap never flashes `dead`. A
- * failed snapshot (`[]`) or an unrecognized process shape publishes `alive:
- * null` (unknown) and advances no confirmation. Lifecycle reports never feed
- * liveness.
+ * failed snapshot (`[]`) publishes `alive: null` (unknown) for every agent, and
+ * an unrecognized process shape for its agent; neither advances nor resets the
+ * confirmation, so a not-alive observation before an unknown sweep still counts.
+ * A published not alive's `since` is the confirming sweep, up to one interval
+ * after the process went. Lifecycle reports never feed liveness.
  *
  * The sweep also drops the store entries of agents no longer registered (SC11)
  * and raises `AGENT_STATE_CHANGED` whenever a published value changes. The
@@ -117,12 +119,16 @@ function launchLoopRunsAgent(tree: ProcessTree, pid: number): boolean {
   return tree.running.has(pid) && hasChild(tree, pid);
 }
 
-/** This sweep's observation for one agent; `null` when it cannot be told. */
+/**
+ * This sweep's observation for one agent; `null` when it cannot be told. A
+ * failed snapshot makes every observation unknown, session facts included, so a
+ * failing `ps` never advances any agent toward not alive.
+ */
 function observe(agent: RegisteredAgent, tree: ProcessTree | null): boolean | null {
+  if (tree === null) return null;
   const session = agent.session;
   if (session === undefined || session.status === 'exited') return false;
   if (agent.kind === 'architect' && session.awaitingRestart) return false;
-  if (tree === null) return null;
   if (!Number.isInteger(session.pid) || session.pid <= 0) return null;
 
   if (agent.kind === 'builder') {
