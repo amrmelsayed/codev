@@ -148,6 +148,16 @@ export class AgentStateStore extends EventEmitter {
     return 'changed';
   }
 
+  /** Every agent the store holds state for. */
+  agents(): AgentStateChange[] {
+    const agents: AgentStateChange[] = [];
+    for (const key of this.entries.keys()) {
+      const separator = key.indexOf('\0');
+      agents.push({ workspacePath: key.slice(0, separator), agentId: key.slice(separator + 1) });
+    }
+    return agents;
+  }
+
   /** Forget an agent's reported state (it was removed). */
   drop(workspacePath: string, agentId: string): void {
     this.entries.delete(storeKey(workspacePath, agentId));

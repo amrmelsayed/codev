@@ -180,4 +180,16 @@ describe('AgentStateStore: keys and drop', () => {
     store.drop(WS, ID);
     expect(store.get(WS, ID)).toBeUndefined();
   });
+
+  it('agents lists every held agent', () => {
+    const store = makeStore();
+    store.apply(WS, ID, event({ event: 'turn-started' }));
+    store.apply('/other', 'main', event({ event: 'turn-started' }));
+    expect(store.agents()).toEqual([
+      { workspacePath: WS, agentId: ID },
+      { workspacePath: '/other', agentId: 'main' },
+    ]);
+    store.drop(WS, ID);
+    expect(store.agents()).toEqual([{ workspacePath: '/other', agentId: 'main' }]);
+  });
 });
