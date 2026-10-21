@@ -104,8 +104,9 @@ Shared details:
 
 Today auth is reported only when `provider === 'github'`, so a Jira (or Linear) workspace gets no auth line. I'll make two changes:
 
-- For any non-github provider whose `auth-status` resolves (not disabled), run it and print `<provider> auth  authenticated | not authenticated`. The recommendation is per provider: `jira` → `run: acli jira auth login (standard user account; service accounts unsupported)`, `linear` → `set LINEAR_API_KEY`.
-- For the hybrid providers (`linear`, `jira`), also report `gh auth` by running the github default `auth-status` via the `forgeConfig: { provider: 'github' }` option. Every PR concept they use spends `gh`, so a Jira project that isn't logged into `gh` cannot open PRs. Doctor should say so.
+- For the **hybrid providers only** (an explicit list: `jira`, `linear`), run the provider's `auth-status` and print `<provider> auth  authenticated | not authenticated`. The recommendation is per provider: `jira` → `run: acli jira auth login (standard user account; service accounts unsupported)`, `linear` → `set LINEAR_API_KEY`.
+- For the hybrid providers (`linear`, `jira`), also report `gh auth` by running the github default `auth-status` via the `forgeConfig: { provider: 'github' }` option. Every PR concept they use runs `gh` (Linear and Jira hold the issues; the code still lives on GitHub), so a hybrid project that isn't logged into `gh` cannot open or merge PRs. Today doctor reports nothing for these projects, neither the tracker login nor `gh`.
+- **`gitlab` and `gitea` are deliberately left alone.** Their doctor output stays byte-for-byte as today: no new auth calls and no new warnings.
 
 ### Step 4: issue keys end to end
 
@@ -118,18 +119,21 @@ Add one shared helper module, `packages/codev/src/lib/issue-id.ts`, so the key g
 Then fix each broken site from the Understanding list:
 
 - **Spawn parse** (`cli.ts:342-349`): accept the full key grammar and **canonicalize to uppercase** at the single entry point. Jira and Linear keys are uppercase by definition. This removes the case-split class (lowercase spawn followed by uppercase `porch next`) at its source. The same canonicalization applies to `attach --issue` / `cleanup --issue` (`cli.ts:260, 430`), and `findBuilderByIssue` widens to `number | string`.
-- **Worktree-name recovery** (`overview.ts` `worktreeNameToRoleId`, `extractProjectIdFromWorktreeName`, the trailing-digit fallbacks): add a key branch per protocol prefix. `pir-PROJ-123[-slug]` → `builder-pir-proj-123` / `PROJ-123`, and `bugfix-PROJ-123[-slug]` → `bugfix-PROJ-123`. These run *before* the generic and numeric branches. The key pattern is anchored as `<prefix>-<KEY>-<digits>`, so a slug can't be misread as part of the key.
+- **Worktree-name recovery** (`overview.ts` `worktreeNameToRoleId`, `extractProjectIdFromWorktreeName`, the trailing-digit fallbacks): add a key branch per protocol prefix. `pir-PROJ-123[-slug]` → `builder-pir-proj-123` / `PROJ-123`, and `bugfix-PROJ-123[-slug]` → `bugfix-PROJ-123`. These run **after** every existing numeric branch and after the `task-`/`worktree-` soft-mode exclusion, so every name that resolves today resolves identically. They also can't misread a base64url short id (which may contain `-`, `_` and digits) as a key. The key pattern is anchored as `<prefix>-<KEY>-<digits>`, so a slug can't be misread as part of the key.
+- **Prefer the stored issue id over parsing folder names** (overview): the builder row already carries `issue_number` in `global.db` (`overview.ts:~962`). Where it's present, it is the source of truth for the project id and role id. Folder-name parsing is only the fallback for rows without it. This keeps the guessing confined to legacy rows.
 - **Artifact scan** (`overview.ts:742-747`): accept a key prefix as well as a numeric one.
 - **Porch cwd detection** (`porch/state.ts` `detectProjectIdFromCwd`, `detectProjectId`): the same key alternatives.
-- **Resume** (`spawn.ts` `inferProtocolFromWorktree`): match the protocol prefix plus the id, not `split('-')[1]`.
+- **Resume** (`spawn.ts` `inferProtocolFromWorktree`): match the protocol prefix plus the id, not `split('-')[1]`. `findExistingIssueWorktree` (`spawn-worktree.ts:505-511`) compares key-shaped ids case-insensitively, so a builder spawned before canonicalization (`pir-eng-123`) is still found by `--resume ENG-123` on case-sensitive filesystems (Linux).
 - **Reset fallback** (`reset/context.ts` `issueNumberFromPorchId`): return the key, not its digits.
 - **PR↔issue linking** (`lib/github.ts` `parseLinkedIssue` / `parseAllLinkedIssues`): recognise keys **only inside the bracketed protocol tags** (`[Bugfix #KEY-N]`, `[PIR #KEY-N]`, `[Spec KEY-N]`), plus a branch name `builder/<proto>-KEY-N`. Bare `ABC-123` tokens in free text are not matched, because `UTF-8`-style false positives are real.
 - **Consult** (`consult/index.ts:337`): accept key worktree names.
 
 The VS Code extension gets a twinned copy of the key pattern, with a sync note pointing at `issue-id.ts`. That is the accepted twinned-map pattern. The `codev-types` package stays wire-contracts only.
 
+**Only workspaces whose issues use keys see key-shaped ids in VS Code.** Key-shaped input is accepted only when the workspace's issue ids are key-shaped, which the ids in the loaded backlog (`OverviewData.backlog[].id`) show. On GitHub, GitLab and Gitea nothing changes: searching `UTF-8` / `COVID-19` stays a plain text search with no "View Issue" row, and `ABC-12` in Open Issue by ID still gets the inline "invalid id" validation.
+
 - **`open-issue-by-id.ts` `parseIssueId`**: accept `#?\d+` **or** a key (canonicalized to uppercase), and reword the input-box prompt to "issue id (e.g. 42 or PROJ-123)".
-- **`backlog-search.ts` `BARE_ID` / `TYPED_ID`**: the same widening.
+- **`backlog-search.ts` `BARE_ID` / `TYPED_ID`**: the same widening, under the same gate.
 
 Deliberately untouched:
 
@@ -202,14 +206,21 @@ Deliberately untouched:
   - accepts `PROJ-123`, `AB2-12`, `MY_PROJ-1`;
   - rejects `-12`, `PROJ-`, `PROJ`, `12-PROJ`;
   - canonicalizes `proj-123` → `PROJ-123`.
-- Worktree-name tests (`overview` tests): `pir-PROJ-123`, `pir-PROJ-123-slug`, `bugfix-PROJ-123-slug` and `spir-ENG-7`, plus **every existing numeric case unchanged**.
+- Worktree-name tests (`overview` tests): `pir-PROJ-123`, `pir-PROJ-123-slug`, `bugfix-PROJ-123-slug` and `spir-ENG-7`, plus **every existing form resolving exactly as before**:
+  - numeric and legacy `0110`;
+  - `task-`/`worktree-` with short ids containing `-`, `_` and digits (e.g. `task-Ab-3`, `task-x_9Q`).
+
+  Also: when `issue_number` is in the row, it wins over the parsed name.
+- `findExistingIssueWorktree`: a lowercase legacy worktree is found by an uppercase key.
 - `detectProjectIdFromCwd` / `detectProjectId`, `inferProtocolFromWorktree`, `issueNumberFromPorchId`, `parseLinkedIssue` (including the negative case: `UTF-8` in a PR body is not linked), and `findBuilderByIssue`.
 - doctor:
   - a jira provider prints a `jira auth` line and a `gh auth` line;
   - `acli` missing → the executable warning;
-  - auth failure → a recommendation that mentions `acli jira auth login`.
+  - auth failure → a recommendation that mentions `acli jira auth login`;
+  - a linear provider prints `linear auth` and `gh auth` lines;
+  - **gitlab and gitea doctor output is unchanged** (snapshot/regression assertion).
 
-**Unit (`apps/vscode`):** `parseIssueId` accepts `#42`, `42`, `PROJ-123` and ` proj-123 ` (→ `PROJ-123`), and still rejects the existing malformed cases. The same goes for the backlog-search typed-id detection.
+**Unit (`apps/vscode`):** `parseIssueId` accepts `#42`, `42`, `PROJ-123` and ` proj-123 ` (→ `PROJ-123`), and still rejects the existing malformed cases. The same goes for the backlog-search typed-id detection. **The gate:** with a numeric-id backlog, `UTF-8` / `ABC-12` produce no dynamic issue rows, and `parseIssueId('ABC-12')` is rejected.
 
 **Full-suite gates:** `pnpm build`, `pnpm test`, and `check-types` (tsc) in both `packages/codev` and `apps/vscode`.
 
