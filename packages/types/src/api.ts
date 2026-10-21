@@ -292,6 +292,9 @@ export interface OverviewRecentlyClosed {
   reviewPath?: string;
 }
 
+/** The shape of a workspace's issue ids: bare numbers, or tracker keys like `ENG-123`. */
+export type IssueIdKind = 'number' | 'key';
+
 export interface OverviewData {
   builders: OverviewBuilder[];
   pendingPRs: OverviewPR[];
@@ -349,6 +352,14 @@ export interface OverviewData {
   feedbackMode: 'forward' | 'queue';
   /** Auto-detected GitHub login of the current user (via the user-identity forge concept). */
   currentUser?: string;
+  /**
+   * Issue #1740: the shape of this workspace's issue ids, from its configured
+   * forge provider: `'number'` (GitHub, GitLab, Gitea: `42`) or `'key'` (Linear,
+   * Jira: `ENG-123`). Clients gate key-shaped input on it. Absent when Tower
+   * cannot tell (the issue concepts are overridden by hand, or an older Tower);
+   * clients then fall back to their own inference.
+   */
+  issueIdKind?: IssueIdKind;
   /**
    * Issue #1645: why forge-backed sections (PRs, backlog, recently closed/merged)
    * may be stale or empty. `rate-limited` = the backend's budget is exhausted and

@@ -17,6 +17,7 @@ import { promisify } from 'node:util';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { IssueIdKind } from '@cluesmith/codev-types';
 import { loadConfig as loadCodevConfig } from './config.js';
 
 const execAsync = promisify(exec);
@@ -132,6 +133,10 @@ function getProviderPresets(): Record<string, Record<string, string | null>> {
     // default. Disabling pr-create here would leave Linear the one provider
     // that can merge a PR but not open one.
     linear: buildPresetFromScripts('linear', ['team-activity', 'on-it-timestamps']),
+    // Jira Cloud via Atlassian's `acli` (#1740) is hybrid on the Linear model:
+    // issue concepts only, every PR concept (pr-create included) on the github
+    // default.
+    jira: buildPresetFromScripts('jira', ['team-activity', 'on-it-timestamps']),
   };
   return _providerPresets;
 }
@@ -139,6 +144,38 @@ function getProviderPresets(): Record<string, Record<string, string | null>> {
 /** Get known provider names. */
 export function getKnownProviders(): string[] {
   return Object.keys(getProviderPresets());
+}
+
+/**
+ * Providers that hold only the issues (spec 719). Their PR concepts run `gh`,
+ * so a workspace on one needs a working `gh` login as well as the tracker's.
+ */
+const HYBRID_PROVIDERS: ReadonlySet<string> = new Set(['linear', 'jira']);
+
+export function isHybridProvider(provider: string | undefined): boolean {
+  return provider !== undefined && HYBRID_PROVIDERS.has(provider.toLowerCase());
+}
+
+const ISSUE_ID_KIND_BY_PROVIDER: Record<string, IssueIdKind> = {
+  github: 'number',
+  gitlab: 'number',
+  gitea: 'number',
+  linear: 'key',
+  jira: 'key',
+};
+
+const ISSUE_CONCEPTS = ['issue-view', 'issue-list', 'issue-search', 'issue-comment', 'recently-closed'];
+
+/**
+ * The shape of the workspace's issue ids, from its provider (#1740). Undefined
+ * when a hand-written override replaces an issue concept: the provider then no
+ * longer says what the ids look like, so this reports nothing rather than guess.
+ */
+export function resolveIssueIdKind(forgeConfig: ForgeConfig | null | undefined): IssueIdKind | undefined {
+  if (forgeConfig && ISSUE_CONCEPTS.some((concept) => typeof forgeConfig[concept] === 'string')) {
+    return undefined;
+  }
+  return ISSUE_ID_KIND_BY_PROVIDER[(forgeConfig?.provider ?? 'github').toLowerCase()];
 }
 
 /** Resolution source for a concept command. */
