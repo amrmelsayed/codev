@@ -69,7 +69,7 @@ import {
 } from './spawn-worktree.js';
 import { getTowerClient } from '../lib/tower-client.js';
 import { executeForgeCommand, loadForgeConfig } from '../../lib/forge.js';
-import { ISSUE_KEY_SOURCE } from '../../lib/issue-id.js';
+import { ISSUE_KEY_SOURCE, isIssueKey, issueRef } from '../../lib/issue-id.js';
 
 // =============================================================================
 // ID and Session Management
@@ -115,11 +115,24 @@ function logSpawnSuccess(label: string, terminalId: string, mode?: string): void
 
 /**
  * Generate a short 4-character base64-encoded ID
- * Uses URL-safe base64 (a-z, A-Z, 0-9, -, _) for filesystem-safe IDs
+ * Uses URL-safe base64 (a-z, A-Z, 0-9, -, _) for filesystem-safe IDs.
+ *
+ * Never key-shaped (#1740): about 0.24% of raw draws look like a tracker key
+ * (`Ab-3`), and an issue-less spawn named `pir-Ab-3` would collide with issue
+ * AB-3's worktree, role id and porch project. Such a draw is redrawn. `random`
+ * is injectable for tests.
  */
-function generateShortId(): string {
+export function generateShortId(random: () => number = Math.random): string {
+  let id = drawShortId(random);
+  while (isIssueKey(id)) {
+    id = drawShortId(random);
+  }
+  return id;
+}
+
+function drawShortId(random: () => number): string {
   // Generate random 24-bit number and base64 encode to 4 chars
-  const num = Math.floor(Math.random() * 0xFFFFFF);
+  const num = Math.floor(random() * 0xFFFFFF);
   const bytes = new Uint8Array([num >> 16, (num >> 8) & 0xFF, num & 0xFF]);
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
@@ -733,7 +746,7 @@ async function spawnWorktree(options: SpawnOptions, config: Config): Promise<voi
 /**
  * Spawn builder for an issue-driven protocol (BUGFIX, PIR, …).
  *
- * Implements the shared spawn pattern: fetch the GitHub issue, derive the
+ * Implements the shared spawn pattern: fetch the issue from the forge, derive the
  * builder ID / worktree / branch from `prefix`, run pre-spawn hooks, create
  * or resume the worktree, initialize porch, render the builder prompt from
  * the protocol's template, and start the PTY session.
@@ -755,7 +768,7 @@ async function spawnIssueDrivenBuilder(
   logger.header(`${options.resume ? 'Resuming' : 'Spawning'} ${protocolLabel} Builder for Issue #${issueNumber}`);
 
   // Fetch issue from GitHub
-  logger.info('Fetching issue from GitHub...');
+  logger.info(`Fetching issue ${issueRef(issueNumber)}...`);
   const issue = await fetchGitHubIssue(issueNumber, { cwd: config.workspaceRoot, forgeConfig });
 
   const builderId = buildAgentName(prefix, String(issueNumber));
@@ -861,7 +874,7 @@ async function spawnIssueDrivenBuilder(
     // The porch project ID — what `porch next/done/approve` expects.
     // NOT the builder agent name (which includes the `builder-` prefix).
     project_id: porchProjectId,
-    input_description: `work for GitHub Issue #${issueNumber}`,
+    input_description: `work for issue ${issueRef(issueNumber)}`,
     issue: { number: issueNumber, title: issue.title, body: issue.body || '(No description provided)' },
   };
   if (options.branch) {
