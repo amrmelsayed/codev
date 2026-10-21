@@ -1,4 +1,4 @@
-import type { ArchitectState, OverviewBuilder, OverviewData, ServedAgentState } from '@cluesmith/codev-types';
+import type { ArchitectState, NeedsInputDetail, OverviewBuilder, OverviewData, ServedAgentState } from '@cluesmith/codev-types';
 
 /**
  * Threshold (ms) for treating a builder as "idle, likely waiting on input".
@@ -90,6 +90,21 @@ export function isIdleWaiting(b: OverviewBuilder, now: number = Date.now()): boo
   if (state !== null) { return isWaitingState(state); }
   if (!b.lastDataAt) { return false; }
   return now - new Date(b.lastDataAt).getTime() > IDLE_WAITING_THRESHOLD_MS;
+}
+
+/**
+ * Spec 1595: the phrase every surface shows for what a `needs-input` agent is waiting on, so the
+ * extension and the dashboard word it identically: `at a permission prompt: <tool> <summary>`,
+ * `asking a question`, or `needs input` when the detail is absent or of another kind. The tool and
+ * summary are copied verbatim; callers render the result as plain text, never as markup (SC19).
+ */
+export function describeNeedsInput(detail: NeedsInputDetail | undefined): string {
+  if (detail === undefined) { return 'needs input'; }
+  if (detail.kind === 'question') { return 'asking a question'; }
+  if (detail.kind !== 'permission') { return 'needs input'; }
+  const subject = [detail.tool, detail.summary].filter((part): part is string => !!part).join(' ');
+  if (subject === '') { return 'at a permission prompt'; }
+  return `at a permission prompt: ${subject}`;
 }
 
 /** The classifier states that mean "the human's move". */

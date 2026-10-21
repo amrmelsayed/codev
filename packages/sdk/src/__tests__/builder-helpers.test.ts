@@ -10,6 +10,7 @@ import {
   BACKGROUND_WORK_STALE_MS,
   compareAttention,
   deriveAttention,
+  describeNeedsInput,
   formatAge,
   isIdleWaiting,
   IDLE_WAITING_THRESHOLD_MS,
@@ -581,5 +582,28 @@ describe('formatAge — the canonical cross-client relative age', () => {
     expect(formatAge(null, now)).toBeNull();
     expect(formatAge('not-a-date', now)).toBeNull();
     expect(formatAge(new Date(now + 60_000).toISOString(), now)).toBeNull();
+  });
+});
+
+describe('describeNeedsInput (Spec 1595)', () => {
+  it('names the tool and summary of a permission prompt', () => {
+    expect(describeNeedsInput({ kind: 'permission', tool: 'Bash', summary: 'git push' })).toBe('at a permission prompt: Bash git push');
+  });
+
+  it('omits whichever of tool and summary is absent', () => {
+    expect(describeNeedsInput({ kind: 'permission', tool: 'Edit' })).toBe('at a permission prompt: Edit');
+    expect(describeNeedsInput({ kind: 'permission', summary: 'src/a.ts' })).toBe('at a permission prompt: src/a.ts');
+    expect(describeNeedsInput({ kind: 'permission' })).toBe('at a permission prompt');
+  });
+
+  it('reads a question as asking a question, and anything else as needing input', () => {
+    expect(describeNeedsInput({ kind: 'question', tool: 'AskUserQuestion' })).toBe('asking a question');
+    expect(describeNeedsInput({ kind: 'other' })).toBe('needs input');
+    expect(describeNeedsInput(undefined)).toBe('needs input');
+  });
+
+  it('copies markup in the summary verbatim for the caller to render as text', () => {
+    const summary = '[click](command:workbench.action.terminal.sendSequence) **bold**';
+    expect(describeNeedsInput({ kind: 'permission', tool: 'Bash', summary })).toBe(`at a permission prompt: Bash ${summary}`);
   });
 });
