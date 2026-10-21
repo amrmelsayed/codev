@@ -130,7 +130,18 @@ Then fix each broken site from the Understanding list:
 
 The VS Code extension gets a twinned copy of the key pattern, with a sync note pointing at `issue-id.ts`. That is the accepted twinned-map pattern. The `codev-types` package stays wire-contracts only.
 
-**Only workspaces whose issues use keys see key-shaped ids in VS Code.** Key-shaped input is accepted only when the workspace's issue ids are key-shaped, which the ids in the loaded backlog (`OverviewData.backlog[].id`) show. On GitHub, GitLab and Gitea nothing changes: searching `UTF-8` / `COVID-19` stays a plain text search with no "View Issue" row, and `ABC-12` in Open Issue by ID still gets the inline "invalid id" validation.
+**Only workspaces whose issues use keys see key-shaped ids in VS Code. Tower reports which kind of id the workspace uses.** Folds in the architect's review note on `1fc74e621`. Guessing from the backlog alone fails exactly when a Jira user needs Open Issue by ID most: when the backlog is empty, when the overview hasn't loaded yet, and when the forge is rate-limited or unavailable.
+
+- **New optional wire field:** `OverviewData.issueIdKind?: 'number' | 'key'` in `packages/types/src/api.ts`. It is optional, so older clients ignore it, and a client talking to an older Tower sees it absent.
+- **Tower derives it from the configured provider** (`packages/codev`): `linear` and `jira` give `'key'`; `github`, `gitlab` and `gitea` give `'number'`. The mapping sits next to the presets in `forge.ts`.
+- **Overrides suppress it.** If the workspace overrides the issue concepts by hand (the interim per-concept Jira wiring that #1740 describes), the provider no longer tells the truth about the ids. The field is **omitted** in that case rather than guessed.
+- **VS Code behaviour, per surface:**
+
+| `issueIdKind` | Open Issue by ID (explicit action) | Backlog search dynamic rows (unsolicited) |
+|---|---|---|
+| `'number'` | Numeric only, inline "invalid id" for keys. Today's behaviour. | Numeric only. Today's behaviour. |
+| `'key'` | Keys (canonicalized uppercase) and numbers. | Keys and numbers. |
+| absent: older Tower, overrides, or overview not loaded | **Accept both.** The worst case is a "could not open issue" toast, never a silently rejected valid Jira key. | Fall back to backlog inference: key rows only if the loaded backlog ids are key-shaped; **with an empty or unloaded backlog, numeric only.** An unrequested "View Issue UTF-8" row is worse than a missing row, because the explicit command remains available. |
 
 - **`open-issue-by-id.ts` `parseIssueId`**: accept `#?\d+` **or** a key (canonicalized to uppercase), and reword the input-box prompt to "issue id (e.g. 42 or PROJ-123)".
 - **`backlog-search.ts` `BARE_ID` / `TYPED_ID`**: the same widening, under the same gate.
@@ -168,6 +179,7 @@ Deliberately untouched:
 - `packages/codev/src/lib/github.ts:483-545`.
 - `packages/codev/src/commands/consult/index.ts:337`.
 - `apps/vscode/src/commands/open-issue-by-id.ts:36-42, 83-86`, `apps/vscode/src/views/backlog-search.ts:87-88`.
+- `packages/types/src/api.ts` (`OverviewData.issueIdKind?`), plus `packages/codev/src/agent-farm/servers/overview.ts` (populate it) and `forge.ts` (provider → kind, omitted under issue-concept overrides).
 - `codev/resources/commands/forge.md`, `.claude/skills/forge/SKILL.md`, `.codex/skills/forge/SKILL.md`.
 - Tests: see the Test Plan.
 
@@ -220,7 +232,16 @@ Deliberately untouched:
   - a linear provider prints `linear auth` and `gh auth` lines;
   - **gitlab and gitea doctor output is unchanged** (snapshot/regression assertion).
 
-**Unit (`apps/vscode`):** `parseIssueId` accepts `#42`, `42`, `PROJ-123` and ` proj-123 ` (→ `PROJ-123`), and still rejects the existing malformed cases. The same goes for the backlog-search typed-id detection. **The gate:** with a numeric-id backlog, `UTF-8` / `ABC-12` produce no dynamic issue rows, and `parseIssueId('ABC-12')` is rejected.
+**Unit (`apps/vscode`):** `parseIssueId` accepts `#42`, `42`, `PROJ-123` and ` proj-123 ` (→ `PROJ-123`), and still rejects the existing malformed cases. The same goes for the backlog-search typed-id detection. **The gate, cell by cell from the table above:**
+
+- `'number'`: `UTF-8` and `ABC-12` produce no rows and are rejected.
+- `'key'`: both are accepted.
+- Absent:
+  - Open Issue by ID accepts keys;
+  - search with an empty or unloaded backlog gives numeric-only rows;
+  - search with a key-shaped backlog gives key rows.
+
+On the codev side: the provider maps to the kind, an issue-concept override omits the field, and the overview payload carries it.
 
 **Full-suite gates:** `pnpm build`, `pnpm test`, and `check-types` (tsc) in both `packages/codev` and `apps/vscode`.
 
