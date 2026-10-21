@@ -390,6 +390,20 @@ APPROVE
 - **Concern** (non-blocking): a served `idle` now counts as waiting at once on the status bar and badge → **N/A**: SC4 as approved; an intended behavior change, noisier than the 5-minute rule.
 - **Concern** (nit): some rebuttals untracked → **Addressed** (as Codex).
 
+### PR Review (Round 2)
+
+#### Gemini
+CONSULT_ERROR, skipped (agy exit 3).
+
+#### Codex
+APPROVE. No concerns raised.
+
+#### Claude
+APPROVE
+- **Concern** (minor): the frontmatter rebuttal's supporting claim that no porch-gated spec carries `approved:` is inaccurate → **Addressed**: rebuttal corrected; the conclusion rests on porch's gate records.
+- **Concern** (minor): #1851 and the SC1 headless residual → **N/A**: already disclosed above.
+- **Concern** (follow-up): file the bounded-relaunch guard so it is not lost in the PR description → **N/A**: raised with the architect, whose call it is.
+
 ## Lessons Learned
 
 ### What Went Well
