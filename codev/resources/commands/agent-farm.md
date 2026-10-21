@@ -1057,7 +1057,6 @@ afx ide start [options]
 **Options:**
 - `--server-path <path>` - Path to the `codev-ide-server` binary (overrides discovery)
 - `-p, --port <port>` - Port the server listens on (default: 8200, loopback only)
-- `--default-folder <path>` - Folder to open when a URL carries no `?folder=`
 
 **Discovery** (without `--server-path`), first match wins:
 1. `codev-ide-server` on `PATH`
@@ -1106,7 +1105,7 @@ afx ide status
 ```
 
 Shows the prefix, port, server path, server version, extensions directory, sidebar version,
-default folder (if set), and whether the process is live. Records written before this feature
+and whether the process is live. Records written before this feature
 show `unknown` for the version and extensions fields.
 
 **Files:**

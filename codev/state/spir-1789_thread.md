@@ -93,3 +93,7 @@
 - Post-fix: tsc clean; IDE suites plus doc/parity tests 23 files / 695 tests green.
 - Full packages/codev suite after the main merge: 316 files / 6349 tests passed (48 skipped).
 - Porch went straight to the pr gate after the rebuttal (no second consultation), so CMAP on the fix was run by hand: claude APPROVE, codex REQUEST_CHANGES (sync with main), gemini skipped. Merged origin/main (#1783 changed sanitizeAgentEnv, which the IDE env uses; no overlap). Rebuttal: 1789-review-iter2-rebuttals.md.
+
+## 2026-10-21: --default-folder retired (owner ruling via main)
+- Owner ruling 2026-10-21 (relayed by main from the codev-ide architect): no default folder; Tower manages several workspaces, so the IDE opens the folder chosen per connection (?folder= on /ide/). Removed end to end: the `afx ide start --default-folder` option, the POST body field, the spawn arg, the record field, the status line, and the adopt/respawn plumbing. readIdeRecord builds the record from known fields, so a stale `defaultFolder` on disk is dropped (tested). Docs: four afx skill copies, both command references, arch.md; spec gains Desired State 8 + a criterion; review Deviations updated. Skill hashes regenerated. Follow-up (main files it): derive the folder from Tower's workspace registry.
+- Earlier the same day: merged origin/main (378 commits; lessons-learned.md conflict, kept both sides); main's skill-refresh test needed the skill hashes regenerated.

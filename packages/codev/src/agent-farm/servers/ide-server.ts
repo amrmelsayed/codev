@@ -100,7 +100,6 @@ function withIdeLock<T>(fn: () => Promise<T>): Promise<T> {
 export interface SpawnIdeOptions {
   serverPath: string;
   port?: number;
-  defaultFolder?: string;
 }
 
 export interface SpawnIdeResult {
@@ -191,9 +190,6 @@ async function spawnIdeServerUnlocked(opts: SpawnIdeOptions, log: LogFn): Promis
     '--extensions-dir', preflight.extensionsDir,
     '--accept-server-license-terms',
   ];
-  if (opts.defaultFolder) {
-    args.push('--default-folder', opts.defaultFolder);
-  }
 
   log('INFO', `Spawning IDE server ${preflight.serverVersion}: ${opts.serverPath} ${args.join(' ')}`);
   const child = spawn(opts.serverPath, args, {
@@ -217,7 +213,6 @@ async function spawnIdeServerUnlocked(opts: SpawnIdeOptions, log: LogFn): Promis
     port,
     serverPath: opts.serverPath,
     pid: child.pid,
-    defaultFolder: opts.defaultFolder,
     startedAt: new Date().toISOString(),
     serverVersion: preflight.serverVersion,
     extensionsDir: preflight.extensionsDir,
@@ -235,7 +230,6 @@ async function spawnIdeServerUnlocked(opts: SpawnIdeOptions, log: LogFn): Promis
  * the version just checked describes `opts.serverPath`, which need not be the
  * binary the live process came from. With no prior record on that port the live
  * binary is unknown, so the requested path is recorded and a restart is flagged.
- * Its default folder is kept too, unless the start names one.
  */
 function adoptLiveIdeServer(
   opts: SpawnIdeOptions,
@@ -255,7 +249,6 @@ function adoptLiveIdeServer(
     port,
     serverPath: prior?.serverPath ?? opts.serverPath,
     pid: getProcessesOnPort(port)[0] ?? 0,
-    defaultFolder: opts.defaultFolder ?? prior?.defaultFolder,
     startedAt: prior?.startedAt ?? new Date().toISOString(),
     serverVersion: prior?.serverVersion,
     extensionsDir: prior?.extensionsDir,
@@ -381,7 +374,7 @@ async function respawnRecordedIdeServer(log: LogFn): Promise<number | null> {
     if (isPortLive(current.port)) return current.port;
     log('INFO', `IDE server on port ${current.port} is down; respawning from ${current.serverPath}`);
     const fresh = await spawnIdeServerUnlocked(
-      { serverPath: current.serverPath, port: current.port, defaultFolder: current.defaultFolder },
+      { serverPath: current.serverPath, port: current.port },
       log,
     );
     return fresh.record.port;
@@ -407,7 +400,7 @@ export async function reconcileIdeServer(log: LogFn): Promise<void> {
 
 /**
  * Local-only `/api/ide` management endpoint driving the lifecycle above:
- * `POST` starts (body `{ serverPath, port?, defaultFolder? }`), `DELETE` stops,
+ * `POST` starts (body `{ serverPath, port? }`), `DELETE` stops,
  * `GET` reports status. Reached only post-`isRequestAllowed` (key required) and
  * blocked from the tunnel like `/api/tunnel/*` — it spawns/kills a process.
  */
@@ -441,14 +434,13 @@ export async function handleIdeApi(
     }
     const serverPath = typeof body.serverPath === 'string' ? body.serverPath : '';
     const port = typeof body.port === 'number' ? body.port : undefined;
-    const defaultFolder = typeof body.defaultFolder === 'string' ? body.defaultFolder : undefined;
     if (!serverPath) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'serverPath is required' }));
       return;
     }
     try {
-      const { record, restartRequired } = await spawnIdeServer({ serverPath, port, defaultFolder }, log);
+      const { record, restartRequired } = await spawnIdeServer({ serverPath, port }, log);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, ...record, restartRequired }));
     } catch (err) {

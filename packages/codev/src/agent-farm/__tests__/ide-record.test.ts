@@ -29,7 +29,6 @@ const SAMPLE: IdeServerRecord = {
   port: 8200,
   serverPath: '/opt/codev-ide/bin/server',
   pid: 4242,
-  defaultFolder: '/home/dev/project',
   startedAt: '2026-09-11T00:00:00.000Z',
 };
 
@@ -92,6 +91,14 @@ describe('ide-record', () => {
     expect(parsed?.serverVersion).toBeUndefined();
     expect(parsed?.extensionsDir).toBeUndefined();
     expect(parsed?.sidebarVersion).toBeUndefined();
+  });
+
+  it('ignores a retired defaultFolder left by an earlier Tower, keeping the record', () => {
+    mkdirSync(TMP_DIR, { recursive: true });
+    writeFileSync(getIdeRecordPath(), JSON.stringify({ ...SAMPLE, defaultFolder: '/home/dev/project' }));
+    const parsed = readIdeRecord();
+    expect(parsed).toEqual(SAMPLE);
+    expect(parsed).not.toHaveProperty('defaultFolder');
   });
 
   it('drops new fields that are not strings, keeping the record', () => {

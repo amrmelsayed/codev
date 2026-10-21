@@ -40,6 +40,7 @@
 
 **Record compatibility**
 - [x] `serverVersion`, `extensionsDir` and `sidebarVersion` are optional, and legacy records still parse and are adopted (Phase 4).
+- [x] `--default-folder` is retired end to end, and a record still carrying `defaultFolder` parses with the field ignored (review round, owner ruling 2026-10-21).
 
 **Status and install**
 - [x] `afx ide status` shows the server version, extensions dir and sidebar version. A legacy record shows `unknown` (Phase 5).
@@ -60,9 +61,10 @@
 - **Phase 1, vsce pinned to `^3.9.2`.** vsce 4.x requires Node 22 and CI runs Node 20. `vsce package` never loads vsce's Node-22 Azure dependencies (they are publish-only); verified under Node 20.20.2.
 - **Phase 3, a successful install re-reads `extensions.json` and throws** if the embedded version is still not indexed. The plan had a benign "reinstall next time" fallback here. A zero-exit install that did not take would otherwise start a server without its sidebar. Scenario 21 confirmed the check passes against a real server.
 - **Phase 3, the bounded runner was extracted** into `runIdeServerCommand` (process group, SIGKILL on timeout, capped stderr), shared by `--version` and `--install-extension`.
-- **Phase 4, adopt keeps the prior `sidebarVersion` and `defaultFolder`** (the plan named only the server version and extensions dir), so the record describes what the live process actually loaded.
+- **Phase 4, adopt keeps the prior `sidebarVersion`** (the plan named only the server version and extensions dir), so the record describes what the live process actually loaded. (It also kept the prior `defaultFolder` until that field was retired; see below.)
 - **Phase 5, `restartRequired` also compares the server path** (Phase 4 CMAP carry-over), because discovery can pick a different bin than an earlier `--server-path`.
 - **Review round, the adopt rule now covers the whole record.** The adopted record keeps the live `serverPath`, and `restartRequired` also compares the server version, so an in-place `npm i -g` upgrade is flagged and the hint persists until a restart. Stdout from server CLI calls is capped at 64 KB. Docs say where extra extensions go, and the RELEASE protocol has a pre-flight check for the floor coupling.
+- **Review round, `--default-folder` retired end to end** (owner ruling, 2026-10-21, relayed by main from the codev-ide architect). Tower manages several workspaces, so a single default folder makes no sense: the IDE opens the folder chosen per connection (`?folder=` on `/ide/`). Removed the `afx ide start` option, the CLI-to-Tower body field, the spawn argument, the record field and its status line, and the adopt/respawn plumbing. A record on disk that still carries `defaultFolder` (from #1668 or earlier runs of this branch) parses, and the field is ignored (tested). The spec gains Desired State 8 and a success criterion. Deriving the folder from Tower's workspace registry is a follow-up for main to file.
 - **Phase 6, `docs/releases/UNRELEASED.md` was not edited.** Its header reserves entries for the architect on `docs/vscode-changelog`. The suggested wording is in the thread and the PR body.
 - **Phase 6, the skeleton command reference was mirrored** (`codev-skeleton/resources/commands/agent-farm.md`). The spec named only the root copy; Claude's CMAP flagged the parity gap.
 - **Phase 6, Scenario 21 ran on an isolated Tower** (port 4199, scratch `CODEV_AGENT_FARM_DIR`) per the architect's ruling, not on a restarted real Tower. The real Tower and IDE PIDs were unchanged before and after.

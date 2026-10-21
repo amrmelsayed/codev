@@ -15,7 +15,7 @@ This affects every user who wants the browser IDE, whether locally at `http://lo
 - **Tower is the spawner.** `spawnIdeServer` spawns the binary detached with:
   - `--host 127.0.0.1 --port <p> --server-base-path /ide`
   - `--connection-token-file <tower-owned> --accept-server-license-terms`
-  - `--default-folder` when given
+  - `--default-folder` when given (retired by this spec, see Desired State 8)
 
   It then writes `~/.agent-farm/ide-server.json` (`{prefix, port, serverPath, pid, defaultFolder?, startedAt}`). Tower's boot reconcile and the on-demand respawn (a `/ide/` request that finds the server down) reuse the same function. `readIdeRecord` returns `null`, meaning "no server registered", when the record fails its field whitelist.
 - When a start names a port different from a live recorded server's port, `spawnIdeServer` stops the existing server **before** it spawns the new one.
@@ -52,6 +52,7 @@ After `npm i -g @cluesmith/codev @cluesmith/codev-ide`:
 5. If the server is not installed, the error says exactly what to run (`afx ide install`, or `npm i -g @cluesmith/codev-ide`).
 6. `afx ide install` runs that npm command for the user and reports the result.
 7. `afx ide status` shows enough to diagnose the pairing: the server path and version, the extensions directory, and the installed sidebar version.
+8. There is no default folder (owner ruling, 2026-10-21). Tower manages several workspaces, so the IDE opens the folder chosen per connection (`?folder=` on `/ide/`) and Tower passes the server no `--default-folder`. `afx ide start` has no `--default-folder` option, and the record drops the field; a record on disk that still carries it parses, and the field is ignored. A URL with no `?folder=` gets the server's own fallback.
 
 ## Success Criteria
 
@@ -93,6 +94,7 @@ After `npm i -g @cluesmith/codev @cluesmith/codev-ide`:
 
 **Record compatibility**
 - [ ] New record fields (server version, extensions directory, sidebar version) are optional. A record written by a pre-#1789 Tower still parses, and its live server is still tracked and adopted.
+- [ ] `--default-folder` is retired end to end (owner ruling, 2026-10-21): no CLI option, no spawn argument, no record field. A record that still carries `defaultFolder` parses with the field ignored.
 
 **Status and install**
 - [ ] `afx ide status` reports the server version, the extensions directory and the installed sidebar version, as well as today's fields. Fields missing from a legacy record show as unknown rather than erroring.

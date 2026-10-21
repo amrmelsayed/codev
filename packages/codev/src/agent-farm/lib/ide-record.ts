@@ -45,7 +45,6 @@ export interface IdeServerRecord {
   port: number;
   serverPath: string;
   pid: number;
-  defaultFolder?: string;
   startedAt: string;
   /** Base version the server reported at its spawn preflight (Spec 1789). Absent on a pre-#1789 record. */
   serverVersion?: string;
@@ -89,7 +88,6 @@ export function readIdeRecord(): IdeServerRecord | null {
       port: parsed.port,
       serverPath: parsed.serverPath,
       pid: parsed.pid,
-      defaultFolder: optionalString(parsed.defaultFolder),
       startedAt: parsed.startedAt,
       serverVersion: optionalString(parsed.serverVersion),
       extensionsDir: optionalString(parsed.extensionsDir),

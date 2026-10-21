@@ -196,6 +196,8 @@ describe('spawn preflight', () => {
     expect(fakes.events.slice(0, 3)).toEqual(['version', 'install', 'spawn']);
     const { args, env } = fakes.spawnCalls[0];
     expect(argValue(args, '--extensions-dir')).toBe(getIdeExtensionsDir());
+    // The folder is chosen per connection (?folder= on /ide/); Tower passes no default.
+    expect(args).not.toContain('--default-folder');
     expect(env.PATH.split(':')[0]).toBe(resolve(process.execPath, '..'));
     expect(installSidebar).toHaveBeenCalledWith(SERVER_PATH, expect.objectContaining({ extensionsDir: getIdeExtensionsDir(), log }));
     expect(record).toMatchObject({ serverVersion: '1.135.0', extensionsDir: getIdeExtensionsDir(), sidebarVersion: '3.3.4' });
@@ -357,17 +359,6 @@ describe('live-port adopt', () => {
     const { restartRequired } = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
 
     expect(restartRequired).toBe(false);
-  });
-
-  it('keeps the live server default folder when the start names none', async () => {
-    fakes.seedRecord(recordOn(8200, 4100, { defaultFolder: '/home/dev/project' }));
-    fakes.ports.set(8200, [4100]);
-
-    const kept = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200 }, log);
-    const replaced = await spawnIdeServer({ serverPath: SERVER_PATH, port: 8200, defaultFolder: '/home/dev/other' }, log);
-
-    expect(kept.record.defaultFolder).toBe('/home/dev/project');
-    expect(replaced.record.defaultFolder).toBe('/home/dev/other');
   });
 
   it('flags a restart when the sidebar changed, without killing the server', async () => {

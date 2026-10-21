@@ -974,13 +974,11 @@ export async function runAgentFarm(args: string[]): Promise<void> {
     .description('Ask Tower to spawn the IDE server (found on PATH or in the global node_modules)')
     .option('--server-path <path>', 'Path to the codev-ide-server binary (overrides discovery)')
     .option('-p, --port <port>', 'Port to run on (default: 8200)')
-    .option('--default-folder <path>', 'Folder to open when a URL carries no ?folder=')
     .action(async (options) => {
       try {
         await ideStart({
           serverPath: options.serverPath,
           port: options.port ? parseInt(options.port, 10) : undefined,
-          defaultFolder: options.defaultFolder,
         });
       } catch (error) {
         logger.error(error instanceof Error ? error.message : String(error));

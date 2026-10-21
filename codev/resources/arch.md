@@ -2188,7 +2188,8 @@ Tower forwards a fixed `/ide/` prefix to a **single** local VS Code server-web p
 HTTP in `tower-routes.ts` and a **raw bidirectional WebSocket pipe** in `tower-websocket.ts`
 (Tower never parses those frames; they are VS Code's own remote protocol, not Tower's PTY
 bridge). The target workspace is chosen per browser connection via `?folder=<abs path>`; one
-server serves any folder. Forwarding code lives in `servers/ide-forward.ts`; lifecycle
+server serves any folder. Tower passes the server no default folder: it manages several
+workspaces, so no single default makes sense (owner ruling, 2026-10-21, retired `--default-folder`). Forwarding code lives in `servers/ide-forward.ts`; lifecycle
 (spawn / stop / status / boot-reconcile / on-demand respawn) in `servers/ide-server.ts`.
 
 - **Auth**: the forward is a *post-auth* handler behind Tower's existing key choke point. HTTP
@@ -2211,8 +2212,8 @@ server serves any folder. Forwarding code lives in `servers/ide-forward.ts`; lif
 - **Management API**: `POST/DELETE/GET /api/ide` (driven by `afx ide start|stop|status`) is
   local-only — blocked from the tunnel like `/api/tunnel/*` because it spawns/kills a process.
 - **State**: a Tower-managed `~/.agent-farm/ide-server.json` record (`{prefix, port, serverPath,
-  pid}`, plus optional `defaultFolder`, `serverVersion`, `extensionsDir`, `sidebarVersion` from
-  Spec 1789; legacy records without them still parse), the `cloud-config.json` pattern — **no
+  pid}`, plus optional `serverVersion`, `extensionsDir`, `sidebarVersion` from Spec 1789; legacy
+  records without them still parse, and a retired `defaultFolder` is ignored), the `cloud-config.json` pattern — **no
   config file, no `global.db` change**. Live PID is discovered by port. `codev/` and
   `codev-skeleton/` are unaffected (this is product code).
 - **npm distribution (Spec 1789)**: the server ships as `@cluesmith/codev-ide` (bin

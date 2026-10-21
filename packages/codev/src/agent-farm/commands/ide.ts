@@ -196,7 +196,6 @@ const SERVER_NOT_FOUND_MESSAGE =
 export interface IdeStartOptions {
   serverPath?: string;
   port?: number;
-  defaultFolder?: string;
 }
 
 /** `afx ide start`: discover the server, then ask Tower to spawn it. */
@@ -219,7 +218,6 @@ export async function ideStart(options: IdeStartOptions = {}): Promise<void> {
   const res = await towerIdeRequest('POST', IDE_START_BUDGET_MS, {
     serverPath,
     port: options.port,
-    defaultFolder: options.defaultFolder ? resolve(options.defaultFolder) : undefined,
   });
 
   if (res.status === 200) {
@@ -277,7 +275,6 @@ export async function ideStatus(): Promise<void> {
       prefix: string;
       port: number;
       serverPath: string;
-      defaultFolder?: string;
       serverVersion?: string;
       extensionsDir?: string;
       sidebarVersion?: string;
@@ -297,7 +294,6 @@ export async function ideStatus(): Promise<void> {
   logger.kv('Server version', status.record.serverVersion ?? 'unknown');
   logger.kv('Extensions dir', status.record.extensionsDir ?? 'unknown');
   logger.kv('Sidebar version', status.record.sidebarVersion ?? 'unknown');
-  if (status.record.defaultFolder) logger.kv('Default folder', status.record.defaultFolder);
   logger.kv('Running', status.alive ? `yes (PID ${status.pid})` : 'no (recorded but not live)');
   logger.blank();
   logger.info('Note: each open IDE browser window runs its own extension host (~100–300 MB); N windows = N hosts.');

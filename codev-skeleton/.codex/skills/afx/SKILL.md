@@ -190,7 +190,6 @@ afx ide install                 # npm i -g @cluesmith/codev-ide, then report the
 afx ide start                   # Find codev-ide-server, ask Tower to spawn it (port 8200)
 afx ide start --server-path <bin>   # Use this binary instead of discovery
 afx ide start -p <port>         # Run the server on another port
-afx ide start --default-folder <path>   # Folder opened when the URL has no ?folder=
 afx ide stop                    # Stop the server
 afx ide status                  # Port, PID, server path/version, extensions dir, sidebar version
 ```
