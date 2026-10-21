@@ -182,7 +182,7 @@ Parse prompt rendering or tune thresholds.
 
 ### Approach A (recommended injection channel): the `--settings` launch flag through `HarnessProvider`
 
-The Claude provider adds the reporter hook set as a `--settings` launch argument on every launch form it builds: builder script, architect spawn, and resume. The flag accepts a file path or inline JSON; a codev-owned settings file is preferred over inline JSON to avoid shell-quoting a multi-hook document in generated scripts (the plan decides the location). The reporter script likewise lives in a codev-owned location the hook command references.
+The Claude provider adds the reporter hook set as a `--settings` launch argument on every launch form it builds: builder script, architect spawn, and resume. The flag accepts a file path or inline JSON; a codev-owned settings file is preferred over inline JSON to avoid shell-quoting a multi-hook document in generated scripts (the plan decides the location). The reporter script likewise lives in a codev-owned location the hook command references. Neither the settings file nor the script may live in a path an agent session writes to (a builder worktree, the main checkout): the #1782 mods spike observed a session rewriting code it ran under (finding 10), and the owner's #1761 decision 2 makes the spawn path the only loader. The installed package folder or Tower's own directory satisfies this; the plan picks one.
 
 - **Pros:** one channel for builders **and** architects (architects have no worktree to write into, and writing `.claude/settings.local.json` in the main checkout would also hook the human's own sessions there); never touches `settings.local.json`, so the write-guard block cannot be clobbered (constraint 5 satisfied structurally, with hook concatenation verified empirically); naturally re-applied on resume; harnesses without the capability simply contribute nothing.
 - **Cons:** depends on `--settings` hook concatenation holding in future Claude Code versions (mitigated by a test that asserts both the guard and the reporter fire); the reporter script location must survive package upgrades or fail open silently when missing.
@@ -274,7 +274,7 @@ The spec adopts these defaults. SC4, SC13 and the predicate are written to them,
 **Important (shapes design)**
 
 - **Codex reporter: resolved (owner, 2026-10-12): follow-up, not this build.** This build ships the Claude reporter only. Follow-up issue #1796 adds the Codex reporter behind the same capability and contract; its first task is the trust question (codev-generated hooks trusted without `--dangerously-bypass-hook-trust`, for example a one-time `/hooks` trust of the stable reporter command) plus a TUI-noise check.
-- No other design questions remain. The spike resolved the Claude event semantics. Reporter script location and upgrade behavior are plan-level choices bounded by SC15 (it must be codev-owned, and a missing script must fail silently).
+- No other design questions remain. The spike resolved the Claude event semantics. Reporter script location and upgrade behavior are plan-level choices bounded by SC15 (it must be codev-owned, outside any path an agent session writes, and a missing script must fail silently).
 
 **Nice-to-know**
 
