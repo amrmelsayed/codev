@@ -156,6 +156,8 @@ function run(command: string, args: string[], stdin: string, env: Record<string,
     child.stdout.on('data', (d) => { stdout += d; });
     child.stderr.on('data', (d) => { stderr += d; });
     child.on('close', (code) => resolve({ code, stdout, stderr, elapsedMs: Date.now() - started }));
+    // A child may exit without reading stdin (the hook wrapper does when the script is missing).
+    child.stdin.on('error', () => {});
     child.stdin.end(stdin);
   });
 }
