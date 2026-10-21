@@ -39,6 +39,12 @@ describe('parseLinkedIssue', () => {
     expect(parseLinkedIssue('Switches encoding to UTF-8 per ISO-8601', 'Fix COVID-19 banner')).toBeNull();
   });
 
+  it('links a numeric [PIR #N] tag like Spec and Bugfix tags (#1740)', () => {
+    expect(parseLinkedIssue('', '[PIR #1740] Add jira')).toBe('1740');
+    expect(parseLinkedIssue('- `abc` [PIR #0042] change', 'Title')).toBe('42');
+    expect(parseAllLinkedIssues('[PIR #7] a', 'x')).toEqual(['7']);
+  });
+
   it('prefers numeric links exactly as before (#1740)', () => {
     expect(parseLinkedIssue('Fixes #42', '[PIR #ENG-1] x')).toBe('42');
   });

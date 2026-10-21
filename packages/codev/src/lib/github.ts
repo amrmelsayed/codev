@@ -490,6 +490,9 @@ export function parseLinkedIssue(prBody: string, prTitle: string): string | null
   // Check PR title for [Spec N] or [Bugfix #N] patterns
   const specPattern = /\[Spec\s+#?(\d+)\]/i;
   const bugfixPattern = /\[Bugfix\s+#?(\d+)\]/i;
+  // [PIR #N] (#1740): the PIR commit tag, matched like the other two, so PIR
+  // links the same way whether its id is a number or a tracker key.
+  const pirPattern = /\[PIR\s+#?(\d+)\]/i;
 
   const titleSpecMatch = prTitle.match(specPattern);
   if (titleSpecMatch) {
@@ -510,6 +513,11 @@ export function parseLinkedIssue(prBody: string, prTitle: string): string | null
   const bodyBugfixMatch = prBody.match(bugfixPattern);
   if (bodyBugfixMatch) {
     return String(Number(bodyBugfixMatch[1]));
+  }
+
+  const pirMatch = prTitle.match(pirPattern) ?? prBody.match(pirPattern);
+  if (pirMatch) {
+    return String(Number(pirMatch[1]));
   }
 
   // Tracker keys (#1740), only inside codev's bracketed tags, checked after
@@ -566,6 +574,11 @@ export function parseAllLinkedIssues(prBody: string, prTitle: string): string[] 
 
   const bugfixPattern = /\[Bugfix\s+#?(\d+)\]/gi;
   for (const m of combined.matchAll(bugfixPattern)) {
+    issues.add(String(Number(m[1])));
+  }
+
+  const pirPattern = /\[PIR\s+#?(\d+)\]/gi;
+  for (const m of combined.matchAll(pirPattern)) {
     issues.add(String(Number(m[1])));
   }
 
