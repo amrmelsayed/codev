@@ -105,6 +105,16 @@ function hasIrregularPending(dir: string): boolean {
   return false;
 }
 
+/**
+ * Whether `dir` is a real directory holding no skill files: nothing at all, or only
+ * `.DS_Store` / `.codev-new` leftovers. Such a folder is what discarding the untracked files
+ * of an earlier install leaves behind, and it is treated as a missing skill, never a skill.
+ */
+export function isEmptySkillDir(dir: string): boolean {
+  const files = readSkillFiles(dir);
+  return files !== null && files.length === 0;
+}
+
 export function hashSkillDir(dir: string): string | null {
   const files = readSkillFiles(dir);
   if (files === null) return null;
@@ -117,7 +127,7 @@ export function skillRelDir(provider: SkillProvider, name: string): string {
 }
 
 export type SkillState =
-  /** No copy in the project. */
+  /** No copy in the project, or an empty folder where one belongs. */
   | 'missing'
   /** Identical to the package's version. */
   | 'current'
@@ -144,6 +154,7 @@ export function classifySkill(
   if (!fs.existsSync(projectSkillDir) && !isSymlink(projectSkillDir)) return 'missing';
   const files = readSkillFiles(projectSkillDir);
   if (files === null || files.some(file => file.link) || hasIrregularPending(projectSkillDir)) return 'not-regular';
+  if (files.length === 0) return 'missing';
   const projectHash = hashSkillFiles(files);
   if (projectHash === hashSkillDir(packageSkillDir)) return 'current';
   if ((history[key] ?? []).includes(projectHash)) return 'shipped';

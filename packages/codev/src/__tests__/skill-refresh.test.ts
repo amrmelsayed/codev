@@ -86,6 +86,17 @@ describe('refreshSkills', () => {
     expect(read('.claude/skills/demo/SKILL.md')).toBe(NEW);
   });
 
+  it('fills an empty skill folder, or one holding only .DS_Store, as a missing skill', () => {
+    fs.mkdirSync(path.join(project, '.claude/skills/demo'), { recursive: true });
+    expect(classifySkill(path.join(project, '.claude/skills/demo'), path.join(skeleton, '.claude/skills/demo'), '.claude/skills/demo', HISTORY))
+      .toBe('missing');
+    write(project, '.claude/skills/demo/.DS_Store', 'finder');
+    const result = refreshSkills(project, skeleton, { history: HISTORY });
+    expect(result).toMatchObject({ added: ['.claude/skills/demo/'], conflicts: [] });
+    expect(read('.claude/skills/demo/SKILL.md')).toBe(NEW);
+    expect(fs.existsSync(path.join(project, '.claude/skills/demo/SKILL.md.codev-new'))).toBe(false);
+  });
+
   it('leaves an up-to-date skill alone', () => {
     write(project, '.claude/skills/demo/SKILL.md', NEW);
     const result = refreshSkills(project, skeleton, { history: HISTORY });

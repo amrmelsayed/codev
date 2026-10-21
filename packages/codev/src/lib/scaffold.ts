@@ -7,6 +7,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isEmptySkillDir } from './skill-refresh.js';
 
 interface CreateUserDirsOptions {
   skipExisting?: boolean;
@@ -420,7 +421,8 @@ export function copySkills(
       const destSkillDir = path.join(skillsDir, entry.name);
       const relativeSkillDir = `${relativeSkillsDir}/${entry.name}/`;
 
-      if (skipExisting && fs.existsSync(destSkillDir)) {
+      // An empty folder (left when an earlier install's files were discarded) is filled.
+      if (skipExisting && fs.existsSync(destSkillDir) && !isEmptySkillDir(destSkillDir)) {
         skipped.push(relativeSkillDir);
         continue;
       }
