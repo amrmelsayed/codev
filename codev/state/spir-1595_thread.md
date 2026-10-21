@@ -48,3 +48,10 @@
 - `PtySession.awaitingRestart` getter added (restart logic unchanged).
 - CMAP iter1: claude APPROVE, codex REQUEST_CHANGES (a failed census still advanced session-fact agents toward dead), gemini skipped (agy exit 3). Fixed: census failure is checked first, so every agent reads unknown. Added dedupe test and documented counter-on-unknown and `since` semantics.
 - Carry to phase 5: liveness keys builders by `entry.builders` key lowercased; the store keys by `builderRoleId`. They can diverge for a null or non-role-shaped terminal `role_id`, in which case the sweep drops that builder's reported state each sweep (graceful: PTY fallback). Settle in phase 5's key-join test.
+
+## Phase 5: agent state served on the overview (implemented)
+- `agent-state/serve.ts`: `serveAgentState(workspace, agentId, porchFacts)` reads the store + published liveness and calls core `projectAgentState`; per request, no cache.
+- `handleOverview` projects over every listed builder (not inside the session loop, so a session-less builder is served `dead` by liveness); `blocked` reuses the overview's own `detectBlocked` result. `liveArchitects` takes the workspace path and adds `agentState` + `lastDataAt`; both `/api/state` and `/api/overview` updated.
+- Key join settled: the overview list is filtered to `entry.builders` keys, so every listed builder's `roleId` equals the lowercased registry key liveness uses, and the store's `builderRoleId` is the same derivation as discovery. A registry entry under a non-role-shaped key (legacy null `role_id` falling back to the terminal id) never appears on the overview, so the sweep dropping its store entry has no served effect. Tested for a role-shaped and a legacy (`bugfix-42`) stored id.
+- Liveness stays the one place for `dead` (Constraint 14): the route never infers `alive: false` itself; before the first sweep the row is unknown.
+- Test 6 is a real restart: `vi.resetModules()` re-imports the route, store and liveness over the same in-memory `global.db`.
