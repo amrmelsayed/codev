@@ -1,5 +1,6 @@
 import type { OverviewBacklogItem, OverviewData } from '@cluesmith/codev-types';
 import { spawnableBacklog } from './backlog-filter.js';
+import { ISSUE_KEY_SOURCE, issueRef } from '../issue-id.js';
 
 /**
  * A backlog row projected for the Search Backlog Quick Pick.
@@ -58,7 +59,7 @@ export function toQuickPickItems(
     const assignee = item.assignees?.[0];
     if (assignee) { parts.push(`@${assignee}`); }
     return {
-      label: `#${item.id} ${item.title}`,
+      label: `${issueRef(item.id)} ${item.title}`,
       description: parts.join(' · '),
       issueId: item.id,
     };
@@ -86,10 +87,9 @@ export interface DynamicQuickPickItem {
 
 const BARE_ID = /^#?(\d+)$/;
 const TYPED_ID = /^(?:view\s+)?(issue|pr)\s+#?(\d+)$/i;
-// Tracker keys (#1740), issue-only: PR ids are always numbers. Sync note: the
-// key grammar twins apps/vscode/src/issue-id.ts.
-const BARE_KEY = /^#?([A-Za-z][A-Za-z0-9_]*-\d+)$/;
-const TYPED_KEY = /^(?:view\s+)?issue\s+#?([A-Za-z][A-Za-z0-9_]*-\d+)$/i;
+// Tracker keys (#1740), issue-only: PR ids are always numbers.
+const BARE_KEY = new RegExp(`^#?(${ISSUE_KEY_SOURCE})$`);
+const TYPED_KEY = new RegExp(`^(?:view\\s+)?issue\\s+#?(${ISSUE_KEY_SOURCE})$`, 'i');
 
 /**
  * Parse the Quick Pick's typed value against the dynamic type-ahead grammar:
@@ -136,13 +136,8 @@ export function toDynamicQuickPickItems(value: string, acceptKeys = false): Dyna
     } else {
       noun = 'PR';
     }
-    // Tracker keys read `ENG-123`, never `#ENG-123`.
-    let ref = `#${id}`;
-    if (!/^\d+$/.test(id)) {
-      ref = id;
-    }
     return {
-      label: `View ${noun} ${ref}`,
+      label: `View ${noun} ${issueRef(id)}`,
       description: 'Open in browser',
       alwaysShow: true,
       target,

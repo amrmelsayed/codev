@@ -199,3 +199,10 @@ describe('tracker-key dynamic rows (#1740)', () => {
     expect(toDynamicQuickPickItems('1350', true)[0].label).toBe('View Issue #1350');
   });
 });
+
+describe('static rows label tracker keys without # (#1740)', () => {
+  it('renders ENG-12 and #42', () => {
+    const rows = toQuickPickItems([item('ENG-12', { title: 'Jira' }), item('42', { title: 'GitHub' })], Date.now());
+    expect(rows.map(r => r.label)).toEqual(['ENG-12 Jira', '#42 GitHub']);
+  });
+});
