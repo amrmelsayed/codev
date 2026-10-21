@@ -1,5 +1,6 @@
 import type { OverviewBacklogItem } from '../lib/api.js';
 import { createFileTab } from '../lib/api.js';
+import { issueRef } from '../lib/issueIds.js';
 
 interface BacklogListProps {
   items: OverviewBacklogItem[];
@@ -57,7 +58,7 @@ export function BacklogList({ items, onRefresh }: BacklogListProps) {
         <div key={item.id} className="backlog-row">
           <a className="backlog-row-main" href={item.url} target="_blank" rel="noopener noreferrer">
             <span className={`backlog-priority-dot ${PRIORITY_CLASS[item.priority] ?? 'priority-dot--low'}`} />
-            <span className="backlog-row-number">#{item.id}</span>
+            <span className="backlog-row-number">{issueRef(item.id)}</span>
             <span className={`backlog-type-tag ${TYPE_CLASS[item.type] ?? ''}`}>{item.type}</span>
             <span className="backlog-row-title">{item.title}</span>
             {item.author && (
