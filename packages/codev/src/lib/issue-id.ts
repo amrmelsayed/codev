@@ -54,3 +54,10 @@ export function sameIssueId(a: number | string | undefined, b: number | string |
   if (a === undefined || b === undefined) return false;
   return String(a).toUpperCase() === String(b).toUpperCase();
 }
+
+/** How an issue id reads in prose: `#42` for a number, `ENG-123` for a key (never `#ENG-123`). */
+export function issueRef(id: number | string): string {
+  const text = String(id);
+  if (isIssueKey(text)) return canonicalIssueId(text);
+  return `#${text}`;
+}

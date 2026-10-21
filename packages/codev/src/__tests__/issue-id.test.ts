@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { canonicalIssueId, isIssueKey, parseIssueArg, sameIssueId } from '../lib/issue-id.js';
+import { canonicalIssueId, isIssueKey, issueRef, parseIssueArg, sameIssueId } from '../lib/issue-id.js';
 
 describe('isIssueKey', () => {
   it.each(['ENG-123', 'AB2-12', 'MY_PROJ-1', 'eng-1', 'A-1'])('accepts %s', (id) => {
@@ -51,5 +51,13 @@ describe('sameIssueId', () => {
     expect(sameIssueId(42, '42')).toBe(true);
     expect(sameIssueId(42, 43)).toBe(false);
     expect(sameIssueId(undefined, 42)).toBe(false);
+  });
+});
+
+describe('issueRef', () => {
+  it('writes #N for numbers and the canonical key for keys', () => {
+    expect(issueRef(42)).toBe('#42');
+    expect(issueRef('42')).toBe('#42');
+    expect(issueRef('eng-123')).toBe('ENG-123');
   });
 });
