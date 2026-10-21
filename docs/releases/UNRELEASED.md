@@ -56,6 +56,12 @@ A project that adopts Codev on a running codebase starts with the four governanc
 
 The agent follows the project's installed skill when it matches the package, so the rules it writes to are the rules the drafts are checked against. That needed `codev update` to keep skills current (#1811): a shipped skill you never edited is now replaced with the package's version, matched against every version Codev has shipped; an edited one keeps your content and gets a `.codev-new` copy of each changed file for the merge session, the same treatment CLAUDE.md gets. An empty skill folder is filled. `codev update --dry-run` now previews all of this and writes nothing; it used to write `CLAUDE.md.codev-new` and `AGENTS.md.codev-new` during a dry run. Symlinked skills, governance paths and `.codev-new` copies are never written through.
 
+## Jira as the issue tracker (#1740, PR #1848)
+
+Codev can now run a project whose issues live in Jira Cloud while the code stays on GitHub. Set `"forge": {"provider": "jira"}` in `.codev/config.json`, with `jira-site` and optionally `jira-project`, and log in once with Atlassian's `acli`; Codev never reads or stores a Jira token. The Jira preset covers viewing, listing and searching issues, commenting, recently closed items and the current user, and every PR operation keeps running through `gh`, the same hybrid shape Linear uses. `codev doctor` reports both logins for Jira and Linear workspaces, and no longer warns about the provider's own settings.
+
+Tracker keys such as `ENG-123` now carry through everything that used to assume a number: `afx spawn`, worktree and branch names, porch project ids, PR linking (`[PIR #ENG-1]`, `Fixes #ENG-1`), builder lookup and cleanup, the overview, the dashboard and the VS Code extension. Numeric ids resolve exactly as before, because every numeric pattern is still tried first, and the overview now prefers the issue id it stored at spawn time over parsing a folder name. A random short id for an issue-less spawn can no longer take the shape of a key. Closing a Jira issue when its PR merges stays a manual step: GitHub's closing keywords do nothing for a Jira key.
+
 ## Polish
 
 <!-- Small vscode items as bullets:
@@ -68,7 +74,7 @@ The agent follows the project's installed skill when it matches the package, so 
 
 ## Breaking changes
 
-None.
+- **Published types: `createdAt` is now optional on backlog and issue-search items, and `OverviewData.issueIdKind` is new** (#1740, PR #1848). Jira's search cannot return dates, so consumers of `@cluesmith/codev-types` (the Stream Deck plugin and the client SDK) must treat a missing `createdAt` as unknown rather than a date.
 
 ## Install
 
