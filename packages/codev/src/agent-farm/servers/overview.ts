@@ -503,6 +503,8 @@ export interface StoredBuilderIdentity {
   roleId: string;
   /** The issue it was spawned for, or null for task/protocol/worktree builders. */
   issueNumber: string | null;
+  /** The architect that spawned it (Spec 823), or null. */
+  spawnedByArchitect: string | null;
 }
 
 /**
@@ -679,10 +681,16 @@ export function loadStoredBuilderIdentities(workspaceRoot: string): Map<string, 
     const db = new Database(dbPath, { readonly: true });
     try {
       const rows = db.prepare(
-        'SELECT worktree, id, issue_number FROM builders WHERE workspace_path = ?',
-      ).all(normalizeWorkspacePath(workspaceRoot)) as Array<{ worktree: string; id: string; issue_number: string | null }>;
+        'SELECT worktree, id, issue_number, spawned_by_architect FROM builders WHERE workspace_path = ?',
+      ).all(normalizeWorkspacePath(workspaceRoot)) as Array<{
+        worktree: string; id: string; issue_number: string | null; spawned_by_architect: string | null;
+      }>;
       for (const row of rows) {
-        result.set(row.worktree, { roleId: row.id, issueNumber: row.issue_number });
+        result.set(row.worktree, {
+          roleId: row.id,
+          issueNumber: row.issue_number,
+          spawnedByArchitect: row.spawned_by_architect,
+        });
       }
     } finally {
       db.close();
@@ -1069,13 +1077,16 @@ export class OverviewCache {
     const errors: { prs?: string; issues?: string } = {};
 
     // 1. Discover builders from .builders/ directory, then filter to live sessions
-    let builders = discoverBuilders(workspaceRoot, loadStoredBuilderIdentities(workspaceRoot));
+    // One read of the builders table (#1740) feeds both discovery (role id,
+    // project id) and the issueId / spawnedByArchitect enrichment below.
+    const stored = loadStoredBuilderIdentities(workspaceRoot);
+    let builders = discoverBuilders(workspaceRoot, stored);
     if (activeBuilderRoleIds) {
       // roleId is precomputed by discoverBuilders — no regex per call.
       builders = builders.filter(b => b.roleId !== null && activeBuilderRoleIds.has(b.roleId));
     }
 
-    // Enrich issueId and spawnedByArchitect from the builders table — protocol-
+    // Enrich issueId and spawnedByArchitect from the builders table (read once above), protocol-
     // agnostic (fixes #664 for issueId; adds spawnedByArchitect per Spec 823).
     // Issue #1118: builders now live in the single shared global.db, scoped by
     // workspace_path; read that file (read-only) and scope to this workspace.
@@ -1083,6 +1094,15 @@ export class OverviewCache {
     // Spec 823: dropped the `WHERE issue_number IS NOT NULL` filter so soft-mode
     // builders (issue_number=null) also enrich their spawnedByArchitect. Each
     // field is applied conditionally on per-row non-nullness.
+    for (const [worktree, row] of stored) {
+      const builder = builders.find(b => b.worktreePath === worktree);
+      if (!builder) continue;
+      // Canonical spelling (#1740): a row written before spawn canonicalized keys
+      // holds `eng-123`, which would fail to match the forge's `ENG-123`.
+      if (row.issueNumber != null) builder.issueId = canonicalIssueId(String(row.issueNumber));
+      if (row.spawnedByArchitect != null) builder.spawnedByArchitect = row.spawnedByArchitect;
+    }
+
     // Spec 1313 Phase 7: workspace held-mail summary, folded into the overview so the
     // dashboard/VSCode indicator renders count + attention state straight off
     // /api/overview. Defaults (0 / false) survive a missing or unreadable DB.
@@ -1094,17 +1114,6 @@ export class OverviewCache {
         const normWs = normalizeWorkspacePath(workspaceRoot);
         const db = new Database(dbPath, { readonly: true });
         try {
-          const rows = db.prepare(
-            'SELECT worktree, issue_number, spawned_by_architect FROM builders WHERE workspace_path = ?',
-          ).all(normWs) as Array<{ worktree: string; issue_number: string | null; spawned_by_architect: string | null }>;
-          for (const row of rows) {
-            const builder = builders.find(b => b.worktreePath === row.worktree);
-            if (!builder) continue;
-            // Canonical spelling (#1740): a row written before spawn canonicalized keys
-            // holds `eng-123`, which would fail to match the forge's `ENG-123`.
-            if (row.issue_number != null) builder.issueId = canonicalIssueId(String(row.issue_number));
-            if (row.spawned_by_architect != null) builder.spawnedByArchitect = row.spawned_by_architect;
-          }
           // Counts + escalation flag only — never bodies (redaction rule). Per-agent
           // held counts attach to the matching builder by roleId (the same
           // case-normalized key handleOverview uses to map the terminal registry).

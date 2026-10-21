@@ -1423,14 +1423,14 @@ describe('overview', () => {
     it('prefers the stored builder id over the parsed directory name (#1740)', () => {
       createBuilderWorktree(tmpDir, 'task-Ab-3');
       const worktree = path.join(tmpDir, '.builders', 'task-Ab-3');
-      const stored = new Map([[worktree, { roleId: 'builder-task-zz-9', issueNumber: null }]]);
+      const stored = new Map([[worktree, { roleId: 'builder-task-zz-9', issueNumber: null, spawnedByArchitect: null }]]);
       expect(discoverBuilders(tmpDir, stored)[0].roleId).toBe('builder-task-zz-9');
     });
 
     it('does not read an issue-less protocol short id as a tracker key when the stored row has no issue (#1740)', () => {
       createBuilderWorktree(tmpDir, 'maintain-Ab-3');
       const worktree = path.join(tmpDir, '.builders', 'maintain-Ab-3');
-      const stored = new Map([[worktree, { roleId: 'builder-maintain-Ab-3', issueNumber: null }]]);
+      const stored = new Map([[worktree, { roleId: 'builder-maintain-Ab-3', issueNumber: null, spawnedByArchitect: null }]]);
 
       const builders = discoverBuilders(tmpDir, stored);
       expect(builders[0].mode).toBe('soft');
@@ -1441,7 +1441,7 @@ describe('overview', () => {
     it('trusts a key-shaped name when the stored row confirms the issue (#1740)', () => {
       createBuilderWorktree(tmpDir, 'pir-AB-3');
       const worktree = path.join(tmpDir, '.builders', 'pir-AB-3');
-      const stored = new Map([[worktree, { roleId: 'builder-pir-ab-3', issueNumber: 'AB-3' }]]);
+      const stored = new Map([[worktree, { roleId: 'builder-pir-ab-3', issueNumber: 'AB-3', spawnedByArchitect: null }]]);
 
       expect(discoverBuilders(tmpDir, stored)[0].issueId).toBe('AB-3');
     });
@@ -1449,7 +1449,7 @@ describe('overview', () => {
     it('ignores a legacy stored id that is not a role id (#1740)', () => {
       createBuilderWorktree(tmpDir, 'bugfix-42-x');
       const worktree = path.join(tmpDir, '.builders', 'bugfix-42-x');
-      const stored = new Map([[worktree, { roleId: 'bugfix-42', issueNumber: '42' }]]);
+      const stored = new Map([[worktree, { roleId: 'bugfix-42', issueNumber: '42', spawnedByArchitect: null }]]);
       expect(discoverBuilders(tmpDir, stored)[0].roleId).toBe('builder-bugfix-42');
     });
 
@@ -1457,7 +1457,7 @@ describe('overview', () => {
       createBuilderWorktree(tmpDir, 'spir-126-x', ["id: '0126'", 'title: t', 'protocol: spir', 'phase: implement'].join('\n'), '0126-t');
       const worktree = path.join(tmpDir, '.builders', 'spir-126-x');
       const without = discoverBuilders(tmpDir)[0];
-      const withStored = discoverBuilders(tmpDir, new Map([[worktree, { roleId: 'builder-spir-126', issueNumber: '126' }]]))[0];
+      const withStored = discoverBuilders(tmpDir, new Map([[worktree, { roleId: 'builder-spir-126', issueNumber: '126', spawnedByArchitect: null }]]))[0];
       expect(withStored).toEqual(without);
     });
 
