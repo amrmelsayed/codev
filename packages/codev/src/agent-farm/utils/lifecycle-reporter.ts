@@ -43,6 +43,9 @@ export const LIFECYCLE_REPORTER_SETTINGS_NAME = 'lifecycle-reporter-settings.jso
 /** Seconds the harness allows each hook before abandoning it. The script itself finishes well inside it. */
 export const LIFECYCLE_HOOK_TIMEOUT_SECONDS = 3;
 
+/** Claude's question tool: the PreToolUse matcher and the script's question-kind test both read it. */
+export const CLAUDE_QUESTION_TOOL = 'AskUserQuestion';
+
 /** The directory both files are installed into. */
 export function lifecycleReporterDir(): string {
   return join(AGENT_FARM_DIR, 'hooks');
@@ -64,7 +67,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
-const QUESTION_TOOL = 'AskUserQuestion';
+const QUESTION_TOOL = '${CLAUDE_QUESTION_TOOL}';
 const DEFAULT_TOWER_PORT = ${DEFAULT_TOWER_PORT};
 const REQUEST_DEADLINE_MS = 800;
 const OVERALL_DEADLINE_MS = 1500;
@@ -276,7 +279,7 @@ export function buildLifecycleReporterSettings(scriptPath: string): string {
       SessionStart: [{ hooks: [hook] }],
       UserPromptSubmit: [{ hooks: [hook] }],
       PostToolUse: [{ matcher: '*', hooks: [hook] }],
-      PreToolUse: [{ matcher: 'AskUserQuestion', hooks: [hook] }],
+      PreToolUse: [{ matcher: CLAUDE_QUESTION_TOOL, hooks: [hook] }],
       PermissionRequest: [{ matcher: '*', hooks: [hook] }],
       Notification: [{ hooks: [hook] }],
       Stop: [{ hooks: [hook] }],

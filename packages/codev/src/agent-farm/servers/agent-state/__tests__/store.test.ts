@@ -60,6 +60,41 @@ describe('AgentStateStore: event to activity', () => {
     expect(store.get(WS, ID)?.backgroundWork).toBe(false);
   });
 
+  // Phase 8 real-session finding: Claude's idle_prompt (a turn-ended with no
+  // background claim) fires 60 s after Stop while the background task still runs.
+  it('a claim-less turn end does not release a same-session background-work hold', () => {
+    const store = makeStore();
+    const listener = vi.fn();
+    store.apply(WS, ID, event({ event: 'turn-ended', backgroundWork: true, at: NOW - 100 }));
+    store.on(AGENT_STATE_CHANGED, listener);
+    expect(store.apply(WS, ID, event({ event: 'turn-ended', at: NOW - 40 }))).toBe('unchanged');
+    expect(store.get(WS, ID)).toMatchObject({
+      activity: 'working', backgroundWork: true, activitySince: NOW - 100, reportedAt: NOW - 100,
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('the background-work hold is released by an explicit turn end, a new turn, or a new session', () => {
+    const releases: Array<[Partial<AgentLifecycleEvent>, string]> = [
+      [{ event: 'turn-ended', backgroundWork: false }, 'idle'],
+      [{ event: 'turn-started' }, 'working'],
+      [{ event: 'turn-ended', sessionId: 's2' }, 'idle'],
+    ];
+    for (const [overrides, activity] of releases) {
+      const store = makeStore();
+      store.apply(WS, ID, event({ event: 'turn-ended', backgroundWork: true, at: NOW - 100 }));
+      expect(store.apply(WS, ID, event({ ...overrides, at: NOW - 40 }))).toBe('changed');
+      expect(store.get(WS, ID)).toMatchObject({ activity, backgroundWork: false });
+    }
+  });
+
+  it('a claim-less turn end still ends a working turn whose own turn end was lost', () => {
+    const store = makeStore();
+    store.apply(WS, ID, event({ event: 'turn-started', at: NOW - 100 }));
+    store.apply(WS, ID, event({ event: 'turn-ended', at: NOW - 40 }));
+    expect(store.get(WS, ID)).toMatchObject({ activity: 'idle', backgroundWork: false });
+  });
+
   it('keeps activitySince across reports of the same activity, and moves it on a change', () => {
     const store = makeStore();
     store.apply(WS, ID, event({ event: 'turn-started', at: NOW - 300 }));

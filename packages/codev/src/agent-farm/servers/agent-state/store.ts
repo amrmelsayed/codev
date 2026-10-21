@@ -17,6 +17,10 @@
  * from a different harness session supersedes the stored one only with a newer
  * hook time; a hook time more than `MAX_FUTURE_SKEW_MS` ahead of Tower's clock is
  * rejected.
+ *
+ * Background work (SC5): a turn end with `backgroundWork: true` holds the agent
+ * `working`. A later same-session turn end that makes no background-work claim
+ * (the field absent) does not release that hold; a new turn does.
  */
 
 import { EventEmitter } from 'node:events';
@@ -82,6 +86,21 @@ function activityFor(event: AgentLifecycleEvent): AgentActivity {
 }
 
 /**
+ * True when `event` is a turn end that makes no background-work claim, arriving
+ * while the same session's turn end with background work is held. Such a report
+ * carries nothing new: Claude's 60 s `idle_prompt` (the second chance for a lost
+ * turn end) fires while the agent's own background task still runs, and must not
+ * end the background-work hold early. Real-session finding, Phase 8.
+ */
+function repeatsBackgroundTurnEnd(event: AgentLifecycleEvent, previous: StoredAgentActivity | undefined): boolean {
+  return event.event === 'turn-ended'
+    && event.backgroundWork === undefined
+    && previous !== undefined
+    && previous.sessionId === event.sessionId
+    && previous.backgroundWork;
+}
+
+/**
  * The needs-input detail for an accepted `needs-input` report. A report without
  * a tool (the redundant permission notification names none) keeps the detail
  * already held for the same episode.
@@ -118,6 +137,7 @@ export class AgentStateStore extends EventEmitter {
       if (event.at < previous.reportedAt) return 'stale';
       if (event.sessionId !== previous.sessionId && event.at === previous.reportedAt) return 'stale';
     }
+    if (repeatsBackgroundTurnEnd(event, previous)) return 'unchanged';
 
     const activity = activityFor(event);
     let activitySince = event.at;
