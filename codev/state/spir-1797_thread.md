@@ -120,3 +120,11 @@ Also all five should-fix items: a cap-parity test, the inline source follows the
 - Full suite: 323 files, 6709 passed; tsc clean.
 
 **Owner's manual adopt:** the skill folders were empty because an earlier install's files had been removed. `adopt` skipped existing folders even when empty (pre-existing), and `update` would have called them edited. Both now treat an empty skill folder as missing. Tested, and reproduced on a scratch repo: 20 folders filled.
+
+**pr gate approved** (the owner's word, relayed by main). Head at approval: d3725f7a3.
+
+**CMAP round 8 (7b3f9457d):** Gemini APPROVE; Codex and Claude REQUEST_CHANGES. The fixes:
+- A symlinked draft is no longer sent to the reviewers.
+- Main merged (28 commits, clean).
+- The #1809 and #1802 umask lessons are reconciled.
+- Full suite: 324 files, 6726 passed; tsc clean.

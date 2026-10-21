@@ -384,6 +384,19 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Concern**: `SKIP_SUMMARY` couples to consult's prose → **Follow-up**: already listed below
 - **Concern**: the skill history pins every commit, not every release → **Rebutted**: as in round 5; release-only history would misclassify a copy installed from a local or pre-release build as edited. Size (134 hashes) is the only cost
 
+### PR Review (Round 8, on the empty-skill-folder fix, head 7b3f9457d)
+#### Gemini (APPROVE)
+- No concerns raised (APPROVE)
+#### Codex (REQUEST_CHANGES)
+- **Concern**: branch 28 commits behind main → **Addressed**: merged, clean, no shipped-skill changes
+- **Concern**: no final-head test run → **Addressed**: full suite after the merge: 324 files, 6726 passed; tsc clean
+#### Claude (REQUEST_CHANGES)
+- **Concern**: a draft replaced by a symlink was flagged but still read into the review prompt and sent to three providers → **Addressed**: drafts with a `not-regular` violation are left out of the review; the test asserts the prompt carries neither the heading nor the target's content
+- **Concern**: no size bound on the review prompt → **Rebutted**: the embedded drafts are capped by the validator, and the CLI passes the prompt to consult as a file, not on argv
+- **Concern**: `HARNESS_SCRATCH_PATHS` covers only Claude → **Rebutted**: no Codex run wrote a project-local scratch file; an unknown path is still reported
+- **Concern**: the #1809 and #1802 lessons contradict on the cloud-config fix → **Addressed**: both now note that this PR made the `chmodSync` fix
+- **Concern**: uncommitted `codev/team/messages.md` → **N/A**: Tower's log in this worktree, never staged
+
 ## Lessons Learned
 
 ### What Went Well
