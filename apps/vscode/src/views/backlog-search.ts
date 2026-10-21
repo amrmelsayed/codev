@@ -86,6 +86,10 @@ export interface DynamicQuickPickItem {
 
 const BARE_ID = /^#?(\d+)$/;
 const TYPED_ID = /^(?:view\s+)?(issue|pr)\s+#?(\d+)$/i;
+// Tracker keys (#1740), issue-only: PR ids are always numbers. Sync note: the
+// key grammar twins apps/vscode/src/issue-id.ts.
+const BARE_KEY = /^#?([A-Za-z][A-Za-z0-9_]*-\d+)$/;
+const TYPED_KEY = /^(?:view\s+)?issue\s+#?([A-Za-z][A-Za-z0-9_]*-\d+)$/i;
 
 /**
  * Parse the Quick Pick's typed value against the dynamic type-ahead grammar:
@@ -95,11 +99,15 @@ const TYPED_ID = /^(?:view\s+)?(issue|pr)\s+#?(\d+)$/i;
  * - `issue 1350` / `view issue 1350` names the target explicitly; likewise
  *   `pr 1350` / `view pr 1350`. Case-insensitive, leading `#` on the number
  *   tolerated (the `parseIssueId` convention).
+ * - `ENG-123` / `issue ENG-123` (a tracker key, #1740) offers the issue only,
+ *   canonicalized to upper case, and only when `acceptKeys` (see
+ *   `acceptsIssueKeys`): on a numeric-id workspace `UTF-8` stays plain text.
  * - Anything else (non-numeric, trailing text, bare keyword) yields no
  *   dynamic rows: the input is an ordinary text search over the static rows.
  */
 export function parseSearchDynamicQuery(
   value: string,
+  acceptKeys = false,
 ): Array<{ target: DynamicPickTarget; id: string }> {
   const trimmed = value.trim();
   const bare = BARE_ID.exec(trimmed);
@@ -110,20 +118,31 @@ export function parseSearchDynamicQuery(
   if (typed) {
     return [{ target: typed[1].toLowerCase() as DynamicPickTarget, id: typed[2] }];
   }
+  if (acceptKeys) {
+    const key = BARE_KEY.exec(trimmed) ?? TYPED_KEY.exec(trimmed);
+    if (key) {
+      return [{ target: 'issue', id: key[1].toUpperCase() }];
+    }
+  }
   return [];
 }
 
 /** Project the parsed dynamic grammar into ready-to-insert Quick Pick rows. */
-export function toDynamicQuickPickItems(value: string): DynamicQuickPickItem[] {
-  return parseSearchDynamicQuery(value).map(({ target, id }) => {
+export function toDynamicQuickPickItems(value: string, acceptKeys = false): DynamicQuickPickItem[] {
+  return parseSearchDynamicQuery(value, acceptKeys).map(({ target, id }) => {
     let noun: string;
     if (target === 'issue') {
       noun = 'Issue';
     } else {
       noun = 'PR';
     }
+    // Tracker keys read `ENG-123`, never `#ENG-123`.
+    let ref = `#${id}`;
+    if (!/^\d+$/.test(id)) {
+      ref = id;
+    }
     return {
-      label: `View ${noun} #${id}`,
+      label: `View ${noun} ${ref}`,
       description: 'Open in browser',
       alwaysShow: true,
       target,

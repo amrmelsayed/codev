@@ -1331,7 +1331,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		reg('codev.openBacklogSearch', () =>
 			BacklogSearchPanel.createOrShow(connectionManager!, overviewCache, context.extensionUri)),
 		reg('codev.searchBacklog', () => searchBacklog(connectionManager!, overviewCache)),
-		reg('codev.openIssueById', () => openIssueById(connectionManager!)),
+		reg('codev.openIssueById', () => openIssueById(connectionManager!, () => overviewCache.getData())),
 		reg('codev.openPRById', () => openPRById(connectionManager!)),
 		reg('codev.openMarkdownPreview', async () => {
 			const uri = vscode.window.activeTextEditor?.document.uri;
