@@ -19,6 +19,7 @@
 
 import { findLatestSessionId, verifySessionOwnership } from './claude-session-discovery.js';
 import { buildWorktreeGuardFiles } from './worktree-write-guard.js';
+import { shellSingleQuoted, toShellPath } from './lifecycle-reporter.js';
 
 // =============================================================================
 // Types
@@ -153,6 +154,24 @@ export interface HarnessProvider {
     args: string[];
     scriptFragment: string;
   } | null;
+
+  /**
+   * Optional: make the agent report its lifecycle to Tower (Spec 1595), given
+   * the absolute path of the installed reporter settings. Covers both launch
+   * shapes in one call, like `buildResume`:
+   *   - args:           Node argv for spawn() call sites (architect launch, resume)
+   *   - scriptFragment: shell-quoted fragment for the generated builder script
+   *   - env:            variables the caller exports beside the command
+   *
+   * Absence means unsupported: the agent's attention state falls back to the
+   * PTY-silence heuristic. Only Claude implements it; callers go through
+   * `resolveLifecycleReporterInjection`, which installs the files first.
+   */
+  buildLifecycleReporterInjection?(settingsPath: string): {
+    args: string[];
+    scriptFragment: string;
+    env: Record<string, string>;
+  };
 }
 
 /** Custom harness definition from .codev/config.json */
@@ -244,6 +263,15 @@ export const CLAUDE_HARNESS: HarnessProvider = {
       scriptFragment: `--resume '${shellEscapeSingleQuote(sessionId)}'`,
     };
   },
+  // Spec 1595: the reporter hook set rides on `--settings`, which concatenates
+  // with the worktree's settings.local.json, so the write-guard is untouched.
+  // Forward slashes keep a Windows path intact under Git Bash (#1658); argv
+  // elements reach the process without a shell, so only the fragment is quoted.
+  buildLifecycleReporterInjection: (settingsPath) => ({
+    args: ['--settings', toShellPath(settingsPath)],
+    scriptFragment: `--settings ${shellSingleQuoted(toShellPath(settingsPath))}`,
+    env: {},
+  }),
   // Install the worktree write-guard PreToolUse hook (Issue #1018) so a builder
   // cannot silently write outside its worktree (e.g. into the main checkout).
   getWorktreeFiles: (_content, _filePath, worktreePath) =>
