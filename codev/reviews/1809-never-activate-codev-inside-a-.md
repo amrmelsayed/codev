@@ -118,6 +118,14 @@ COLD `codev/resources/lessons-learned.md`:
 - **Architecture:** re-pointing a window's data source re-points every consumer of it. The read-only attach made the shared `overviewCache` the parent's, and the owner found the leak at the dev gate as a burst of sibling-lane gate toasts with Approve buttons. The same leak reached the status-bar counts, the badge and the panel's Attention list. When re-pointing a cache or connection, enumerate its subscribers and decide each one.
 - **Testing:** `umask 077` makes `cloud-config.test.ts` fail deterministically. Run under `umask 022` rather than skipping or editing the test.
 
+## Accepted deviation (owner-ruled)
+
+The owner's original words were "codev should never activate inside a builder worktree, nor vs code extension agents view render at all". One bounded deviation stands **by decision**: in a worktree window the Agents view may paint briefly before activation, then disappear.
+- **Why it happens:** the `codev.isBuilderWorktree` context key is set inside `activate()`, and `when: "!codev.isBuilderWorktree"` is true until then.
+- **Why it stands:** a positive-polarity key would also hide the view's pre-activation "Loading Codev…" welcome in every window.
+- **Ruling:** the owner ruled "accept the flash" on 2026-10-21. No code change will be made.
+- **Detail:** reviewer findings and reasoning are in `codev/projects/1809-never-activate-codev-inside-a-/1809-review-iter1-rebuttals.md`.
+
 ## Things to Look At During PR Review
 
 - **Prune location deviation.** The plan put `pruneBuilderWorktreeWorkspaces` in `tower-instances.ts`, but it lives in `tower-terminals.ts`. `tower-terminals` already imports `tower-instances`, and the prune needs `processExists` and the in-memory terminal map, which both live in `tower-terminals`. Putting it in `tower-instances` would have created an import cycle. Only the location changed.
@@ -151,7 +159,7 @@ Verdicts: Gemini **APPROVE**, Codex **REQUEST_CHANGES**, Claude **REQUEST_CHANGE
 - **Gemini (non-blocking): `resolveDevTargetById`'s local fast path.** It used the parent root. It now uses the window root, so a worktree window resolves its own builder without a Tower round-trip.
 
 **Not changed:**
-- **Claude: the Agents view can flash before activation.** `codev.isBuilderWorktree` is unset until `activate()` seeds it at the top of activation, so `!codev.isBuilderWorktree` is briefly true. A positive-polarity clause such as `codev.stateKnown && …` would also hide the view's pre-activation "Loading Codev…" welcome in every window. The flash lasts only until activation and shows no data, because nothing is connected yet.
+- **Claude (also raised by Codex): the Agents view can flash before activation.** Accepted by owner ruling; see "Accepted deviation" below.
 - **Claude: `terminal_sessions.pid` also counts as liveness.** This errs on the safe side; the only cost is that a reused pid keeps a WARN.
 
 ## How to Test Locally
@@ -160,6 +168,7 @@ Verdicts: Gemini **APPROVE**, Codex **REQUEST_CHANGES**, Claude **REQUEST_CHANGE
 - **Run the extension:** F5 in `apps/vscode` (development extension host) from this worktree.
 - **Run Tower from this build:** `afx tower stop`, then `node .builders/pir-1809/packages/codev/bin/afx.js tower start` from the main checkout. This restarts Tower.
 - **What to verify:**
+  - **Known, expected behaviour, not a bug:** in a worktree window the Agents view may paint for a moment before disappearing. This is by owner decision; see "Accepted deviation".
   - Tower log: one `Builder-worktree prune:` INFO line, plus a WARN for any live stray. Stale `.builders` rows are gone from `known_workspaces`.
   - Open a builder worktree folder:
     - no Agents view;
