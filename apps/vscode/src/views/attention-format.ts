@@ -96,3 +96,14 @@ function withAge(text: string, age: string | null): string {
   if (age) { return `${text} · ${age}`; }
   return text;
 }
+
+/**
+ * The one-word badge for a wait (Spec 1595): `needs input` at a prompt, `agent exited` when dead,
+ * `idle` for a served turn end, and `waiting` for the PTY-silence fallback (no served state).
+ */
+export function waitWord(state: WaitState | undefined): string {
+  if (state === 'needs-input') { return 'needs input'; }
+  if (state === 'dead') { return 'agent exited'; }
+  if (state === 'idle') { return 'idle'; }
+  return 'waiting';
+}

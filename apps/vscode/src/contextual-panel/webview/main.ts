@@ -22,6 +22,7 @@ import './styles.css';
 import type { ModeDescriptor, ModeKind } from '../types.js';
 import { formatAge } from '@cluesmith/codev-sdk/builder-helpers';
 import type { ArchitectAttentionItem, AttentionBuilderRef, AttentionSummary, GateItem, WaitingItem, CountItem } from '@cluesmith/codev-sdk/builder-helpers';
+import { waitWord } from '../../views/attention-format.js';
 import type { HostToWebviewMessage, OpenLocationMessage, ReviewAction, WebviewToHostMessage } from '../messages.js';
 import type { CodeReviewComment, CodeReviewFile, CodeReviewSentComment, CodeReviewSummary } from '../code-review.js';
 
@@ -108,13 +109,6 @@ function gateRow(item: GateItem, index: number): React.ReactElement {
     rowMain(item),
     badge,
   );
-}
-
-/** Spec 1595: the badge word for a wait: at a prompt, dead, or idle (also the PTY-silence fallback). */
-function waitWord(state: WaitingItem['state'] | ArchitectAttentionItem['state']): string {
-  if (state === 'needs-input') { return 'needs input'; }
-  if (state === 'dead') { return 'agent exited'; }
-  return 'idle';
 }
 
 /** The wait badge, `<word> · <age>`; a distinct modifier class per state. */
