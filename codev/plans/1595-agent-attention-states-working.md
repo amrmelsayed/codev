@@ -321,6 +321,7 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
     - `SessionStart`, `UserPromptSubmit`, `PostToolUse` (all tools), `PreToolUse` matched to the question tool only, `PermissionRequest`, `Notification`, `Stop`. `SessionEnd` is not wired.
     - Every hook is `async: true` with a short `timeout`, and runs one identical command.
     - **The command fails silently even when the script is missing** (SC15). It is a shell wrapper, not a bare `node <path>`: `[ -f '<script>' ] && node '<script>' >/dev/null 2>&1; exit 0`. A deleted or never-written script, a missing `node`, or a crash produces no output and exit 0. The wrapper text is the same for every agent.
+    - **Path quoting is safe under bash on Windows** (main's condition, from #1658). On Windows the launch script runs under Git Bash and Claude Code runs hooks through Git Bash, so the hook command string and the `--settings` argument are parsed by bash. Every path in them (the script path inside the wrapper, and the settings path in `args` and `scriptFragment`) is converted to forward slashes and single-quoted with the existing single-quote escaper. A backslash path can then never be eaten by bash.
   - **`ensureLifecycleReporterInstalled()`**: writes both files to the hooks directory (main's conditions, 2026-10-21):
     - The directory derives from `AGENT_FARM_DIR` (`@cluesmith/codev-core/constants`), so it resolves under `USERPROFILE` on Windows (#1658).
     - Each write is a temp file plus rename, done only when the content differs.
@@ -349,6 +350,7 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
   - exit 0 and empty stdout when Tower is down, slow, or erroring, on malformed input, and with no identity;
   - the **exact generated hook command** (wrapper included), run through a shell after the script file is deleted: no stdout, no stderr, exit 0;
   - the installer sets modes `0700`/`0600` regardless of umask, rewrites only on a content change, and leaves no secret in either file;
+  - **backslash-path test:** with a Windows-style hooks directory (for example `C:\Users\a b\.agent-farm\hooks`), the generated wrapper command and the injection's `args` and `scriptFragment` contain only forward-slash, single-quoted paths. Running the wrapper and the fragment through `bash -c` yields the original path intact (spaces included);
   - no request is made without identity.
 - [ ] Test 7: the injection is present in each of these forms. Codex, OpenCode and custom providers include none.
   - Claude builder: fresh, resume, and every loop branch.
