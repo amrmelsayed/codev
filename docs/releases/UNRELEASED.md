@@ -50,6 +50,12 @@ On the operator side, Tower refuses to activate a builder worktree and points at
 
 Known and expected: the Agents view can paint briefly as a worktree window loads, before it disappears.
 
+## Governance docs drafted from the codebase: `codev bootstrap-docs` (#1797, PR #1808; #1811)
+
+A project that adopts Codev on a running codebase starts with the four governance docs as placeholders, and nothing filled them in. `codev bootstrap-docs` now does: it launches your agent (Claude Code or Codex) in a session that works in the update-arch-docs skill's bootstrap mode, surveys the build wiring, entry points, service boundaries and persistence, explores the history (the project's own record first, then one line per PR, older eras, fixes and reverts, what was removed), and drafts only the files that are still placeholders. Curated files are read, never edited. When the session ends, Codev validates the drafts against the hot-tier caps, reports anything that changed outside the eligible files, and sends the drafts to the three reviewers for feedback. Nothing is committed for you. `codev adopt` offers the run when it finishes, and `codev update` says when the docs are still placeholders.
+
+The agent follows the project's installed skill when it matches the package, so the rules it writes to are the rules the drafts are checked against. That needed `codev update` to keep skills current (#1811): a shipped skill you never edited is now replaced with the package's version, matched against every version Codev has shipped; an edited one keeps your content and gets a `.codev-new` copy of each changed file for the merge session, the same treatment CLAUDE.md gets. An empty skill folder is filled. `codev update --dry-run` now previews all of this and writes nothing; it used to write `CLAUDE.md.codev-new` and `AGENTS.md.codev-new` during a dry run. Symlinked skills, governance paths and `.codev-new` copies are never written through.
+
 ## Polish
 
 <!-- Small vscode items as bullets:
