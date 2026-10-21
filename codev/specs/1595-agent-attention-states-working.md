@@ -111,7 +111,7 @@ From the main architect seat's Contract Surface ruling (2026-10-05, issue #1595;
 
 ## Assumptions
 
-**Verified empirically on Claude Code 2.1.289 (2026-10-05, live interactive session in tmux, every hook `async: true`):**
+**Verified empirically on Claude Code 2.1.289 (2026-10-05) and re-verified on 2.1.306 (2026-10-21), the latest installed, both after mods shipped in 2.1.287. Live interactive session in tmux, every hook `async: true`; every result below held on both versions:**
 
 - Hooks supplied with the `--settings` launch flag and hooks in the worktree's `.claude/settings.local.json` both fire for the same event (they concatenate). Async command hooks do not hold up the turn.
 - **Permission prompt:** `PreToolUse` fires, then `PermissionRequest` about 10 ms later, while the prompt is on screen. `Notification(permission_prompt)` follows about 6 seconds later. `PermissionRequest` is therefore the instant signal; the notification is a redundant second chance.
@@ -122,10 +122,16 @@ From the main architect seat's Contract Surface ruling (2026-10-05, issue #1595;
 - A message queued while the agent is mid-turn fires `UserPromptSubmit`.
 - **TUI output while working:** during a running foreground tool call the TUI repaints its elapsed-time counter every second, so PTY output stays fresh while a turn is genuinely in progress. The screen is static while the agent sits at a permission prompt or an empty composer.
 
-**From the documentation, to be confirmed during implementation:**
+**Verified on 2.1.306 only (2026-10-21; the 2.1.289 spike could not exercise these keystrokes):**
 
-- `Stop` does not fire on a user interrupt (Esc). The deny case above is consistent with this. The interrupt and `/clear` keystrokes could not be exercised reliably in the spike (the test session's vim-mode composer consumed them), so they are verification items, not design dependencies: the design does not rely on any event for either.
-- `SessionStart` fires with a `source` of `startup`, `resume`, `clear` or `compact`, giving a new session id on context reset. `SessionEnd` also fires on `/clear`, which is why `SessionEnd` is not used as a death signal.
+- **Interrupt (Esc) during a running tool call:** no `Stop`, no `PostToolUse`, and no `idle_prompt` within 60 seconds. The design does not depend on any interrupt event: the `working` staleness rule covers it.
+- **`/clear`:** `SessionEnd` (reason `clear`), then `SessionStart` (source `clear`) with a **new** session id, 7 ms apart. This is why `SessionEnd` is not a death signal and a reset is recognised by the new session id.
+- **Question tool:** `PreToolUse` for the question tool, then `PermissionRequest` naming the same tool about 40 ms later, then `Notification(permission_prompt)` about 6 seconds later. `elicitation_dialog` did not fire. Answering fires `PostToolUse` for the question tool, then `Stop`. So the reporter derives `NeedsInputDetail.kind` from the tool name, never from which hook fired: a `PermissionRequest` or `permission_prompt` for the question tool is `question`, not `permission`.
+- An environment variable set on the agent's launch reaches every hook process, which is how the agent identity travels (Approach 1).
+
+**From the documentation:**
+
+- `SessionStart` also fires with a `source` of `startup`, `resume` or `compact`.
 - Hook payloads carry `session_id`, `cwd`, `hook_event_name`, and for tool events `tool_name` and `tool_input`; Notification carries `notification_type`.
 
 **Codex (codex-cli 0.162.1, 2026-10-12; docs plus a live `codex exec` test):**
@@ -244,8 +250,8 @@ Claude hook to neutral event mapping (internal to the Claude provider, listed fo
 | `UserPromptSubmit` | `turn-started` | working |
 | `PostToolUse` (all tools) | `tool-activity` | working (clears needs-input after an approval or answer) |
 | `PreToolUse` (question tool only) | `needs-input` (question) | needs-input |
-| `PermissionRequest` | `needs-input` (permission, tool, summary) | needs-input |
-| `Notification` (`permission_prompt`) | `needs-input` (permission) | needs-input (redundant second chance) |
+| `PermissionRequest` | `needs-input` (kind from the tool: `question` for the question tool, else `permission`; tool, summary) | needs-input |
+| `Notification` (`permission_prompt`) | `needs-input` with no detail (the notification names no tool); Tower keeps the detail already stored for the episode | needs-input (redundant second chance) |
 | `Notification` (`elicitation_dialog`) | `needs-input` (question) | needs-input |
 | `Notification` (`idle_prompt`) | `turn-ended` | idle (redundant second chance, 60 s after `Stop`) |
 | `Stop` | `turn-ended` with `backgroundWork` | idle, or working while background tasks remain |
