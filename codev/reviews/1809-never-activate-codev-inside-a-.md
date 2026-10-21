@@ -136,6 +136,24 @@ COLD `codev/resources/lessons-learned.md`:
 - **#1803 ordering.** #1803 plans a startup re-adopt pass for unregistered shellpers, and it has not landed. When it does, it must run **before** the prune, so a re-adopted worktree architect counts as live. Whichever change lands second rebases.
 - **`codev.tower` was traced and left as is.** In a worktree window it renders the whole fleet, the same as every other window, and its Deactivate action is fleet-wide by design. It is not a regression from this change; it was routed out to #1845.
 
+## 3-Way Consultation (single pass)
+
+Verdicts: Gemini **APPROVE**, Codex **REQUEST_CHANGES**, Claude **REQUEST_CHANGES**. Each finding was checked against the source.
+
+**Fixed, with regression tests:**
+- **Codex: the WARN remedy failed for an unattached live stray.** A persisted session can have a live pid even though reconcile could not reattach it. `stopInstance` only kills what the in-memory map holds, so `afx workspace stop` did nothing for such a stray, and it was kept forever. The prune now splits live sessions into two groups:
+  - **attached**: the WARN gives `afx workspace stop`, which works through the unfiltered deactivate route;
+  - **unattached**: the WARN names the id and pid, says `afx workspace stop` cannot reach it, and tells the operator to stop it by pid after confirming the cwd.
+
+  Tower still never signals anything itself. Tests assert both message shapes. This satisfies main's condition that the WARN must name a remedy that works.
+- **Claude: `BuilderSpawnHandler` was a missed parent-scoped surface.** In a worktree window its scope check compared the spawn payload with the parent root, so a sibling lane's spawn produced a toast (`notify`) or auto-opened that sibling's live, writable terminal (`auto`). It is not wired in a worktree window now. This is the same rule as the gate and mailbox toasts the owner already approved suppressing. A source-level test covers it.
+- **Claude: path spelling in prune liveness.** The in-memory map is keyed by `normalizeWorkspacePath`, and the lookup now tries both spellings. A test covers a DB row spelled differently from its live in-memory entry.
+- **Gemini (non-blocking): `resolveDevTargetById`'s local fast path.** It used the parent root. It now uses the window root, so a worktree window resolves its own builder without a Tower round-trip.
+
+**Not changed:**
+- **Claude: the Agents view can flash before activation.** `codev.isBuilderWorktree` is unset until `activate()` seeds it at the top of activation, so `!codev.isBuilderWorktree` is briefly true. A positive-polarity clause such as `codev.stateKnown && …` would also hide the view's pre-activation "Loading Codev…" welcome in every window. The flash lasts only until activation and shows no data, because nothing is connected yet.
+- **Claude: `terminal_sessions.pid` also counts as liveness.** This errs on the safe side; the only cost is that a reused pid keeps a WARN.
+
 ## How to Test Locally
 
 - **View diff:** VSCode sidebar → right-click builder pir-1809 → **Review Diff**.

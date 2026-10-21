@@ -1761,11 +1761,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		activateMailboxEscalationToasts(context, connectionManager, overviewCache);
 	}
 
-	// Auto-open builder terminals on Tower spawn events
-	const builderSpawnHandler = new BuilderSpawnHandler(connectionManager, terminalManager, outputChannel);
-	context.subscriptions.push(
-		connectionManager.onSSEEvent(({ type, data }) => builderSpawnHandler.handle(type, data)),
-	);
+	// Auto-open builder terminals on Tower spawn events. Not in a builder-worktree
+	// window (#1809): its workspace path is the PARENT root, so a sibling lane's
+	// spawn would toast there (`notify`) or open that sibling's live terminal (`auto`).
+	if (!isBuilderWorktreeWindow) {
+		const builderSpawnHandler = new BuilderSpawnHandler(connectionManager, terminalManager, outputChannel);
+		context.subscriptions.push(
+			connectionManager.onSSEEvent(({ type, data }) => builderSpawnHandler.handle(type, data)),
+		);
+	}
 
 	// VSCode as the command provider for Tower's command relay: run canonical
 	// verbs sent by a controller (the focused window self-gates).

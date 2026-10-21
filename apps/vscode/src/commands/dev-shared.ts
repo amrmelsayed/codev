@@ -214,7 +214,9 @@ export async function resolveDevTargetById(
   if (builderId === 'main') {
     return { id: 'main', cwd: mainRootOf(workspacePath), name: 'main' };
   }
-  const local = resolveWorkspaceDevTarget(workspacePath);
+  // The window root, not the Tower workspace path (the parent root in a builder-worktree window,
+  // #1809), so a worktree window resolves its own builder without a Tower round-trip.
+  const local = resolveWorkspaceDevTarget(connectionManager.getWindowRoot() ?? workspacePath);
   if (local.id === builderId) { return local; }
   const client = connectionManager.getClient();
   const overview = client ? await client.getOverview(workspacePath) : null;

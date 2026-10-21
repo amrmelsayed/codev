@@ -1040,11 +1040,10 @@ export function pruneBuilderWorktreeWorkspaces(): BuilderWorktreePruneResult {
   });
 
   for (const workspacePath of candidates) {
-    const liveTerminals = liveTerminalIdsForWorkspace(db, workspacePath);
-    if (liveTerminals.length > 0) {
+    const live = liveSessionsForWorkspace(db, workspacePath);
+    if (live.attached.length > 0 || live.unattached.length > 0) {
       result.live.push(workspacePath);
-      log('WARN', `Stray architect in a builder worktree: ${workspacePath} (terminals: ${liveTerminals.join(', ')}). `
-        + 'Left running and its rows kept; stop it with `afx workspace stop` from that worktree.');
+      log('WARN', strayWarning(workspacePath, live));
       continue;
     }
     result.rowsDeleted += deleteRows(workspacePath);
@@ -1055,35 +1054,67 @@ export function pruneBuilderWorktreeWorkspaces(): BuilderWorktreePruneResult {
   return result;
 }
 
+/** Live sessions for one worktree path, split by whether Tower holds them. */
+interface WorktreeLiveSessions {
+  /** Terminal ids reconcile reattached into the in-memory map: `afx workspace stop` reaches these. */
+  attached: string[];
+  /** Persisted sessions whose pid is up but which Tower did NOT reattach. stopInstance only kills
+   *  what the in-memory map holds, so `afx workspace stop` cannot reach these. */
+  unattached: Array<{ id: string; pid: number }>;
+}
+
 /**
- * Terminal ids still alive for a workspace path: anything reconcile reattached into
- * the in-memory map, plus any terminal_sessions row whose shellper pid or process
- * pid is up (the bugfix #1686 rule: a live pid is proof of life).
+ * Sessions still alive for a workspace path: anything reconcile reattached into the in-memory
+ * map, plus any terminal_sessions row whose shellper pid or process pid is up (the bugfix #1686
+ * rule: a live pid is proof of life). The map is keyed by the normalized path, so it is looked up
+ * under both spellings; a differently-spelled DB row must not hide a live session.
  */
-function liveTerminalIdsForWorkspace(db: ReturnType<typeof getGlobalDb>, workspacePath: string): string[] {
-  const ids = new Set<string>();
-  const entry = workspaceTerminals.get(workspacePath);
-  if (entry) {
+function liveSessionsForWorkspace(db: ReturnType<typeof getGlobalDb>, workspacePath: string): WorktreeLiveSessions {
+  const attached = new Set<string>();
+  for (const key of new Set([workspacePath, normalizeWorkspacePath(workspacePath)])) {
+    const entry = workspaceTerminals.get(key);
+    if (!entry) continue;
     for (const map of [entry.architects, entry.builders, entry.shells]) {
       for (const terminalId of map.values()) {
-        ids.add(terminalId);
+        attached.add(terminalId);
       }
     }
   }
+  const unattached: WorktreeLiveSessions['unattached'] = [];
   try {
     const rows = db.prepare('SELECT id, pid, shellper_pid FROM terminal_sessions WHERE workspace_path = ?')
       .all(workspacePath) as { id: string; pid: number | null; shellper_pid: number | null }[];
     for (const row of rows) {
-      const shellperAlive = row.shellper_pid != null && processExists(row.shellper_pid);
-      const processAlive = row.pid != null && processExists(row.pid);
-      if (shellperAlive || processAlive) {
-        ids.add(row.id);
+      if (attached.has(row.id)) continue;
+      if (row.shellper_pid != null && processExists(row.shellper_pid)) {
+        unattached.push({ id: row.id, pid: row.shellper_pid });
+      } else if (row.pid != null && processExists(row.pid)) {
+        unattached.push({ id: row.id, pid: row.pid });
       }
     }
   } catch {
     // Table may not exist yet (pre-migration)
   }
-  return Array.from(ids);
+  return { attached: Array.from(attached), unattached };
+}
+
+/**
+ * The WARN for a kept stray, naming a remedy that actually works for what was found: an attached
+ * session stops with `afx workspace stop` (the deactivate route keeps the unfiltered path list); an
+ * unattached one is out of Tower's reach, so the operator is pointed at its pid instead. Tower never
+ * signals either itself.
+ */
+function strayWarning(workspacePath: string, live: WorktreeLiveSessions): string {
+  const parts = [`Stray architect in a builder worktree: ${workspacePath}. Left running and its rows kept.`];
+  if (live.attached.length > 0) {
+    parts.push(`Attached terminals (${live.attached.join(', ')}): stop them with \`afx workspace stop\` from that worktree.`);
+  }
+  if (live.unattached.length > 0) {
+    const list = live.unattached.map((s) => `${s.id} pid ${s.pid}`).join(', ');
+    parts.push(`Not attached to Tower (${list}): \`afx workspace stop\` cannot reach these; `
+      + 'confirm each pid is the stray (its cwd is the worktree) and stop it by pid.');
+  }
+  return parts.join(' ');
 }
 
 // ============================================================================

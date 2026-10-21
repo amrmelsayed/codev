@@ -76,6 +76,18 @@ describe('parent-scoped surfaces in a builder-worktree window', () => {
     expect(EXT_SRC.match(/activateGateToasts\(/g)).toHaveLength(1);
   });
 
+  it('does not auto-open or toast sibling builder spawns there', () => {
+    expect(EXT_SRC).toMatch(
+      /if \(!isBuilderWorktreeWindow\) \{\s*const builderSpawnHandler = new BuilderSpawnHandler\(/,
+    );
+    expect(EXT_SRC.match(/new BuilderSpawnHandler\(/g)).toHaveLength(1);
+  });
+
+  it('resolves a dev target by id from the window root first', () => {
+    const DEV_SRC = readFileSync(resolve(__dirname, '../commands/dev-shared.ts'), 'utf8');
+    expect(DEV_SRC).toMatch(/resolveWorkspaceDevTarget\(connectionManager\.getWindowRoot\(\) \?\? workspacePath\)/);
+  });
+
   it("pins the contextual panel to the worktree's own builder", () => {
     expect(EXT_SRC).toMatch(/if \(windowWorkspace\?\.kind === 'builder-worktree'\) \{\s*pinnedPanelBuilderId = windowWorkspace\.builderId;/);
     expect(EXT_SRC).toMatch(/new ContextualPanelProvider\(\s*context\.extensionUri, terminalManager!, overviewCache, reviewQueueStore, pinnedPanelBuilderId\)/);

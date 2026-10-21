@@ -218,10 +218,13 @@ describe('pruneBuilderWorktreeWorkspaces', () => {
     expect(result).toEqual({ pruned: 0, rowsDeleted: 0, live: [worktree] });
     expect(countRows('known_workspaces', worktree)).toBe(1);
     expect(countRows('architect', worktree)).toBe(1);
+    // Live by pid but never reattached: stopInstance only kills what the in-memory map holds, so the
+    // remedy must NOT be `afx workspace stop` alone — the WARN points at the pid instead.
     const warn = log.mock.calls.find(([level]) => level === 'WARN');
     expect(warn?.[1]).toContain(worktree);
-    expect(warn?.[1]).toContain('live-session');
-    expect(warn?.[1]).toContain('afx workspace stop');
+    expect(warn?.[1]).toContain(`Not attached to Tower (live-session pid ${process.pid})`);
+    expect(warn?.[1]).toContain('`afx workspace stop` cannot reach these');
+    expect(warn?.[1]).not.toContain('Attached terminals');
   });
 
   it('keeps a worktree that reconcile reattached into the in-memory map', () => {
@@ -238,6 +241,28 @@ describe('pruneBuilderWorktreeWorkspaces', () => {
 
     expect(result.live).toEqual([worktree]);
     expect(countRows('known_workspaces', worktree)).toBe(1);
+    // Attached, so `afx workspace stop` (deactivate -> stopInstance) does reach it.
+    const warn = log.mock.calls.find(([level]) => level === 'WARN');
+    expect(warn?.[1]).toContain('Attached terminals (term-arch): stop them with `afx workspace stop`');
+    expect(warn?.[1]).not.toContain('Not attached to Tower');
+  });
+
+  it('finds an attached session even when the DB row spells the path differently', () => {
+    // The in-memory map is keyed by normalizeWorkspacePath; a non-normalized DB spelling must not
+    // hide the live session and get its rows pruned.
+    const worktree = path.join(tmpRoot, '.builders', 'spelled');
+    insertKnown(`${worktree}/.`);
+    getWorkspaceTerminals().set(worktree, {
+      architects: new Map([['main', 'term-spelled']]),
+      builders: new Map(),
+      shells: new Map(),
+      fileTabs: new Map(),
+    });
+
+    const result = pruneBuilderWorktreeWorkspaces();
+
+    expect(result.live).toEqual([`${worktree}/.`]);
+    expect(countRows('known_workspaces', `${worktree}/.`)).toBe(1);
   });
 
   it('never touches a normal workspace', () => {
