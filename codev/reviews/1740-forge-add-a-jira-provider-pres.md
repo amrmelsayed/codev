@@ -218,6 +218,20 @@ The umask-077 test failure hit again here; it is already a lesson (from #1809), 
 
 The architect's "noted" list: the 100-item cap is now documented in `forge.md`.
 
+**Integration review round 2 (architect)**, all addressed:
+1. **Key-shaped short ids (must-fix, a regression this PR introduced).** `generateShortId()` drew a key-shaped id (`Ab-3`) about 0.22% of the time. On this branch, an issue-less `pir-Ab-3` was then read as issue `AB-3`: by porch's cwd detection, by the overview's name fallback when no DB row exists, and by resume for the real `AB-3`.
+   - **Fix:** the generator, the single source for task, protocol, shell and worktree spawns, now redraws any key-shaped id.
+   - **Tests:** a key-shaped draw (`AA-0`) is redrawn; 50 000 real draws contain no key; and for the would-have-been `pir-AA-0`, each surface was checked: cwd detection gives `null`, the overview with no row is soft with no issue, and resuming `AA-0` finds nothing.
+   - **Residual:** a worktree spawned *before* this change with a key-shaped id is still read as that key by porch's cwd detection, and by the overview when its DB row is missing. Documented in `forge.md`; there was no DB lookup added to porch, per the architect.
+2. **Single DB read:** the `builders` table is read once per overview (`loadStoredBuilderIdentities`, now carrying `spawned_by_architect`), feeding both discovery and the issueId/spawnedByArchitect enrichment.
+3. **Published-type change** (see Deviations below).
+4. **`issueNumberFromPorchId` narrowing is intentional and pinned by a test.** `bugfix-` is the only protocol prefix porch puts on project ids, so any other `<word>-<N>` is a tracker key, not a prefix followed by digits.
+5. **Forge-neutral spawn wording:** "Fetching issue ENG-123..." and the prompt's "work for issue ENG-123" (numbers keep `#42`).
+
+**Deviations to carry into the release notes**
+- **Published type change in `@cluesmith/codev-types`:** `OverviewBacklogItem.createdAt` and `IssueSearchItem.createdAt` are now optional (`string | undefined`), as is `IssueListItem.createdAt` on the codev side, because Jira's search cannot return dates. An external consumer of `codev-types` (the Stream Deck plugin and client SDK in the integrations repo) that reads `createdAt` must handle its absence. New optional field: `OverviewData.issueIdKind`.
+- **Spawn ids:** issue-less spawns can no longer get a key-shaped short id. Old ids are unaffected.
+
 **3-way consultation (single pass): Gemini APPROVE, Claude APPROVE, Codex REQUEST_CHANGES.** Codex's four points and their dispositions:
 - **`createdAt` contracts:** fixed (round 1, item 1).
 - **No browser verification:** fixed (round 1, item 2).
