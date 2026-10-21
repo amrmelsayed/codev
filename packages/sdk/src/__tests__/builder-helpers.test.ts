@@ -131,6 +131,11 @@ describe('agentAttentionState / isIdleWaiting over a served state (Spec 1595)', 
     });
   }
 
+  it('never counts a builder at a porch gate, even when the served state disagrees', () => {
+    const b = builderRow({ id: 'a', blocked: 'plan review', agentState: served('needs-input'), lastDataAt: FRESH });
+    expect(isIdleWaiting(b, NOW)).toBe(false);
+  });
+
   it('never counts a complete or verified builder, whatever its state (SC14)', () => {
     for (const phase of ['complete', 'verified']) {
       for (const state of ['working', 'needs-input', 'idle', 'blocked', 'dead'] as const) {
@@ -439,6 +444,7 @@ const gate = (since: string | null) => summary({ pendingGates: [{ ...ref, gate: 
 const waiting = (since: string | null) => summary({ waiting: [{ ...ref, since }], isEmpty: false });
 const held = (heldTotal: number, heldEscalated = false) => summary({ heldTotal, heldEscalated, heldMail: [{ ...ref, count: heldTotal }], isEmpty: false });
 const queued = (count: number) => summary({ queuedFeedback: [{ ...ref, count }], isEmpty: false });
+const architectWaiting = (since: string | null) => summary({ architects: [{ architect: 'main', state: 'needs-input', since }], isEmpty: false });
 const quiet = () => summary({});
 
 function sign(n: number): number {
@@ -490,6 +496,7 @@ describe('compareAttention — order properties', () => {
   const samples: AttentionSummary[] = [
     gate('2026-08-25T09:00:00Z'), gate('2026-08-25T11:00:00Z'), gate(null),
     waiting('2026-08-25T08:00:00Z'), waiting('2026-08-25T12:00:00Z'),
+    architectWaiting('2026-08-25T10:00:00Z'), architectWaiting(null),
     held(1, true), held(9, false), held(3, false),
     queued(5), queued(1), quiet(),
   ];

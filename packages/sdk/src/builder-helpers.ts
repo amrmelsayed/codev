@@ -84,9 +84,10 @@ export function agentAttentionState(b: OverviewBuilder, now: number = Date.now()
  */
 export function isIdleWaiting(b: OverviewBuilder, now: number = Date.now()): boolean {
   if (isFinished(b)) { return false; }
+  // A porch gate is the human's move on the gate path, whatever the served state says.
+  if (b.blocked) { return false; }
   const state = agentAttentionState(b, now);
   if (state !== null) { return isWaitingState(state); }
-  if (b.blocked) { return false; }
   if (!b.lastDataAt) { return false; }
   return now - new Date(b.lastDataAt).getTime() > IDLE_WAITING_THRESHOLD_MS;
 }
