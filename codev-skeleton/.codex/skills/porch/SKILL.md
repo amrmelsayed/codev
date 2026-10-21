@@ -45,6 +45,7 @@ porch approve 42 pr --a-human-explicitly-approved-this
 
 ```bash
 porch pending                  # List all gates waiting for approval
+porch pending --all            # Include stale records on finished/advanced projects (hidden by default)
 ```
 
 ## Critical rules
@@ -54,6 +55,23 @@ porch pending                  # List all gates waiting for approval
 - Builders signal completion with `porch done`, not `porch approve`
 - `porch run` is for strict mode only — soft mode builders follow the protocol document manually
 - When running `porch approve` from the architect, use a subshell if you need worktree context: `(cd /path/to/worktree && porch approve ...)`
+
+## Check overrides and timeouts (`porch.checks`)
+
+Override a protocol check per name in `.codev/config.json` under `porch.checks` instead of forking `protocol.json`. Each entry takes `command` (replace), `cwd` (replace), `timeout_ms` (replace), and/or `skip: true`:
+
+```jsonc
+{
+  "porch": {
+    "checks": {
+      "tests":     { "command": "uv run pytest", "timeout_ms": 900000 },
+      "e2e_tests": { "skip": true }
+    }
+  }
+}
+```
+
+A phase check is killed after 5 minutes unless it sets `timeout_ms` — in `protocol.json` or in its `porch.checks` override. On timeout porch kills the check's whole process tree.
 
 ## State storage
 

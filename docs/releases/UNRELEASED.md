@@ -33,27 +33,12 @@
     6. Re-cp the template back to UNRELEASED.md to start the next cycle
 -->
 
-## Codev Tower: the fleet in your sidebar
-
-A new Tower view (#1566, PR #1767) lists every workspace your local Tower knows about, urgency-ordered so the one that needs you is on top, with an attention badge on its icon, a current-workspace marker, and switch and activate actions plus a `Codev: Switch Workspace` quick pick. Expanding a workspace shows what is waiting there, including held mail. It reads the one Tower event stream the extension already holds, so it adds no load.
-
-The Tower container opens in the secondary side bar (right) by default and reveals itself once on first run. Drag it anywhere; VS Code keeps your placement. Under the hood the attention ordering and relative-age wording moved into the shared SDK so the Tower view and the contextual panel can never disagree.
-
-## Review queue in the contextual panel
-
-The contextual panel's Code Review body is wired to the builder's review queue (#1559, PR #1769). It lists pending comments, sent-but-unconfirmed comments, and the commented files with their counts, and the same body appears in the Builder Inspector when a builder's terminal has focus. Submit Review sends only the pending comments, Discard confirms first, Mark Delivered is the default action for sent comments, and Re-send is separate. File references open the builder's diff at the line, or the worktree file when the file was not changed. The status-bar "Submit Review" item is retired in favour of the panel.
-
-## Codev works in Restricted Mode
-
-Opening an untrusted folder no longer leaves the Codev sidebar inert until you trust the workspace (#1727, PR #1728). The extension activates immediately in Restricted Mode, and only four workspace-scoped settings that could redirect Tower or launch a process (Tower host and port, workspace path, auto-start) are held back until the folder is trusted. Your user-level values for those settings still apply.
-
-## Reading aids in the Markdown Preview
-
-The preview can now put a soft shape behind whatever your eye is on, so a long spec is easier to track line by line (#1802, PR #1812). Six styles are available: the word under the pointer as a rounded pill, its line as a band, its paragraph as a faint tint, and the combinations of those, plus None. The default lights the line and its paragraph. The prose cursor is yours to pick too: the arrow it has always used, an I-beam, or the pointing hand.
-
-Both choices live in a new "Reading Aids..." item in the preview's title-bar `...` menu, next to Reset Font Size, and in two settings (`codev.markdownPreview.hoverHighlight` and `codev.markdownPreview.readingCursor`) if you would rather set them once and forget them. A change applies to every open preview straight away.
-
-The shapes are painted behind the text, never over it, so nothing is dimmed and selecting or copying works exactly as before. Fenced code, comment cards, the composer and the "+" button are never lit and keep the arrow cursor; inline code keeps the band and the cursor you chose, because it reads as part of the sentence. Dark themes get slightly stronger shading than light ones, and the shapes scale with the preview's font size and follow the columns layout.
+<!-- Release-time note (owner ruling, 2026-10-21): the VS Code extension was NOT published to the
+     Marketplace for v3.3.5 or v3.3.6; the Marketplace's latest is 3.3.4 (2026-09-17), although
+     main's apps/vscode/CHANGELOG.md was renamed to [3.3.5] by the version bump. This release's
+     Marketplace publish is therefore the first since 3.3.4 and carries every extension item
+     announced in v3.3.5-luxor.md. Say so in the Summary and in Install, and publish the
+     extension as part of the release, not after it. -->
 
 ## A builder worktree is no longer a workspace of its own
 
@@ -71,30 +56,13 @@ Known and expected: the Agents view can paint briefly as a worktree window loads
        - **<Headline>** (#<issue>, PR #<pr>). <One short paragraph of context.>
      Move out to its own ## section if the entry grows past ~3 sentences. -->
 
-- **Builder-row click can leave the row collapsed** (#1743, PR #1744). Turn off `codev.buildersClickExpands` and a click on a builder in the Agents view opens its terminal only; the chevron still opens the file list.
-- **Agent-cycle keys launch the first agent** (#1748, PR #1749). With no agent terminal focused, the cycle keys now open the first (or last) agent in sidebar order instead of showing a "nothing to cycle to" hint; the empty-roster hint is now honest.
-- **Status-bar items readable in light themes** (#1747, PR #1750). The dev chip and the Reconnecting and Offline states no longer render near-white on a light status bar.
-- **Hunk stepping follows the viewport** (#1546, PR #1770). Next and previous change in a builder diff now continue from what you are looking at after a scroll, instead of from a stale cursor; alt+F5 and shift+alt+F5, the new hunk commands, and the Stream Deck changes dial all use it.
-- **Review-queue submit no longer deletes comments before they are delivered** (#1562, PR #1768). Submitted comments move to a sent list; the next submit asks Mark Delivered (default), Re-send, or cancel. Sent-versus-actioned tracking follows in #1771.
-- **Review comments no longer open the Comments panel** (#1773, PR #1774). The extension defaults `comments.openView` to `never`; an explicit user setting still wins.
-
-- **Gates from every protocol surface as blocked** (#1777, PR #1778). A builder held at an EXPERIMENT, MAINTAIN or RESEARCH gate showed as working everywhere, because Tower only recognised the five SPIR-family gate names and did not map those protocols' worktrees to their porch project. Any pending gate now surfaces on the Agents view, toast, status bar, dashboard and Tower hub, with icons for the four new gates and a derived label for any gate Tower has not seen before.
-
-- **Non-core gates get their own icons on every surface** (#1779, PR #1780). The Stream Deck face draws a beaker, tools, search or library glyph for the experiment, maintenance, scope and research gates instead of a bell; the dashboard's attention list styles them with one neutral colour instead of the plan colour, and any gate it has never seen gets the same neutral treatment; and the Tower view's attention rows share the Agents view's icon per gate instead of a warning triangle.
-
-- **PR-review lanes no longer appear twice** (#1787, PR #1788). A builder at the PR review gate was pushed into the attention summary once for the porch gate and once for the open PR, so the Tower view and Agents view showed two rows and urgency counted it twice. The shared SDK now emits one row, the one carrying the waiting time.
-
 ## Other fixes (dashboard, porch, infrastructure)
 
 <!-- Non-vscode work that ships in the npm release. Same bullet shape as Polish. -->
 
-- **Block navigation on the artifact canvas no longer skips the first item of a list or blockquote** (#1738, PR #1741). Stepping one block at a time (the Stream Deck fine-review dial, or `n`/`p` across marked blocks) used to jump the whole list and land on the second item, and a marker on a first list item decorated the entire list. Every first child is now individually navigable and markable, the same as items two onward. Tables keep their existing behaviour for now.
-
-- **Builders keep their identity when running `afx` from the workspace root** (#1783, PR #1784). A builder that followed the "run `afx` from the main workspace root" rule used to lose its identity the moment it left its worktree: `afx send architect` routed to `main` instead of its own architect, and the guard against addressing a different architect was skipped. Each builder session now carries its spawn-time worktree in its environment, and `afx send`, `afx whoami`, `afx interrupt`, `afx reset` and `afx self-refresh` resolve the builder from that before falling back to the current directory. Builders spawned before this change pick it up on `afx spawn <id> --resume`.
-
 ## Breaking changes
 
-- **Minimum VS Code raised to 1.128** (#1608, PR #1764). Hosts below 1.128 stay on the last 3.3.x release and stop receiving extension updates until the editor rebases. Cursor 3.22 (VS Code 1.128) is supported; Antigravity and Kiro were on 1.107 in May 2026 and were not re-verified.
+None.
 
 ## Install
 

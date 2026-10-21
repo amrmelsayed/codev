@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AGENT_FARM_DIR, encodeWorkspacePath } from '../lib/tower-client.js';
 import type { TerminalType } from '@cluesmith/codev-sdk/tower-client';
+import { isBuilderWorktreePath } from '@cluesmith/codev-sdk/builder-worktree';
 import { loadConfig } from '../../lib/config.js';
 import { sanitizeAgentEnv } from '../../lib/agent-env.js';
 import { getGlobalDb } from '../db/index.js';
@@ -647,6 +648,10 @@ async function _reconcileTerminalSessionsInner(): Promise<void> {
   let orphanReconnected = 0;
   let killed = 0;
   let cleaned = 0;
+  // Bugfix #1686: rows kept because reconnect failed but death was not proven
+  // (the shellper pid is still alive). Counted so a reconcile that only
+  // preserved rows does not misreport "No terminal sessions to reconcile".
+  let unconfirmed = 0;
 
   // Track matched session IDs across all phases
   const matchedSessionIds = new Set<string>();
@@ -800,8 +805,13 @@ async function _reconcileTerminalSessionsInner(): Promise<void> {
   // Process probe results sequentially (shared state mutations)
   for (const { dbSession, client, replayData, restartOptions } of probeResults) {
     if (!client) {
-      _deps.log('INFO', `Shellper session ${dbSession.id} is stale (PID/socket dead) — will clean up`);
-      continue; // Will be cleaned up in Phase 2
+      // Bugfix #1686: reconnect returning null does NOT prove death (it also
+      // covers a connect refused by another Tower client, or a transient
+      // socket/fd hiccup). Death is confirmed in the Phase 2 sweep, which keeps
+      // a row whose pid is still alive — so this log defers the verdict rather
+      // than asserting "dead" up front.
+      _deps.log('INFO', `Shellper session ${dbSession.id} reconnect failed — deferring to Phase 2 sweep for death confirmation`);
+      continue; // Phase 2 confirms death before any cleanup
     }
 
     const workspacePath = dbSession.workspace_path;
@@ -923,6 +933,27 @@ async function _reconcileTerminalSessionsInner(): Promise<void> {
     const existing = manager.getSession(session.id);
     if (existing && existing.status !== 'exited') continue;
 
+    // Bugfix #1686: a shellper-backed row reaches here when Phase 1 failed to
+    // reconnect to it. But reconnectSession() returns null for transient reasons
+    // too — a socket connect refused because another Tower client already owns
+    // the shellper (one-client-per-shellper), or a boot-time socket/fd hiccup —
+    // not just for a genuinely dead process. Treating that failure as death and
+    // SIGTERMing the still-live pid is what destroyed 53 live sessions in the
+    // #1629 incident. Destroy only what is proven dead, and the sole proof of
+    // death is the pid being down: a live shellper pid is never signaled and its
+    // row is never deleted here, regardless of socket-file state (a transiently
+    // absent socket is the same transient-failure class and must not kill a live
+    // agent). The row is left in place (WARN) and retried on a later
+    // reconcile/adoption pass; a pid-dead row still deletes below as before.
+    if (session.shellper_socket) {
+      const shellperAlive = session.shellper_pid != null && processExists(session.shellper_pid);
+      if (shellperAlive) {
+        _deps.log('WARN', `Shellper session ${session.id} failed to reconnect but pid ${session.shellper_pid} is alive — leaving row untouched (a live pid is never signaled), retried next reconcile/adoption pass (${session.type} for ${path.basename(session.workspace_path)})`);
+        unconfirmed++;
+        continue;
+      }
+    }
+
     // Stale row — kill orphaned process if any, then delete
     if (session.pid && processExists(session.pid)) {
       _deps.log('INFO', `Killing orphaned process: PID ${session.pid} (${session.type} for ${path.basename(session.workspace_path)})`);
@@ -937,11 +968,153 @@ async function _reconcileTerminalSessionsInner(): Promise<void> {
   }
 
   const total = shellperReconnected + orphanReconnected;
-  if (total > 0 || killed > 0 || cleaned > 0) {
-    _deps.log('INFO', `Reconciliation complete: ${shellperReconnected} shellper, ${orphanReconnected} orphan, ${killed} killed, ${cleaned} stale rows cleaned`);
+  if (total > 0 || killed > 0 || cleaned > 0 || unconfirmed > 0) {
+    _deps.log('INFO', `Reconciliation complete: ${shellperReconnected} shellper, ${orphanReconnected} orphan, ${killed} killed, ${cleaned} stale rows cleaned, ${unconfirmed} unconfirmed (kept)`);
   } else {
     _deps.log('INFO', 'No terminal sessions to reconcile');
   }
+}
+
+// ============================================================================
+// Builder-worktree row prune (#1809)
+// ============================================================================
+
+/** Counts from one prune pass, returned for tests and logged as one INFO line. */
+export interface BuilderWorktreePruneResult {
+  /** Worktree paths whose rows were deleted. */
+  pruned: number;
+  /** known_workspaces + architect + terminal_sessions rows deleted. */
+  rowsDeleted: number;
+  /** Worktree paths kept because a live session is attached; reported, never killed. */
+  live: string[];
+}
+
+/**
+ * Delete global.db rows that recorded a builder worktree as a workspace (#1809).
+ *
+ * Before #1809 Tower activated a worktree like any folder, leaving known_workspaces
+ * and architect rows (and their stray `main` architects) under `.builders/`.
+ * Activation now refuses worktrees; this pass removes what was left behind.
+ *
+ * Runs once per boot, AFTER reconcile (so the in-memory map holds every reattached
+ * session) and BEFORE the #341 orphan sweep, so liveness is decided before anything
+ * is killed. It never signals a process: a path with a live session keeps its rows
+ * and is reported at WARN every boot until it is stopped; the next boot after that
+ * prunes it. Idempotent.
+ */
+export function pruneBuilderWorktreeWorkspaces(): BuilderWorktreePruneResult {
+  const result: BuilderWorktreePruneResult = { pruned: 0, rowsDeleted: 0, live: [] };
+  const log = _deps?.log ?? (() => {});
+  let db: ReturnType<typeof getGlobalDb>;
+  try {
+    db = getGlobalDb();
+  } catch {
+    return result;
+  }
+
+  const candidates = new Set<string>();
+  for (const table of ['known_workspaces', 'architect', 'terminal_sessions']) {
+    try {
+      const rows = db.prepare(`SELECT DISTINCT workspace_path FROM ${table} WHERE workspace_path LIKE '%.builders%'`)
+        .all() as { workspace_path: string }[];
+      for (const row of rows) {
+        if (isBuilderWorktreePath(row.workspace_path)) {
+          candidates.add(row.workspace_path);
+        }
+      }
+    } catch {
+      // Table may not exist yet (pre-migration)
+    }
+  }
+
+  const deleteRows = db.transaction((workspacePath: string): number => {
+    let deleted = 0;
+    for (const table of ['known_workspaces', 'architect', 'terminal_sessions']) {
+      try {
+        deleted += db.prepare(`DELETE FROM ${table} WHERE workspace_path = ?`).run(workspacePath).changes;
+      } catch {
+        // Table may not exist yet (pre-migration)
+      }
+    }
+    return deleted;
+  });
+
+  for (const workspacePath of candidates) {
+    const live = liveSessionsForWorkspace(db, workspacePath);
+    if (live.attached.length > 0 || live.unattached.length > 0) {
+      result.live.push(workspacePath);
+      log('WARN', strayWarning(workspacePath, live));
+      continue;
+    }
+    result.rowsDeleted += deleteRows(workspacePath);
+    result.pruned++;
+  }
+
+  log('INFO', `Builder-worktree prune: ${result.pruned} paths pruned, ${result.rowsDeleted} rows deleted, ${result.live.length} live kept`);
+  return result;
+}
+
+/** Live sessions for one worktree path, split by whether Tower holds them. */
+interface WorktreeLiveSessions {
+  /** Terminal ids reconcile reattached into the in-memory map: `afx workspace stop` reaches these. */
+  attached: string[];
+  /** Persisted sessions whose pid is up but which Tower did NOT reattach. stopInstance only kills
+   *  what the in-memory map holds, so `afx workspace stop` cannot reach these. */
+  unattached: Array<{ id: string; pid: number }>;
+}
+
+/**
+ * Sessions still alive for a workspace path: anything reconcile reattached into the in-memory
+ * map, plus any terminal_sessions row whose shellper pid or process pid is up (the bugfix #1686
+ * rule: a live pid is proof of life). The map is keyed by the normalized path, so it is looked up
+ * under both spellings; a differently-spelled DB row must not hide a live session.
+ */
+function liveSessionsForWorkspace(db: ReturnType<typeof getGlobalDb>, workspacePath: string): WorktreeLiveSessions {
+  const attached = new Set<string>();
+  for (const key of new Set([workspacePath, normalizeWorkspacePath(workspacePath)])) {
+    const entry = workspaceTerminals.get(key);
+    if (!entry) continue;
+    for (const map of [entry.architects, entry.builders, entry.shells]) {
+      for (const terminalId of map.values()) {
+        attached.add(terminalId);
+      }
+    }
+  }
+  const unattached: WorktreeLiveSessions['unattached'] = [];
+  try {
+    const rows = db.prepare('SELECT id, pid, shellper_pid FROM terminal_sessions WHERE workspace_path = ?')
+      .all(workspacePath) as { id: string; pid: number | null; shellper_pid: number | null }[];
+    for (const row of rows) {
+      if (attached.has(row.id)) continue;
+      if (row.shellper_pid != null && processExists(row.shellper_pid)) {
+        unattached.push({ id: row.id, pid: row.shellper_pid });
+      } else if (row.pid != null && processExists(row.pid)) {
+        unattached.push({ id: row.id, pid: row.pid });
+      }
+    }
+  } catch {
+    // Table may not exist yet (pre-migration)
+  }
+  return { attached: Array.from(attached), unattached };
+}
+
+/**
+ * The WARN for a kept stray, naming a remedy that actually works for what was found: an attached
+ * session stops with `afx workspace stop` (the deactivate route keeps the unfiltered path list); an
+ * unattached one is out of Tower's reach, so the operator is pointed at its pid instead. Tower never
+ * signals either itself.
+ */
+function strayWarning(workspacePath: string, live: WorktreeLiveSessions): string {
+  const parts = [`Stray architect in a builder worktree: ${workspacePath}. Left running and its rows kept.`];
+  if (live.attached.length > 0) {
+    parts.push(`Attached terminals (${live.attached.join(', ')}): stop them with \`afx workspace stop\` from that worktree.`);
+  }
+  if (live.unattached.length > 0) {
+    const list = live.unattached.map((s) => `${s.id} pid ${s.pid}`).join(', ');
+    parts.push(`Not attached to Tower (${list}): \`afx workspace stop\` cannot reach these; `
+      + 'confirm each pid is the stray (its cwd is the worktree) and stop it by pid.');
+  }
+  return parts.join(' ');
 }
 
 // ============================================================================
@@ -1111,6 +1284,23 @@ export async function getTerminalsForWorkspace(
     }
 
     if (!session) {
+      // Bugfix #1686: the same guard as reconcile Phase 2, applied to this
+      // sibling delete site. The on-the-fly reconnect above returns null for
+      // transient reasons too (socket connect refused because another Tower
+      // client owns the shellper, or a boot-time socket/fd hiccup), not just
+      // for a dead process. Dropping the row on that failure alone is how a row
+      // the Phase 2 guard just preserved would be deleted by the first
+      // /api/state or /api/overview read whose reconnect fails again — making
+      // Phase 2's "retried next reconcile/adoption pass" promise false. Destroy
+      // only what is proven dead: a live shellper pid is never deleted here,
+      // regardless of socket-file state; the row is kept for a later pass.
+      if (dbSession.shellper_socket) {
+        const shellperAlive = dbSession.shellper_pid != null && processExists(dbSession.shellper_pid);
+        if (shellperAlive) {
+          _deps?.log('WARN', `On-the-fly reconnect for ${dbSession.id} failed but pid ${dbSession.shellper_pid} is alive — leaving row untouched (a live pid is never signaled), retried next reconcile/adoption pass (${dbSession.type})`);
+          continue;
+        }
+      }
       // Stale row, nothing to reconnect — clean up
       deleteTerminalSession(dbSession.id);
       continue;

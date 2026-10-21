@@ -26,6 +26,16 @@
 - **Status-bar text is readable in light themes.** The dev chip ("Dev: <id>") and the "Reconnecting..." and "Offline" states used foreground colours that pair with a highlighted background the extension cannot set, so light themes drew them near-white on a light bar. All three now use the theme's normal status-bar foreground. Their icons still carry the state; in dark themes the only visible change is that these three items no longer render in a slightly different shade from their neighbours.
 - **Terminals come back after a laptop sleep.** Sleeping the machine used to burn every terminal tab's reconnect budget against the suspended network stack, leaving a permanent "unable to reconnect" banner while Tower was healthy. Refocusing the window now re-arms reconnects for every tab, and a tab that gave up for a transient reason reconnects on its own. When the budget really is exhausted, the banner checks Tower first and says which case you are in: Tower unreachable, or Tower up and a click will retry. A session that no longer exists on Tower still gives up immediately, as before.
 
+## [3.3.4] - 2026-09-17
+
+### What's new
+
+- **Cycle through agent terminals from the keyboard.** `ctrl+alt+n` / `ctrl+alt+p` move focus through the sidebar's Agents order: architects and builders exactly as the sidebar lists them. An agent whose terminal cannot open is skipped, so a dead session never wedges the cycle.
+
+### Fixes
+
+- **Terminals come back after a laptop sleep.** Sleeping the machine used to burn every terminal tab's reconnect budget against the suspended network stack, leaving a permanent "unable to reconnect" banner while Tower was healthy. Refocusing the window now re-arms reconnects for every tab, and a tab that gave up for a transient reason reconnects on its own. When the budget really is exhausted, the banner checks Tower first and says which case you are in: Tower unreachable, or Tower up and a click will retry. A session that no longer exists on Tower still gives up immediately, as before.
+
 ## [3.3.3] - 2026-09-05
 
 ### What's new

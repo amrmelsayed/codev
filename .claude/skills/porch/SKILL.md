@@ -45,6 +45,7 @@ porch approve 42 pr --a-human-explicitly-approved-this
 
 ```bash
 porch pending                  # List all gates waiting for approval
+porch pending --all            # Include stale records on finished/advanced projects (hidden by default)
 ```
 
 ## Critical rules
@@ -75,6 +76,8 @@ Protocol check commands default to the **npm** toolchain (`npm run build`, `npm 
   }
 }
 ```
+
+A phase check is killed after 5 minutes unless it sets `timeout_ms` — in `protocol.json` or in its `porch.checks` override (`phase_completion` predicates take no timeout), e.g. `"tests": { "command": "uv run pytest", "timeout_ms": 900000 }` for a long suite. On timeout porch kills the check's whole process tree.
 
 Keys are the **check names** from the protocol: `build` / `test` / `e2e_tests` live in phases; `build_succeeds` / `tests_pass` live in `phase_completion`. An override key that matches no check in the protocol prints a warning. Shipped by Spec #550.
 

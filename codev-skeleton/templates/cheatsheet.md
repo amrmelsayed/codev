@@ -61,7 +61,7 @@ A **protocol** is a structured workflow that defines how work progresses from id
 | Protocol | Use For | Phases |
 |----------|---------|--------|
 | **SPIR** | New features | Specify → Plan → Implement → Review |
-| **MAINTAIN** | Codebase hygiene | Dead code removal, documentation sync |
+| **MAINTAIN** | Scheduled codebase hygiene | Whole-repo audit → clean → sync run since the last one, on the human's call. Not for a single targeted cleanup or doc fix (that is a BUGFIX) |
 | **EXPERIMENT** | Research & prototyping | Hypothesis → Experiment → Conclude |
 | **RESEARCH** | Multi-agent research | Scope → Investigate (3-way) → Synthesize → Critique (3-way) |
 
