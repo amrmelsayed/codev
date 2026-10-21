@@ -11,6 +11,9 @@
 /** Regex source for an issue key, unanchored, for embedding in larger patterns. */
 export const ISSUE_KEY_SOURCE = '[A-Za-z][A-Za-z0-9_]*-\\d+';
 
+/** The canonical (upper-case) spelling of a key: what spawn records and artifacts are named by. */
+export const CANONICAL_KEY_SOURCE = '[A-Z][A-Z0-9_]*-\\d+';
+
 const ISSUE_KEY = new RegExp(`^${ISSUE_KEY_SOURCE}$`);
 
 /** True for a tracker key such as `ENG-123` (any case); false for a bare number. */

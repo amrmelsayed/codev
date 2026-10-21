@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ProjectState, Protocol, PlanPhase } from './types.js';
 import type { ArtifactResolver } from './artifacts.js';
-import { ISSUE_KEY_SOURCE, canonicalIssueId } from '../../lib/issue-id.js';
+import { CANONICAL_KEY_SOURCE, ISSUE_KEY_SOURCE, canonicalIssueId } from '../../lib/issue-id.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -421,7 +421,7 @@ export function resolveProjectId(
  * Returns null if zero or multiple projects found.
  */
 /** Project dir id prefix: `bugfix-237`, `0076`, or a tracker key `ENG-123` / `bugfix-ENG-123` (#1740). */
-const PROJECT_DIR_ID = new RegExp(`^(bugfix-\\d+|\\d{4}|(?:bugfix-)?[A-Z][A-Z0-9_]*-\\d+)-`);
+const PROJECT_DIR_ID = new RegExp(`^(bugfix-\\d+|\\d{4}|(?:bugfix-)?${CANONICAL_KEY_SOURCE})-`);
 
 export function detectProjectId(workspaceRoot: string): string | null {
   const projectsDir = path.join(workspaceRoot, PROJECTS_DIR);

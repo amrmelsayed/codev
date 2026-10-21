@@ -2,16 +2,24 @@
  * Issue identifiers in the extension (#1740): bare numbers (GitHub, GitLab,
  * Gitea) or tracker keys (Jira, Linear: `ENG-123`).
  *
- * Sync note: the key grammar is a twin of `ISSUE_KEY_SOURCE` in
- * packages/codev/src/lib/issue-id.ts (a letter, then letters, digits or
- * underscores, a dash, digits). Change both together.
+ * Sync note: the key grammar twins `ISSUE_KEY_SOURCE` / `CANONICAL_KEY_SOURCE`
+ * in packages/codev/src/lib/issue-id.ts (a letter, then letters, digits or
+ * underscores, a dash, digits). `issue-id-parity.test.ts` (packages/codev)
+ * fails if the copies drift. Every other extension pattern derives from these.
  *
  * vscode-free so it is unit-testable from the vitest harness.
  */
 
 import type { OverviewData } from '@cluesmith/codev-types';
 
-const ISSUE_KEY = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+/** Regex source for a key, unanchored. Twin of the codev-side ISSUE_KEY_SOURCE (parity-tested). */
+export const ISSUE_KEY_SOURCE = '[A-Za-z][A-Za-z0-9_]*-\\d+';
+
+/** The canonical (upper-case) spelling. Twin of the codev-side CANONICAL_KEY_SOURCE (parity-tested). */
+export const CANONICAL_KEY_SOURCE = '[A-Z][A-Z0-9_]*-\\d+';
+
+const ISSUE_KEY = new RegExp(`^${ISSUE_KEY_SOURCE}$`);
+const CANONICAL_KEY = new RegExp(`^${CANONICAL_KEY_SOURCE}$`);
 
 /** True for a tracker key such as `ENG-123` (any case). */
 export function isIssueKey(value: string): boolean {
@@ -48,7 +56,7 @@ export function acceptsIssueKeys(
  * never written with a `#`.
  */
 export function issueRef(id: string): string {
-  if (/^[A-Z][A-Z0-9_]*-\d+$/.test(id)) { return id; }
+  if (CANONICAL_KEY.test(id)) { return id; }
   return `#${id}`;
 }
 
