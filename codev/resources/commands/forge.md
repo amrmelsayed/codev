@@ -16,9 +16,9 @@ Add to `.codev/config.json`:
 }
 ```
 
-Available providers: `github` (default), `gitlab` (uses `glab` CLI), `gitea` (uses `tea` CLI), `linear` (uses the Linear API).
+Available providers: `github` (default), `gitlab` (uses `glab` CLI), `gitea` (uses `tea` CLI), `linear` (uses the Linear API), `jira` (Jira Cloud, uses Atlassian's `acli` CLI).
 
-`linear` is a **hybrid** provider: it serves the issue concepts, and every PR concept deliberately falls through to the `gh` default, because the repository itself still lives on GitHub. Only `team-activity` and `on-it-timestamps` are disabled.
+`linear` and `jira` are **hybrid** providers: they serve the issue concepts, and every PR concept deliberately falls through to the `gh` default, because the repository itself still lives on GitHub. Only `team-activity` and `on-it-timestamps` are disabled. A hybrid workspace therefore needs two logins, the tracker's and `gh`'s; `codev doctor` reports both.
 
 > **Note:** Non-GitHub presets are best-effort. Their CLI tools may produce output schemas that differ from GitHub's JSON contracts. Codev handles this gracefully — concepts that return non-conforming JSON are treated as unavailable (null). If a preset command doesn't work correctly for your setup, override the individual concept with a command that produces the expected output.
 
@@ -92,7 +92,7 @@ Set a concept to `null` to disable it. The feature that uses it will gracefully 
 
 | Concept | Env Vars | Output | Description |
 |---------|----------|--------|-------------|
-| `auth-status` | — | text | Check forge authentication |
+| `auth-status` | — | text | Check forge authentication (`codev doctor` reports it for `github`, `jira`, and `linear`) |
 
 ## Worked Examples
 
@@ -149,6 +149,37 @@ when that derivation is wrong or unavailable (a worktree with no `origin`, or re
 different repo than the checkout). The scripts fail fast with a message naming `CODEV_REPO`
 rather than issuing a `repos//…` request. Exporting `CODEV_REPO` globally therefore retargets
 every Gitea read at that repo — set it per invocation instead.
+
+### Jira Cloud with `acli`
+
+```json
+{
+  "forge": {
+    "provider": "jira",
+    "jira-site": "https://your-site.atlassian.net",
+    "jira-project": "ENG"
+  }
+}
+```
+
+**Prerequisites.** Install Atlassian's CLI (`acli`, e.g. `brew tap atlassian/homebrew-acli && brew install acli`) and log in once with `acli jira auth login` (browser OAuth or an API token). `acli` owns the credential: Codev never reads, stores, or passes a Jira token. Use a standard user account; token login for service accounts is a known upstream limitation. The preset was verified against `acli` 1.3.39.
+
+**Scope.** Jira **Cloud** only. Jira Data Center is not supported by this preset.
+
+**Configuration keys** (passed to the scripts as environment variables):
+
+| Key | Env var | Purpose |
+|-----|---------|---------|
+| `jira-site` | `CODEV_JIRA_SITE` | Site for browser links (`https://<site>.atlassian.net`). Recommended: when unset, each script asks `acli` which site it is logged into, and `auth-status` cannot check that `acli` is logged into the right site. |
+| `jira-project` | `CODEV_JIRA_PROJECT` | Project key that scopes issue lists, search, and recently closed. When unset, those concepts span every project the account can see. |
+
+**Behavior notes.**
+
+- **Issue ids are work item keys** (`ENG-123`), end to end: `afx spawn ENG-123 --protocol bugfix`, worktrees and branches (`builder/bugfix-ENG-123`), porch state, and VS Code's Open Issue by ID. Keys are canonicalized to upper case.
+- **Open and closed follow the status *category*,** never status names, which differ per site: open is any category but Done, and closed is Done.
+- **Comments are plain text.** Markdown is posted as written, not converted to Atlassian's rich-text format. Descriptions and comments read from Jira are flattened to plain text.
+- **No created dates in the backlog.** `acli`'s search returns no date fields, so backlog items have no age; they are still ordered newest first.
+- **No smart commits.** Codev does not rely on `Fix ENG-123` commit messages to transition issues. Closing the issue on merge stays a manual step, as on every forge.
 
 ### Custom Forge (any platform)
 

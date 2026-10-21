@@ -448,7 +448,8 @@ export interface IssueView {
    * The issue's **browser/web** URL (NOT an API endpoint), when the forge
    * concept supplies it. Each forge maps its own web-URL field into this:
    * GitHub `url`, GitLab `web_url`, Gitea `html_url` (Gitea's `url` is the API
-   * endpoint — do not use it), Linear `url`. Optional so the contract stays
+   * endpoint — do not use it), Linear `url`, Jira `<site>/browse/<key>` (never
+   * the REST `self` link, which names an infrastructure host). Optional so the contract stays
    * forge-neutral; consumers that open the issue in a browser degrade
    * gracefully when it's absent (e.g. a forge script that doesn't emit it).
    */
@@ -456,7 +457,8 @@ export interface IssueView {
   /**
    * Login/handle of the user who opened the issue, when the forge concept
    * supplies it: GitHub `author.login`, GitLab `author.username`, Gitea
-   * `user.login`, Linear `creator.displayName`. Optional so the contract
+   * `user.login`, Linear `creator.displayName`, Jira the creator's email
+   * (falling back to display name). Optional so the contract
    * stays forge-neutral — a forge/script that omits it degrades gracefully
    * (the consumer drops the "opened by" attribution).
    */
