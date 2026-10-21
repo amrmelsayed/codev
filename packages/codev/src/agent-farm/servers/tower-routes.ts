@@ -23,7 +23,7 @@ import { decodeWorkspacePath } from '../lib/tower-client.js';
 import { readCloudConfig } from '../lib/cloud-config.js';
 import { fileURLToPath } from 'node:url';
 import { version } from '../../version.js';
-import { sanitizeAgentEnv } from '../../lib/agent-env.js';
+import { sanitizeAgentEnv, withTowerPort } from '../../lib/agent-env.js';
 
 const execAsync = promisify(exec);
 import type { SessionManager } from '../../terminal/session-manager.js';
@@ -107,6 +107,9 @@ import {
   removeArchitect,
 } from './tower-instances.js';
 import { OverviewCache } from './overview.js';
+import { handleAgentLifecycle } from './agent-state/route.js';
+import { agentStateStore } from './agent-state/store.js';
+import { resolveAgentIdentity } from './agent-state/identity.js';
 import {
   fetchIssue,
   fetchPR,
@@ -214,6 +217,11 @@ const ROUTES: Record<string, RouteEntry> = {
   'POST /api/overview/refresh': (_req, res, _url, ctx) => handleOverviewRefresh(res, ctx),
   'GET /api/events':      (req, res, _url, ctx) => handleSSEEvents(req, res, ctx),
   'POST /api/notify':     (req, res, _url, ctx) => handleNotify(req, res, ctx),
+  // Spec 1595: write-only lifecycle ingestion; key-authenticated like every non-public route.
+  'POST /api/agent-lifecycle': (req, res) => handleAgentLifecycle(req, res, {
+    store: agentStateStore,
+    resolve: identity => resolveAgentIdentity(identity),
+  }),
   'GET /api/browse':      (_req, res, url) => handleBrowse(res, url),
   'POST /api/create':     (req, res, _url, ctx) => handleCreateWorkspace(req, res, ctx),
   'POST /api/launch':     (req, res) => handleLaunchInstance(req, res),
@@ -833,8 +841,9 @@ async function handleTerminalCreate(
         // Strip Claude Code session markers so spawned Claude processes don't
         // detect nesting and disable transcript saving (#1219). `env` is normally
         // absent — `createPtySession` sends no env — so this is the path by which
-        // Tower's own environment becomes every builder's environment.
-        const sessionEnv = sanitizeAgentEnv(env || process.env);
+        // Tower's own environment becomes every builder's environment. Spec 1595:
+        // Tower's port is set last, so an inherited value never survives.
+        const sessionEnv = withTowerPort(sanitizeAgentEnv(env || process.env), ctx.port);
         const client = await shellperManager.createSession({
           sessionId,
           command,
@@ -894,7 +903,10 @@ async function handleTerminalCreate(
     // Fallback: non-persistent session (graceful degradation per plan)
     // Shellper is the only persistence backend for new sessions.
     if (!info) {
-      info = await manager.createSession({ command, args, cols, rows, cwd, env: env && sanitizeAgentEnv(env), label });
+      // Spec 1595: the manager merges this over its own base env, so Tower's port
+      // reaches the session whether or not the client supplied an env.
+      const sessionEnv = withTowerPort(sanitizeAgentEnv(env ?? {}), ctx.port);
+      info = await manager.createSession({ command, args, cols, rows, cwd, env: sessionEnv, label });
       persistent = false;
 
       if (workspacePath && termType && roleId) {

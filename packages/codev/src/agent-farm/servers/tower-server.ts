@@ -64,6 +64,7 @@ import { startMailboxDrainer, stopMailboxDrainer, setMailboxBroadcaster } from '
 import { shutdownDelayedSends } from './delayed-send.js';
 import type { RouteContext } from './tower-routes.js';
 import { setCodevConfigNotifier, stopAllCodevConfigWatchers } from './codev-config-watcher.js';
+import { agentStateStore, AGENT_STATE_CHANGED, type AgentStateChange } from './agent-state/store.js';
 import { getGlobalDb } from '../db/index.js';
 import {
   claimGlobalDbOwnership,
@@ -417,6 +418,18 @@ setCodevConfigNotifier(broadcastNotification);
 // module and the boot-time drainer have no RouteContext, so they fan out through here.
 setMailboxBroadcaster(broadcastNotification);
 
+// Spec 1595: an accepted lifecycle report that changes an agent's served state
+// fans out as the existing `overview-changed` event, so surfaces refetch the
+// overview (which projects agent state per request; no cache to invalidate).
+agentStateStore.on(AGENT_STATE_CHANGED, (change: AgentStateChange) => {
+  broadcastNotification({
+    type: 'overview-changed',
+    title: 'Agent state changed',
+    body: change.agentId,
+    workspace: change.workspacePath,
+  });
+});
+
 // ============================================================================
 // Readiness gate (Issue #1261)
 // ============================================================================
@@ -651,6 +664,7 @@ async function bootSequence(): Promise<void> {
   // Spec 0105 Phase 4: Initialize terminal management module
   initTerminals({
     log,
+    towerPort: port,
     shellperManager,
     registerKnownWorkspace,
     getKnownWorkspacePaths,
@@ -756,6 +770,7 @@ async function bootSequence(): Promise<void> {
   // now runs here and the two maintenance sweeps run after readiness instead.
   initInstances({
     log,
+    towerPort: port,
     workspaceTerminals: getWorkspaceTerminals(),
     getTerminalManager,
     shellperManager,
