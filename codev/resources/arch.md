@@ -95,7 +95,7 @@ tail -f ~/.agent-farm/tower.log
 
 2. **Single Tower Port**: All projects are served through Tower on port 4100. Per-project port blocks were removed in Spec 0098. Terminal sessions and workspace metadata are tracked in `~/.agent-farm/global.db`.
 
-3. **Worktree Integrity**: Worktrees in `.builders/` are managed by Agent Farm. Never delete them manually (use `afx cleanup`).
+3. **Worktree Integrity**: Worktrees in `.builders/` are managed by Agent Farm. Never delete them manually (use `afx cleanup`). A builder worktree is **never a workspace** (#1809): Tower's `launchInstance` refuses any path with a `.builders/<id>` segment (no known-workspace row, no architect), and a VS Code window rooted at a worktree attaches read-only to the parent root (no activate, no Tower auto-start, no Agents view, no parent-scoped toasts/counts/badge, contextual panel pinned to its own builder). Classify such paths only through `@cluesmith/codev-sdk/builder-worktree` so Tower and the extension cannot drift.
 
 4. **CLAUDE.md ≡ AGENTS.md**: These files MUST be identical. They are the same content for different tool ecosystems.
 
@@ -1819,6 +1819,7 @@ The startup ordering is critical — race conditions have caused real bugs when 
 | 3 | `initTerminals()` | Terminal management module ready |
 | 4 | `startMailboxDrainer()` | Mailbox backstop drainer ready (Spec 1313 — replaced Spec 403's `startSendBuffer()`); shutdown calls `stopMailboxDrainer()` with **no force-flush** |
 | 5 | **`reconcileTerminalSessions()`** | **MUST run before step 7** — reconnects shellper sessions from previous run |
+| 5a | `pruneBuilderWorktreeWorkspaces()` (#1809) | **After step 5, before step 6**: deletes `known_workspaces` / `architect` / `terminal_sessions` rows recorded under a builder worktree path, unless a session for that path is live (in-memory entry or a live `terminal_sessions` pid). Never signals a process; live strays are WARN-reported with the `afx workspace stop` remedy (the deactivate route uses the unfiltered `getAllKnownWorkspacePaths()` so that remedy works). One INFO count line per boot |
 | 6 | `killOrphanedShellpers()` | **MUST run after step 5** — avoids killing sessions that were just reconnected. **MUST also stay before step 9** (#1685): it has no age guard (unlike step 10's husk sweep), so once requests are served it could reap a just-spawned session that is already in `ps` but not yet registered or socket-listening. It is time-bounded (`ORPHAN_SWEEP_TIMEOUT_MS`, 10s, cooperative cancellation) rather than deferred past readiness |
 | 7 | `initInstances()` | Enables workspace API handlers — triggers dashboard polling |
 | 8 | `initCron()` | Scheduler starts after instances ready |

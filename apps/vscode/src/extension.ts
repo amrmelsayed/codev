@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ConnectionManager } from './connection-manager.js';
 import { wireCommandProvider } from './command-relay.js';
-import { fireActivity, setActivityHooks } from './activity-hooks.js';
+import { fireActivity, setActivityHooks, setActivityHooksSuppressed } from './activity-hooks.js';
 import { loadActivityHooks } from './load-activity-hooks.js';
 import { TerminalManager } from './terminal-manager.js';
 import { openResolvedArchitect } from './open-architect.js';
@@ -89,7 +89,7 @@ import { persistAreaGroupExpansion } from './views/area-group-expansion.js';
 import { buildArchitectReferenceInjection } from './architect-reference-injection.js';
 import { runPreflight, recheckCli, isCliReady, showPreflightFeedback, probeTowerVersion, openWalkthrough, maybeOpenWalkthrough } from './preflight/preflight.js';
 import { detectIdeMode, decideActivationTier, activationPolicy, IDE_SIMULATION_ENV_VAR } from './ide-mode.js';
-import { detectWorkspacePath } from './workspace-detector.js';
+import { detectWorkspace, detectWorkspacePath, detectIsBuilderWorktree } from './workspace-detector.js';
 import { loadWorktreeConfig, hasRunnableDevCommand } from './load-worktree-config.js';
 
 let connectionManager: ConnectionManager | null = null;
@@ -259,6 +259,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		hasCodevWorkspace: detectWorkspacePath() !== null,
 	});
 	const policy = activationPolicy(tier);
+	// #1809: a builder-worktree window attaches read-only to the PARENT
+	// workspace, so its overview data is the parent's builders. Surfaces that
+	// summarize or act on those builders (gate toasts with their Approve button,
+	// mailbox-escalation toasts, status-bar counts, the activity-bar badge) stay
+	// off in such a window; the parent's own window carries them. Computed once:
+	// a folder change restarts the extension host.
+	const isBuilderWorktreeWindow = detectIsBuilderWorktree();
 
 	// The two layer-model context keys (#1144). `codev.ideMode` is immutable
 	// for the window's lifetime (appName can't change in-process).
@@ -273,10 +280,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	// opening a folder from an empty window restarts the extension host
 	// anyway.
 	vscode.commands.executeCommand('setContext', 'codev.ideMode', ideMode);
-	const syncHasWorkspaceContext = () =>
+	// `codev.isBuilderWorktree` (#1809): the window is rooted at a
+	// `<root>/.builders/<id>` worktree. Codev never activates a worktree; the
+	// window attaches read-only to the parent, the Agents view is gated off
+	// (absent, not empty) and activity hooks are suppressed.
+	const syncHasWorkspaceContext = () => {
+		const isBuilderWorktree = detectIsBuilderWorktree();
+		setActivityHooksSuppressed(isBuilderWorktree);
 		vscode.commands.executeCommand(
+			'setContext', 'codev.isBuilderWorktree', isBuilderWorktree);
+		return vscode.commands.executeCommand(
 			'setContext', 'codev.hasWorkspace',
 			detectWorkspacePath() !== null);
+	};
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeWorkspaceFolders(syncHasWorkspaceContext));
 	syncHasWorkspaceContext(); // seed initial state
@@ -478,6 +494,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Each is shown only when > 0, with its own icon.
 	const updateStatusBarCounts = () => {
 		if (!statusBarItem || connectionManager?.getState() !== 'connected') { return; }
+		if (isBuilderWorktreeWindow) { return; }
 		const data = overviewCache.getData();
 		if (!data) { return; }
 		const builderCount = data.builders.length;
@@ -538,7 +555,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const updateActivityBadge = () => {
 		if (!buildersView) { return; }
 		const data = overviewCache.getData();
-		if (connectionManager?.getState() !== 'connected' || !data) {
+		if (isBuilderWorktreeWindow || connectionManager?.getState() !== 'connected' || !data) {
 			buildersView.badge = undefined;
 			return;
 		}
@@ -638,7 +655,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	// surface and posts a ModeDescriptor to its webview. Takes the terminal manager for the
 	// builder-terminal surface (getActiveBuilderId). (#921's Codev Dev panel view was removed —
 	// its status is carried by the status-bar chip below.)
-	const contextualPanelProvider = new ContextualPanelProvider(context.extensionUri, terminalManager!, overviewCache, reviewQueueStore);
+	// #1809: in a builder-worktree window the panel is pinned to that worktree's own builder.
+	const windowWorkspace = detectWorkspace();
+	let pinnedPanelBuilderId: string | undefined;
+	if (windowWorkspace?.kind === 'builder-worktree') {
+		pinnedPanelBuilderId = windowWorkspace.builderId;
+	}
+	const contextualPanelProvider = new ContextualPanelProvider(
+		context.extensionUri, terminalManager!, overviewCache, reviewQueueStore, pinnedPanelBuilderId);
 	context.subscriptions.push(
 		buildersView,
 		pullRequestsView,
@@ -1727,18 +1751,25 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Toast on new gate-pending — surfaces blocked builders without forcing the
 	// user to watch the Builders tree. Respects `codev.gateToasts.enabled`.
-	activateGateToasts(context, overviewCache);
+	// Both toast families are the parent's in a builder-worktree window (#1809).
+	if (!isBuilderWorktreeWindow) {
+		activateGateToasts(context, overviewCache);
 
-	// Spec 1313 Phase 8: toast when a held message crosses the escalation age
-	// (the `mailbox-escalation` SSE event). Visibility only — read/dismiss via
-	// `afx inbox`. Respects `codev.mailboxEscalationToasts.enabled`.
-	activateMailboxEscalationToasts(context, connectionManager, overviewCache);
+		// Spec 1313 Phase 8: toast when a held message crosses the escalation age
+		// (the `mailbox-escalation` SSE event). Visibility only — read/dismiss via
+		// `afx inbox`. Respects `codev.mailboxEscalationToasts.enabled`.
+		activateMailboxEscalationToasts(context, connectionManager, overviewCache);
+	}
 
-	// Auto-open builder terminals on Tower spawn events
-	const builderSpawnHandler = new BuilderSpawnHandler(connectionManager, terminalManager, outputChannel);
-	context.subscriptions.push(
-		connectionManager.onSSEEvent(({ type, data }) => builderSpawnHandler.handle(type, data)),
-	);
+	// Auto-open builder terminals on Tower spawn events. Not in a builder-worktree
+	// window (#1809): its workspace path is the PARENT root, so a sibling lane's
+	// spawn would toast there (`notify`) or open that sibling's live terminal (`auto`).
+	if (!isBuilderWorktreeWindow) {
+		const builderSpawnHandler = new BuilderSpawnHandler(connectionManager, terminalManager, outputChannel);
+		context.subscriptions.push(
+			connectionManager.onSSEEvent(({ type, data }) => builderSpawnHandler.handle(type, data)),
+		);
+	}
 
 	// VSCode as the command provider for Tower's command relay: run canonical
 	// verbs sent by a controller (the focused window self-gates).

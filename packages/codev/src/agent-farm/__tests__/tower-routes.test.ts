@@ -51,6 +51,7 @@ const { mockGetInstances, mockGetTerminalManager, mockGetSession,
   mockReadCloudConfig,
   mockComputeAnalytics,
   mockGetKnownWorkspacePaths,
+  mockGetAllKnownWorkspacePaths,
   mockIsStartupReconcileSettled,
   sendDbHolder } = vi.hoisted(() => ({
   mockGetInstances: vi.fn(),
@@ -77,6 +78,7 @@ const { mockGetInstances, mockGetTerminalManager, mockGetSession,
   mockReadCloudConfig: vi.fn(),
   mockComputeAnalytics: vi.fn(),
   mockGetKnownWorkspacePaths: vi.fn(() => []),
+  mockGetAllKnownWorkspacePaths: vi.fn((): string[] => []),
   mockIsStartupReconcileSettled: vi.fn(() => true),
   // Holder for the in-memory global.db used by the Spec 1313 send path (mailbox
   // persist + gate delivery). Re-created per test in beforeEach.
@@ -90,6 +92,7 @@ vi.mock('../lib/cloud-config.js', () => ({
 vi.mock('../servers/tower-instances.js', () => ({
   getInstances: mockGetInstances,
   getKnownWorkspacePaths: (...args: unknown[]) => mockGetKnownWorkspacePaths(...args),
+  getAllKnownWorkspacePaths: (...args: unknown[]) => mockGetAllKnownWorkspacePaths(...args),
   getDirectorySuggestions: vi.fn(async () => []),
   launchInstance: vi.fn(async () => ({ success: true })),
   killTerminalWithShellper: vi.fn(async () => true),
@@ -1042,6 +1045,38 @@ describe('tower-routes', () => {
       expect(json.success).toBe(false);
       expect(json.error).toMatch(/Failed to create architect terminal/);
       expect(json.error).toMatch(/spawn claude ENOENT/);
+    });
+  });
+
+  // =========================================================================
+  // #1809: deactivate still reaches a live stray builder-worktree workspace
+  // =========================================================================
+
+  describe('POST /api/workspaces/:path/deactivate', () => {
+    const worktree = '/repo/.builders/pir-1802';
+    const encoded = Buffer.from(worktree).toString('base64url');
+
+    it('stops a stray worktree workspace that the filtered list excludes', async () => {
+      const { stopInstance } = await import('../servers/tower-instances.js');
+      mockGetKnownWorkspacePaths.mockReturnValueOnce([]);
+      mockGetAllKnownWorkspacePaths.mockReturnValueOnce([worktree]);
+
+      const req = makeReq('POST', `/api/workspaces/${encoded}/deactivate`);
+      const { res, statusCode } = makeRes();
+      await handleRequest(req, res, makeCtx());
+
+      expect(statusCode()).toBe(200);
+      expect(stopInstance).toHaveBeenCalledWith(worktree);
+    });
+
+    it('still returns 404 for a path Tower has never seen', async () => {
+      mockGetAllKnownWorkspacePaths.mockReturnValueOnce([]);
+
+      const req = makeReq('POST', `/api/workspaces/${encoded}/deactivate`);
+      const { res, statusCode } = makeRes();
+      await handleRequest(req, res, makeCtx());
+
+      expect(statusCode()).toBe(404);
     });
   });
 
