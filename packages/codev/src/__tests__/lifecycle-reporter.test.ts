@@ -32,6 +32,7 @@ import {
   buildCustomHarnessProvider,
 } from '../agent-farm/utils/harness.js';
 import { buildWorktreeGuardFiles } from '../agent-farm/utils/worktree-write-guard.js';
+import { DEFAULT_TOWER_PORT } from '@cluesmith/codev-sdk/constants';
 import { parseLifecycleEvent } from '../agent-farm/servers/agent-state/route.js';
 
 const KEY = 'a'.repeat(64);
@@ -289,6 +290,10 @@ describe('lifecycle reporter translation', () => {
     });
     expect((bodies[0] as { agent: unknown }).agent).toEqual({ kind: 'architect', workspacePath: '/repo', name: 'main' });
     expect(parseLifecycleEvent(bodies[0])).not.toBeNull();
+  });
+
+  it('falls back to the shared default Tower port', () => {
+    expect(LIFECYCLE_REPORTER_SCRIPT).toContain(`const DEFAULT_TOWER_PORT = ${DEFAULT_TOWER_PORT};`);
   });
 
   it('presents CODEV_TOWER_KEY when set, over the key file', async () => {

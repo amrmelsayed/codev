@@ -30,6 +30,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'n
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { AGENT_FARM_DIR } from '@cluesmith/codev-core/constants';
+import { DEFAULT_TOWER_PORT } from '@cluesmith/codev-sdk/constants';
 import { logger } from './logger.js';
 import { shellEscapeSingleQuote, toShellPath, type HarnessProvider } from './harness.js';
 
@@ -64,7 +65,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const QUESTION_TOOL = 'AskUserQuestion';
-const DEFAULT_TOWER_PORT = 4100;
+const DEFAULT_TOWER_PORT = ${DEFAULT_TOWER_PORT};
 const REQUEST_DEADLINE_MS = 800;
 const OVERALL_DEADLINE_MS = 1500;
 const MAX_BODY_BYTES = 8192;
