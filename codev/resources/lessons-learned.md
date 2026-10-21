@@ -303,7 +303,7 @@ Generalizable wisdom extracted from review documents, ordered by impact. Updated
 
 ## Testing
 
-- [From #1809] A shell with `umask 077` makes `cloud-config.test.ts` ("enforces 0600 on pre-existing files") fail deterministically: its setup cannot create the 0644 starting file. It is environmental, not a code defect: run the suite (and porch's `npm test` check) under `umask 022` rather than skipping or editing the test.
+- [From #1809] A shell with `umask 077` makes `cloud-config.test.ts` ("enforces 0600 on pre-existing files") fail deterministically: its setup cannot create the 0644 starting file. It is environmental, not a code defect: run the suite (and porch's `npm test` check) under `umask 022` rather than skipping or editing the test. (Spec 1797 has since set that precondition with `chmodSync`, so the test no longer depends on the umask; the lesson holds for any test that sets a file mode on write.)
 
 - [From #1482] When a test must be isolated from a live system, **assert the isolation as the first diagnostic**, not the last. A browser test silently ran against the live Tower on port 4100 because the repo's Playwright config defaults to it and the scratch config set `TOWER_TEST_PORT` only in `webServer.env` — the *server* process's environment, not the *test runner's*. The failure was silent because the default was a working server. Log/assert `page.url()`, the port, or the DB path up front; several rounds were lost theorising about stale bundles and hydration races that one `page.url()` would have settled. Better still, make the test throw when the isolating variable is unset rather than defaulting to the production value.
 
