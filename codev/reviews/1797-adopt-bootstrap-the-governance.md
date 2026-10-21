@@ -57,6 +57,12 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
 - **Draft review:** all three reviewers ran this time, Gemini included.
 - **Re-run:** "Nothing needs bootstrapping", exit 0, all four files byte-identical.
 
+**Run 5, on the trimmed survey step (2515db3b0).** Fresh clone of `sindresorhus/execa`, same driver. The skill named the sources and gave no commands.
+
+- **The agent still covered every source, with commands it chose:** release tags and the commits between majors (v1 to v10), merge commits with their bodies, commits per year and the earliest commits, fix and revert searches plus its own vocabulary (windows, hang, leak, zombie, detach), deleted paths, churn since 2024, `git log -S` on removed APIs, and `git show` on about 15 commits behind specific lessons.
+- **Result:** all four files passed validation, there were "No changes outside the eligible files", and the exit code was 0. All three reviewers ran. The hot files are 32 lines each.
+- **Re-run:** "Nothing needs bootstrapping", all four files byte-identical.
+
 ## Deviations from Plan
 
 - **Phase 1:** none of substance. `hot-tier.test.ts` now imports the shared cap/map helpers instead of keeping its own copies.
@@ -105,6 +111,7 @@ Runs 1 and 2 used the CLI-built git digest, since removed (see Deviations).
   - removed areas, from deleted paths grouped by directory, plus the commit that removed one.
 
   Each command was tried on the execa clone and on this repository before it went into the skill.
+- **Review phase, owner direction (history verbosity), head 2515db3b0:** the survey step then listed an exact command for each source. The owner asked whether the agent should get the tools and choose the commands itself, in line with the team review's "give the agent tools" point. Run 3, under the earlier short command list, showed the agent did not need the syntax: it already widened the grep with its own words. It did need the sources named, because it did not reach older eras, removals or the project's own record until they were. The step now names the sources and leaves the commands to the agent. The one mechanic kept is that PR titles live in merge bodies, since that is easy to miss. Run 5 checked the result. Main was merged in first (lessons-learned.md conflict resolved by keeping both sides' entries), and the shipped-skill hash table was regenerated for main's afx and porch skill changes.
 - **Process:** porch force-advanced phase_4 at its iteration-3 ceiling, so commit `b87516dcd` (symlinks hashed by target) had no CMAP round of its own. The architect asked to review it explicitly at PR integration review.
 
 ## Consultation Feedback
