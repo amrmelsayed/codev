@@ -39,8 +39,13 @@ export interface StoredAgentActivity {
   activity: AgentActivity;
   /** Hook time (epoch ms) at which `activity` began. */
   activitySince: number;
-  /** Hook time (epoch ms) of the latest accepted report. */
+  /** Hook time (epoch ms) of the latest report that set the served state; the served `at`. */
   reportedAt: number;
+  /**
+   * Hook time (epoch ms) of the latest accepted report, including one that
+   * changed nothing served. The ordering watermark (SC17): never behind `reportedAt`.
+   */
+  latestHookAt: number;
   /** True when the agent ended its turn with its own background work running. */
   backgroundWork: boolean;
   /** Present only while `activity` is `needs-input`. */
@@ -134,10 +139,15 @@ export class AgentStateStore extends EventEmitter {
     const key = storeKey(workspacePath, agentId);
     const previous = this.entries.get(key);
     if (previous !== undefined) {
-      if (event.at < previous.reportedAt) return 'stale';
-      if (event.sessionId !== previous.sessionId && event.at === previous.reportedAt) return 'stale';
+      if (event.at < previous.latestHookAt) return 'stale';
+      if (event.sessionId !== previous.sessionId && event.at === previous.latestHookAt) return 'stale';
     }
-    if (repeatsBackgroundTurnEnd(event, previous)) return 'unchanged';
+    if (previous !== undefined && repeatsBackgroundTurnEnd(event, previous)) {
+      // The hold and its served time stay; only the ordering watermark moves, so a
+      // delayed report older than this one is still ignored.
+      this.entries.set(key, { ...previous, latestHookAt: event.at });
+      return 'unchanged';
+    }
 
     const activity = activityFor(event);
     let activitySince = event.at;
@@ -149,6 +159,7 @@ export class AgentStateStore extends EventEmitter {
       activity,
       activitySince,
       reportedAt: event.at,
+      latestHookAt: event.at,
       backgroundWork: event.event === 'turn-ended' && event.backgroundWork === true,
     };
     if (activity === 'needs-input') {

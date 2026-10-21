@@ -74,6 +74,20 @@ describe('AgentStateStore: event to activity', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('an ignored claim-less turn end still advances the ordering watermark (SC17)', () => {
+    const store = makeStore();
+    store.apply(WS, ID, event({ event: 'turn-ended', backgroundWork: true, at: NOW - 100 }));
+    store.apply(WS, ID, event({ event: 'turn-ended', at: NOW - 40 }));
+    // A delayed report from between the two must not regress the held state.
+    expect(store.apply(WS, ID, event({ event: 'tool-activity', at: NOW - 70 }))).toBe('stale');
+    expect(store.get(WS, ID)).toMatchObject({
+      activity: 'working', backgroundWork: true, reportedAt: NOW - 100, latestHookAt: NOW - 40,
+    });
+    // A newer report is accepted as usual.
+    expect(store.apply(WS, ID, event({ event: 'turn-started', at: NOW - 10 }))).toBe('changed');
+    expect(store.get(WS, ID)).toMatchObject({ backgroundWork: false, reportedAt: NOW - 10, latestHookAt: NOW - 10 });
+  });
+
   it('the background-work hold is released by an explicit turn end, a new turn, or a new session', () => {
     const releases: Array<[Partial<AgentLifecycleEvent>, string]> = [
       [{ event: 'turn-ended', backgroundWork: false }, 'idle'],
