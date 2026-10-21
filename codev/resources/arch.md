@@ -2275,7 +2275,7 @@ try {
 
 ### State Persistence
 
-**Pattern**: SQLite for all structured state.
+**Pattern**: SQLite for all persisted structured state. Deliberate exception: harness-reported agent state (Spec 1595) is held in Tower's memory only and never persisted, so no report can outlive the Tower process that received it (see Agent State under Agent Farm Internals).
 
 - `.agent-farm/state.db` - Builder/util state (local, per-project)
 - `~/.agent-farm/global.db` - Global workspace/session registry (cross-project)
