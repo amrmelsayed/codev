@@ -76,6 +76,11 @@ describe('parent-scoped surfaces in a builder-worktree window', () => {
     expect(EXT_SRC.match(/activateGateToasts\(/g)).toHaveLength(1);
   });
 
+  it("pins the contextual panel to the worktree's own builder", () => {
+    expect(EXT_SRC).toMatch(/if \(windowWorkspace\?\.kind === 'builder-worktree'\) \{\s*pinnedPanelBuilderId = windowWorkspace\.builderId;/);
+    expect(EXT_SRC).toMatch(/new ContextualPanelProvider\(\s*context\.extensionUri, terminalManager!, overviewCache, reviewQueueStore, pinnedPanelBuilderId\)/);
+  });
+
   it('shows no parent builder counts in the status bar or the activity-bar badge', () => {
     expect(EXT_SRC).toMatch(/const updateStatusBarCounts = \(\) => \{[\s\S]*?if \(isBuilderWorktreeWindow\) \{ return; \}/);
     expect(EXT_SRC).toMatch(/if \(isBuilderWorktreeWindow \|\| connectionManager\?\.getState\(\) !== 'connected' \|\| !data\) \{\s*buildersView\.badge = undefined;/);

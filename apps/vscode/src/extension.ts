@@ -89,7 +89,7 @@ import { persistAreaGroupExpansion } from './views/area-group-expansion.js';
 import { buildArchitectReferenceInjection } from './architect-reference-injection.js';
 import { runPreflight, recheckCli, isCliReady, showPreflightFeedback, probeTowerVersion, openWalkthrough, maybeOpenWalkthrough } from './preflight/preflight.js';
 import { detectIdeMode, decideActivationTier, activationPolicy, IDE_SIMULATION_ENV_VAR } from './ide-mode.js';
-import { detectWorkspacePath, detectIsBuilderWorktree } from './workspace-detector.js';
+import { detectWorkspace, detectWorkspacePath, detectIsBuilderWorktree } from './workspace-detector.js';
 import { loadWorktreeConfig, hasRunnableDevCommand } from './load-worktree-config.js';
 
 let connectionManager: ConnectionManager | null = null;
@@ -655,7 +655,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	// surface and posts a ModeDescriptor to its webview. Takes the terminal manager for the
 	// builder-terminal surface (getActiveBuilderId). (#921's Codev Dev panel view was removed —
 	// its status is carried by the status-bar chip below.)
-	const contextualPanelProvider = new ContextualPanelProvider(context.extensionUri, terminalManager!, overviewCache, reviewQueueStore);
+	// #1809: in a builder-worktree window the panel is pinned to that worktree's own builder.
+	const windowWorkspace = detectWorkspace();
+	let pinnedPanelBuilderId: string | undefined;
+	if (windowWorkspace?.kind === 'builder-worktree') {
+		pinnedPanelBuilderId = windowWorkspace.builderId;
+	}
+	const contextualPanelProvider = new ContextualPanelProvider(
+		context.extensionUri, terminalManager!, overviewCache, reviewQueueStore, pinnedPanelBuilderId);
 	context.subscriptions.push(
 		buildersView,
 		pullRequestsView,
