@@ -849,3 +849,22 @@ describe('shipped provider scripts declare their executable (#1645)', () => {
     }
   });
 });
+
+describe('validateForgeConfig provider settings (#1740)', () => {
+  it('accepts a provider setting when that provider is configured', () => {
+    const results = validateForgeConfig({ provider: 'jira', 'jira-site': 'https://x.atlassian.net', 'jira-project': 'ENG' });
+    expect(results.filter(r => r.status === 'unknown_concept')).toEqual([]);
+    expect(validateForgeConfig({ provider: 'linear', 'linear-team': 'ENG' }).filter(r => r.status === 'unknown_concept')).toEqual([]);
+  });
+
+  it('flags a provider setting under a different provider', () => {
+    const r = validateForgeConfig({ provider: 'github', 'jira-site': 'x' }).find(x => x.concept === 'jira-site');
+    expect(r?.status).toBe('unknown_concept');
+    expect(r?.message).toContain("only applies to provider 'jira'");
+  });
+
+  it('still flags a typo as an unknown concept', () => {
+    const r = validateForgeConfig({ provider: 'jira', 'jira-sitee': 'x' }).find(x => x.concept === 'jira-sitee');
+    expect(r?.message).toContain('is not a known forge concept');
+  });
+});

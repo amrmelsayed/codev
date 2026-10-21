@@ -10,3 +10,16 @@
 - Read-only probe of acli 1.3.39. Key facts: auth status is a real round trip (text, no --json); `workitem search --fields` is allow-listed and returns NO dates; `view` returns everything (one key per call, ~1.2s); REST `self` is an infra host, so browse URL needs jira-site or the auth-status Site line; unbounded JQL is rejected; `--fields key` alone returns nulls.
 - Design changes: issue-list omits createdAt; recently-closed does search + per-hit view (24h window, capped); identity keyed on email.
 - Owner instruction: keep tenant-specific details out of committed artifacts; fixtures are structural with synthetic values.
+
+## 2026-10-21: implement phase
+- Plan approved (owner word via architect); plan text verified identical across the rebase hash change before `porch approve`.
+- Jira scripts follow gitea's `_lib.sh` pattern (sourced helpers: site, JQL scope, key validation, ADF flattener). Live read-only smoke against the owner's acli: issue-list/search/view/recently-closed/auth-status/user-identity all conform. issue-comment NOT exercised live (write to a real site).
+- Safety check flagged an `rm -f "$2/$1.json"` in script text; rewrote recently-closed to write `.part` then rename, cleanup via `${WORK:?}`.
+- Overview: stored `builders.id` is the terminal role id, so it is now preferred over parsing names, BUT only when it has the buildAgentName shape (`builder-`/`worktree-`); legacy rows carry ids like `bugfix-42`.
+- Key/short-id collision: issue-less protocol spawns are `<protocol>-<base64url shortid>`, e.g. `maintain-Ab-3`, indistinguishable from a key by name. Stored row with null issue_number wins (soft, no issue).
+- Trap caught by the regression tests: `bugfix-200` is itself key-shaped; every key pattern now tries numeric forms first.
+- `parseIssueId` stays numeric because Open PR by ID shares it; new `parseIssueInput` for issues.
+- spawn.test.ts re-implemented inferProtocolFromWorktree instead of testing it; extracted a pure exported `inferProtocolFromDirs` and pointed the old cases at it.
+- Not done (outside plan or not reachable): branch-name PR linking (parseLinkedIssue never sees the branch); numeric `[PIR #N]` tag linking was already missing and is left as is.
+- Real-path check caught what unit tests missed: `codev doctor` warned "jira-site is not a known forge concept" (validateForgeConfig only knew concepts; linear-team had the same false warning). Added a per-provider settings registry. Real doctor now: 7 issue concepts `preset acli`, PR concepts `default gh`, `jira auth` + `gh auth` both authenticated; a wrong jira-site reports not authenticated with the login hint.
+- Full suites: build ok, tsc ok (codev + vscode), vscode 1233/1233, codev 6646 pass + 1 deterministic unrelated failure (cloud-config 0600 test: fixture writes 0644 but env umask 077 yields 0600; not touched by this branch).

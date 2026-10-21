@@ -562,6 +562,23 @@ export function getDefaultCommand(concept: string): string | null {
  * Returns an array of diagnostic messages.
  * Used by `codev doctor`.
  */
+/**
+ * Non-concept settings each provider's scripts read, passed through as
+ * `CODEV_<KEY>` (see buildForgeEnv). Listed so validation can tell a real
+ * setting from a typo'd concept name.
+ */
+const PROVIDER_SETTINGS: Record<string, readonly string[]> = {
+  linear: ['linear-team'],
+  jira: ['jira-site', 'jira-project'],
+};
+
+function providerOwningSetting(key: string): string | null {
+  for (const [provider, settings] of Object.entries(PROVIDER_SETTINGS)) {
+    if (settings.includes(key)) return provider;
+  }
+  return null;
+}
+
 export function validateForgeConfig(
   forgeConfig: ForgeConfig,
 ): { concept: string; status: 'ok' | 'disabled' | 'unknown_concept' | 'empty_command' | 'provider'; message: string }[] {
@@ -584,7 +601,14 @@ export function validateForgeConfig(
     } else if (command === '') {
       results.push({ concept, status: 'empty_command', message: `Concept '${concept}' has an empty command string` });
     } else if (!(concept in getDefaultCommands())) {
-      results.push({ concept, status: 'unknown_concept', message: `Concept '${concept}' is not a known forge concept` });
+      const owner = providerOwningSetting(concept);
+      if (owner !== null && owner === forgeConfig.provider?.toLowerCase()) {
+        results.push({ concept, status: 'ok', message: `Setting '${concept}': ${command}` });
+      } else if (owner !== null) {
+        results.push({ concept, status: 'unknown_concept', message: `Setting '${concept}' only applies to provider '${owner}'` });
+      } else {
+        results.push({ concept, status: 'unknown_concept', message: `Concept '${concept}' is not a known forge concept` });
+      }
     } else {
       results.push({ concept, status: 'ok', message: `Concept '${concept}' overridden: ${command}` });
     }
