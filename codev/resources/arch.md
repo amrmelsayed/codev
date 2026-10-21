@@ -2101,6 +2101,10 @@ All interactions with the repository hosting platform (GitHub by default) are ro
 
 **Environment variables**: Each concept receives `CODEV_*` env vars (e.g., `CODEV_ISSUE_NUMBER`, `CODEV_PR_NUMBER`) that the command uses to parameterize its output.
 
+**Providers** (`getProviderPresets()`): `github` (default), `gitlab`, `gitea`, and two **hybrid** trackers, `linear` (spec 719) and `jira` (Jira Cloud via Atlassian's `acli`, #1740). A hybrid serves only the issue concepts; every PR concept, `pr-create` included, falls through to the `gh` default because the code still lives on GitHub. `isHybridProvider()` is the one predicate for that, used by `codev doctor` to report both the tracker's and `gh`'s login. Non-concept `forge.*` keys are provider **settings** passed to scripts as `CODEV_<KEY>` (`linear-team`, `jira-site`, `jira-project`); `PROVIDER_SETTINGS` lists them so validation can tell a setting from a typo'd concept.
+
+**Issue ids are a number or a tracker key** (`ENG-123`, #1740). The key grammar lives once on the codev side (`src/lib/issue-id.ts`, twinned in `apps/vscode/src/issue-id.ts` and `apps/web/src/lib/issueIds.ts` with sync notes), and spawn canonicalizes keys to upper case so worktrees, branches, porch state and artifacts share one spelling. Anything that recovers an id after spawn (worktree names, role ids, porch cwd detection, PR tags) must accept both shapes and try the **numeric forms first**: `bugfix-200` is itself key-shaped. Tower reports the workspace's shape as `OverviewData.issueIdKind` (`'number' | 'key'`, from the provider; omitted when the issue concepts are hand-overridden), and clients gate key input on it. The overview prefers the builder's stored `builders.id` (its terminal role id) over parsing the directory name, because an issue-less spawn's base64url short id can look like a key (`maintain-Ab-3`).
+
 ### Two remote-command paths into an editor surface (Spec 1401)
 
 Tower has **two** ways for an external controller to drive an editor, and picking the wrong one
