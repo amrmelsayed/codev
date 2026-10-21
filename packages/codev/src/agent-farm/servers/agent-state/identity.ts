@@ -17,10 +17,12 @@
  * any builder worktree all resolve to `null`, which the route rejects.
  *
  * Ingestion fires per tool call, so lookups use Tower's own `global.db` handle
- * behind a short-lived memo of successful resolutions. Misses are never memoized,
- * so a newly spawned agent resolves on its first report; a removed agent stops
- * resolving within `IDENTITY_MEMO_TTL_MS`, or at once after
- * `invalidateAgentIdentityMemo`.
+ * behind a memo of successful resolutions. A memoized resolution is reused only
+ * while the registry is unchanged: any write to `global.db`, by Tower or by
+ * another process such as `afx spawn` or `afx cleanup`, moves SQLite's
+ * `data_version` or this connection's `total_changes()` and forces a fresh
+ * lookup, and `IDENTITY_MEMO_TTL_MS` bounds reuse regardless. Misses are never
+ * memoized, so a newly spawned agent resolves on its first report.
  */
 
 import type Database from 'better-sqlite3';
@@ -34,7 +36,7 @@ import {
 } from '../../utils/builder-worktree-identity.js';
 import { builderRoleId } from '../overview.js';
 
-/** How long a successful resolution is reused before the registry is read again. */
+/** The longest a successful resolution is reused, even with the registry unchanged. */
 export const IDENTITY_MEMO_TTL_MS = 5_000;
 
 /** A resolved agent: the store key. */
@@ -51,21 +53,41 @@ export interface ResolveAgentIdentityOptions {
   now?: () => number;
 }
 
-const memo = new Map<string, { agent: ResolvedAgent; expiresAt: number }>();
+const memo = new Map<string, { agent: ResolvedAgent; registryVersion: string; expiresAt: number }>();
 
-/** Drop every memoized resolution (the builders or architects registry changed). */
+/** Drop every memoized resolution. */
 export function invalidateAgentIdentityMemo(): void {
   memo.clear();
+}
+
+/**
+ * A token that changes whenever `global.db` is written: `data_version` moves on
+ * another connection's commit, `total_changes()` on this connection's own writes.
+ */
+function registryVersion(db: Database.Database): string {
+  const dataVersion = db.pragma('data_version', { simple: true }) as number;
+  const changes = db.prepare('SELECT total_changes() AS n').get() as { n: number };
+  return `${dataVersion}:${changes.n}`;
+}
+
+/** Whether a stored `workspace_path` names `workspacePath` (already normalized). */
+function sameWorkspace(stored: string, workspacePath: string): boolean {
+  return stored === workspacePath || normalizeWorkspacePath(stored) === workspacePath;
 }
 
 function resolveBuilder(db: Database.Database, worktreePath: string): ResolvedAgent | null {
   const ref = parseBuilderWorktreePath(normalizeWorkspacePath(worktreePath));
   if (!ref) return null;
   const workspacePath = normalizeWorkspacePath(ref.workspacePath);
+  // Both sides normalized: a row recorded under another spelling of the
+  // workspace path still belongs to this workspace. Rows stored in the
+  // canonical spelling are tried first, so the common case realpaths nothing
+  // beyond this workspace's own rows.
   const rows = db
-    .prepare('SELECT id, worktree FROM builders WHERE workspace_path = ? AND worktree IS NOT NULL')
-    .all(workspacePath) as BuilderWorktreeRow[];
-  const row = matchBuilderRow(rows, ref);
+    .prepare('SELECT id, worktree, workspace_path FROM builders WHERE worktree IS NOT NULL')
+    .all() as Array<BuilderWorktreeRow & { workspace_path: string }>;
+  const row = matchBuilderRow(rows.filter(r => r.workspace_path === workspacePath), ref)
+    ?? matchBuilderRow(rows.filter(r => r.workspace_path !== workspacePath && sameWorkspace(r.workspace_path, workspacePath)), ref);
   if (!row) return null;
   const agentId = builderRoleId(row.id, ref.worktreeDirName);
   if (agentId === null) return null;
@@ -74,9 +96,10 @@ function resolveBuilder(db: Database.Database, worktreePath: string): ResolvedAg
 
 function resolveArchitect(db: Database.Database, workspacePath: string, name: string): ResolvedAgent | null {
   const normalized = normalizeWorkspacePath(workspacePath);
-  const row = db
-    .prepare('SELECT id FROM architect WHERE workspace_path = ? AND id = ?')
-    .get(normalized, name) as { id: string } | undefined;
+  const rows = db
+    .prepare('SELECT id, workspace_path FROM architect WHERE id = ?')
+    .all(name) as Array<{ id: string; workspace_path: string }>;
+  const row = rows.find(r => sameWorkspace(r.workspace_path, normalized));
   if (!row) return null;
   return { workspacePath: normalized, agentId: row.id };
 }
@@ -97,10 +120,13 @@ export function resolveAgentIdentity(
     } else {
       memoKey = `architect\0${normalizeWorkspacePath(identity.workspacePath)}\0${identity.name}`;
     }
-    const cached = memo.get(memoKey);
-    if (cached !== undefined && cached.expiresAt > now()) return cached.agent;
-
     const db = (options.db ?? getGlobalDb)();
+    const version = registryVersion(db);
+    const cached = memo.get(memoKey);
+    if (cached !== undefined && cached.registryVersion === version && cached.expiresAt > now()) {
+      return cached.agent;
+    }
+
     let agent: ResolvedAgent | null;
     if (identity.kind === 'builder') {
       agent = resolveBuilder(db, identity.worktreePath);
@@ -111,7 +137,7 @@ export function resolveAgentIdentity(
       memo.delete(memoKey);
       return null;
     }
-    memo.set(memoKey, { agent, expiresAt: now() + IDENTITY_MEMO_TTL_MS });
+    memo.set(memoKey, { agent, registryVersion: version, expiresAt: now() + IDENTITY_MEMO_TTL_MS });
     return agent;
   } catch {
     return null;

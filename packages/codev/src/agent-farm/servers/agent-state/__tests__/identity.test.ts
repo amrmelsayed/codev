@@ -4,7 +4,7 @@
  * reporter carried, against a real temp `global.db` and real symlinks.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -90,6 +90,14 @@ describe('resolveAgentIdentity: builders', () => {
       .toBe('builder-spir-1595');
   });
 
+  it('matches a row whose stored workspace_path is another spelling (both sides normalized)', () => {
+    const link = join(tmpRoot, 'link-to-workspace');
+    symlinkSync(workspace, link);
+    seedBuilder('builder-spir-1595', join(link, '.builders', dir), link);
+    expect(resolve({ kind: 'builder', worktreePath: join(workspace, '.builders', dir) }))
+      .toEqual({ workspacePath: workspace, agentId: 'builder-spir-1595' });
+  });
+
   it('does not resolve a builder registered in another workspace', () => {
     seedBuilder('builder-spir-1595', join('/elsewhere', '.builders', dir), '/elsewhere');
     expect(resolve({ kind: 'builder', worktreePath: join(workspace, '.builders', dir) })).toBeNull();
@@ -117,6 +125,14 @@ describe('resolveAgentIdentity: architects', () => {
       .toEqual({ workspacePath: workspace, agentId: 'main' });
   });
 
+  it('matches an architect row whose stored workspace_path is another spelling', () => {
+    const link = join(tmpRoot, 'link-to-workspace');
+    symlinkSync(workspace, link);
+    seedArchitect('main', `${link}/`);
+    expect(resolve({ kind: 'architect', workspacePath: workspace, name: 'main' }))
+      .toEqual({ workspacePath: workspace, agentId: 'main' });
+  });
+
   it('rejects an unknown name or a name from another workspace', () => {
     seedArchitect('main', '/elsewhere');
     expect(resolve({ kind: 'architect', workspacePath: workspace, name: 'main' })).toBeNull();
@@ -131,20 +147,39 @@ describe('resolveAgentIdentity: memo and failure', () => {
     expect(resolve({ kind: 'architect', workspacePath: workspace, name: 'late' })?.agentId).toBe('late');
   });
 
-  it('reuses a resolution within the TTL, re-reads after it, and forgets on invalidation', () => {
+  it('reuses a resolution while the registry is unchanged, without re-reading it', () => {
+    seedArchitect('main');
+    const identity = { kind: 'architect' as const, workspacePath: workspace, name: 'main' };
+    expect(resolve(identity)).not.toBeNull();
+
+    const prepare = vi.spyOn(db, 'prepare');
+    expect(resolve(identity)?.agentId).toBe('main');
+    expect(prepare.mock.calls.some(([sql]) => String(sql).includes('FROM architect'))).toBe(false);
+    prepare.mockRestore();
+
+    clock += IDENTITY_MEMO_TTL_MS + 1;
+    const afterTtl = vi.spyOn(db, 'prepare');
+    expect(resolve(identity)?.agentId).toBe('main');
+    expect(afterTtl.mock.calls.some(([sql]) => String(sql).includes('FROM architect'))).toBe(true);
+    afterTtl.mockRestore();
+  });
+
+  it('forgets a removed agent at once when the registry changes on this connection', () => {
     seedArchitect('main');
     const identity = { kind: 'architect' as const, workspacePath: workspace, name: 'main' };
     expect(resolve(identity)).not.toBeNull();
     db.prepare('DELETE FROM architect').run();
-
-    expect(resolve(identity)).not.toBeNull();
-    clock += IDENTITY_MEMO_TTL_MS + 1;
     expect(resolve(identity)).toBeNull();
+  });
 
-    seedArchitect('main');
+  it('forgets a removed agent at once when another process changes the registry', () => {
+    seedBuilder('builder-spir-1595', join(workspace, '.builders', 'spir-1595-agent-attention'));
+    const identity = { kind: 'builder' as const, worktreePath: join(workspace, '.builders', 'spir-1595-agent-attention') };
     expect(resolve(identity)).not.toBeNull();
-    db.prepare('DELETE FROM architect').run();
-    invalidateAgentIdentityMemo();
+
+    const other = new Database(join(tmpRoot, 'global.db'));
+    other.prepare('DELETE FROM builders').run();
+    other.close();
     expect(resolve(identity)).toBeNull();
   });
 

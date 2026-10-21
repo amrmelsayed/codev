@@ -64,7 +64,8 @@ import { startMailboxDrainer, stopMailboxDrainer, setMailboxBroadcaster } from '
 import { shutdownDelayedSends } from './delayed-send.js';
 import type { RouteContext } from './tower-routes.js';
 import { setCodevConfigNotifier, stopAllCodevConfigWatchers } from './codev-config-watcher.js';
-import { agentStateStore, AGENT_STATE_CHANGED, type AgentStateChange } from './agent-state/store.js';
+import { agentStateStore, AGENT_STATE_CHANGED } from './agent-state/store.js';
+import { coalesceAgentStateChanges } from './agent-state/broadcast.js';
 import { getGlobalDb } from '../db/index.js';
 import {
   claimGlobalDbOwnership,
@@ -421,14 +422,15 @@ setMailboxBroadcaster(broadcastNotification);
 // Spec 1595: an accepted lifecycle report that changes an agent's served state
 // fans out as the existing `overview-changed` event, so surfaces refetch the
 // overview (which projects agent state per request; no cache to invalidate).
-agentStateStore.on(AGENT_STATE_CHANGED, (change: AgentStateChange) => {
+// Changes are coalesced per workspace: reports arrive once per tool call.
+agentStateStore.on(AGENT_STATE_CHANGED, coalesceAgentStateChanges((workspacePath) => {
   broadcastNotification({
     type: 'overview-changed',
     title: 'Agent state changed',
-    body: change.agentId,
-    workspace: change.workspacePath,
+    body: 'agent state',
+    workspace: workspacePath,
   });
-});
+}));
 
 // ============================================================================
 // Readiness gate (Issue #1261)
