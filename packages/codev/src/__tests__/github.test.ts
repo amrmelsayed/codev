@@ -25,6 +25,16 @@ describe('parseLinkedIssue', () => {
     expect(parseLinkedIssue('Implements [Spec AB2-4]', 'Title')).toBe('AB2-4');
   });
 
+  it('links a BUGFIX PR by its closing keyword on a #key (#1740)', () => {
+    // BUGFIX PRs carry `Fix #<N>: …` titles and `Fixes #<N>` bodies, no bracketed tag.
+    expect(parseLinkedIssue('Fixes #ENG-12', 'Fix #ENG-12: URL-encode the username')).toBe('ENG-12');
+    expect(parseLinkedIssue('', 'Fix #eng-12: x')).toBe('ENG-12');
+  });
+
+  it('keeps a closing keyword without # inert (#1740)', () => {
+    expect(parseLinkedIssue('Closes ENG-12', 'Title')).toBeNull();
+  });
+
   it('never links a bare key-shaped token in free text (#1740)', () => {
     expect(parseLinkedIssue('Switches encoding to UTF-8 per ISO-8601', 'Fix COVID-19 banner')).toBeNull();
   });
@@ -526,6 +536,10 @@ describe('parseAllLinkedIssues tracker keys (#1740)', () => {
   it('collects tagged keys alongside numeric links, deduplicated and canonical', () => {
     const ids = parseAllLinkedIssues('Fixes #42\n[Bugfix #ENG-1] and [Bugfix #eng-1]', '[PIR #ENG-2] x');
     expect(ids.sort()).toEqual(['42', 'ENG-1', 'ENG-2']);
+  });
+
+  it('collects closing-keyword keys (#1740)', () => {
+    expect(parseAllLinkedIssues('Fixes #ENG-1\nCloses #ENG-2', 'Fix #ENG-1: x').sort()).toEqual(['ENG-1', 'ENG-2']);
   });
 
   it('ignores bare key-shaped tokens', () => {

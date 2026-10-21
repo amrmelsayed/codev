@@ -514,7 +514,8 @@ export function parseLinkedIssue(prBody: string, prTitle: string): string | null
 
   // Tracker keys (#1740), only inside codev's bracketed tags, checked after
   // every numeric form so a numeric PR links exactly as before.
-  const keyMatch = prTitle.match(TAGGED_KEY) ?? prBody.match(TAGGED_KEY);
+  const keyMatch = prTitle.match(TAGGED_KEY) ?? prBody.match(TAGGED_KEY)
+    ?? prBody.match(CLOSING_KEY) ?? prTitle.match(CLOSING_KEY);
   if (keyMatch) {
     return canonicalIssueId(keyMatch[1]);
   }
@@ -528,6 +529,14 @@ export function parseLinkedIssue(prBody: string, prTitle: string): string | null
  * are as often `UTF-8` or `ISO-8601` as an issue.
  */
 const TAGGED_KEY = new RegExp(`\\[(?:Spec|Bugfix|PIR)\\s+#?(${ISSUE_KEY_SOURCE})\\]`, 'i');
+
+/**
+ * A closing keyword on a `#`-prefixed key: `Fixes #ENG-1` (the BUGFIX/PIR PR
+ * body) and `Fix #ENG-1: …` (the BUGFIX PR title). The `#` is required, so
+ * `Closes ENG-1` stays inert. On GitHub these never close a tracker issue;
+ * they only link the PR to it in codev's views.
+ */
+const CLOSING_KEY = new RegExp(`(?:fix(?:es)?|close[sd]?|resolve[sd]?)\\s+#(${ISSUE_KEY_SOURCE})\\b`, 'i');
 
 /**
  * Parse ALL linked issue numbers from a PR body and title.
@@ -560,9 +569,11 @@ export function parseAllLinkedIssues(prBody: string, prTitle: string): string[] 
     issues.add(String(Number(m[1])));
   }
 
-  // Tracker keys in codev tags (#1740)
-  for (const m of combined.matchAll(new RegExp(TAGGED_KEY.source, 'gi'))) {
-    issues.add(canonicalIssueId(m[1]));
+  // Tracker keys in codev tags and after closing keywords (#1740)
+  for (const pattern of [TAGGED_KEY, CLOSING_KEY]) {
+    for (const m of combined.matchAll(new RegExp(pattern.source, 'gi'))) {
+      issues.add(canonicalIssueId(m[1]));
+    }
   }
 
   return [...issues];

@@ -23,3 +23,8 @@
 - Not done (outside plan or not reachable): branch-name PR linking (parseLinkedIssue never sees the branch); numeric `[PIR #N]` tag linking was already missing and is left as is.
 - Real-path check caught what unit tests missed: `codev doctor` warned "jira-site is not a known forge concept" (validateForgeConfig only knew concepts; linear-team had the same false warning). Added a per-provider settings registry. Real doctor now: 7 issue concepts `preset acli`, PR concepts `default gh`, `jira auth` + `gh auth` both authenticated; a wrong jira-site reports not authenticated with the login hint.
 - Full suites: build ok, tsc ok (codev + vscode), vscode 1233/1233, codev 6646 pass + 1 deterministic unrelated failure (cloud-config 0600 test: fixture writes 0644 but env umask 077 yields 0600; not touched by this branch).
+
+## 2026-10-21: dev gate, architect review note
+- Role-id fallback: buildAgentName lowercases the WHOLE base64url short id (`builder-experiment-ab-3`, `builder-maintain-x_9q`). The old generic/task/worktree branches stopped at '-'/'_' and were wrong (lost the terminal); new key branch already matched for `Ab-3`, and the fallback now takes the whole short id. Pinned against buildAgentName itself.
+- PR linking: BUGFIX PRs carry no bracketed tag (title `Fix #<N>:`, body `Fixes #<N>`), so key linking only via tags missed every BUGFIX PR. Added closing-keyword + `#KEY` (hash required; `Closes KEY` inert). PIR links via its `[PIR #KEY]` commit list in the PR body.
+- umask-077 cloud-config failure: known pre-existing (architect has it on record); no action in this lane.

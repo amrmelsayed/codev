@@ -85,6 +85,7 @@ vi.mock('../db/index.js', async (importOriginal) => {
 });
 
 import { normalizeWorkspacePath } from '../servers/tower-utils.js';
+import { buildAgentName } from '../utils/agent-names.js';
 
 // ============================================================================
 // Temp directory helper
@@ -1278,6 +1279,16 @@ describe('overview', () => {
       expect(worktreeNameToRoleId('spir-AB2_X-7')).toBe('builder-spir-ab2_x-7');
     });
 
+    it('maps base64url short ids with - and _ to what buildAgentName produces (#1740)', () => {
+      // generateShortId() is base64url (A-Z a-z 0-9 - _); buildAgentName lowercases it whole.
+      expect(worktreeNameToRoleId('experiment-Ab-3')).toBe(buildAgentName('protocol', 'Ab-3', 'experiment'));
+      expect(worktreeNameToRoleId('maintain-x_9Q')).toBe(buildAgentName('protocol', 'x_9Q', 'maintain'));
+      expect(worktreeNameToRoleId('maintain--ab3')).toBe(buildAgentName('protocol', '-ab3', 'maintain'));
+      expect(worktreeNameToRoleId('task-Ab-3')).toBe(buildAgentName('task', 'Ab-3'));
+      expect(worktreeNameToRoleId('task-x_9Q')).toBe(buildAgentName('task', 'x_9Q'));
+      expect(worktreeNameToRoleId('worktree-a_-1')).toBe('worktree-a_-1');
+    });
+
     it('resolves every pre-#1740 numeric and short-id form exactly as before', () => {
       const cases: Array<[string, string]> = [
         ['spir-126-x', 'builder-spir-126'], ['bugfix-296-x', 'builder-bugfix-296'], ['pir-1298-x', 'builder-pir-1298'],
@@ -1412,11 +1423,8 @@ describe('overview', () => {
     it('prefers the stored builder id over the parsed directory name (#1740)', () => {
       createBuilderWorktree(tmpDir, 'task-Ab-3');
       const worktree = path.join(tmpDir, '.builders', 'task-Ab-3');
-      // Parsing a base64url short id containing '-' loses its tail.
-      expect(worktreeNameToRoleId('task-Ab-3')).toBe('builder-task-ab');
-
-      const stored = new Map([[worktree, { roleId: 'builder-task-Ab-3', issueNumber: null }]]);
-      expect(discoverBuilders(tmpDir, stored)[0].roleId).toBe('builder-task-ab-3');
+      const stored = new Map([[worktree, { roleId: 'builder-task-zz-9', issueNumber: null }]]);
+      expect(discoverBuilders(tmpDir, stored)[0].roleId).toBe('builder-task-zz-9');
     });
 
     it('does not read an issue-less protocol short id as a tracker key when the stored row has no issue (#1740)', () => {

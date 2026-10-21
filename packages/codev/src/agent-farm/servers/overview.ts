@@ -475,6 +475,10 @@ export function computeIdleMs(parsed: ParsedStatus): number {
 // Builder discovery
 // =============================================================================
 
+/** `task-<short id>` / `worktree-<short id>`: base64url, so '-' and '_' can appear. */
+const SHORT_ID_NAME_TASK = /^task-([a-z0-9_-]+)$/;
+const SHORT_ID_NAME_WORKTREE = /^worktree-([a-z0-9_-]+)$/;
+
 /** `<protocol>-<KEY>` at the start of a worktree name, optionally followed by `-slug`. */
 const WORKTREE_KEY_NAME = new RegExp(`^([a-z]+)-(${ISSUE_KEY_SOURCE})(?:-|$)`, 'i');
 
@@ -540,12 +544,14 @@ export function worktreeNameToRoleId(dirName: string): string | null {
   const pirMatch = lower.match(/^pir-(\d+)/);
   if (pirMatch) return `builder-pir-${Number(pirMatch[1])}`;
 
-  // Task: task-NAvW → builder-task-navw
-  const taskMatch = lower.match(/^task-([a-z0-9]+)/);
+  // Task: task-NAvW → builder-task-navw. The whole remainder is the short id:
+  // base64url short ids can contain '-' and '_' (task-Ab-3 → builder-task-ab-3,
+  // as buildAgentName produces; #1740).
+  const taskMatch = lower.match(SHORT_ID_NAME_TASK);
   if (taskMatch) return `builder-task-${taskMatch[1]}`;
 
   // Worktree: worktree-foIg → worktree-foig (no builder- prefix)
-  const worktreeMatch = lower.match(/^worktree-([a-z0-9]+)/);
+  const worktreeMatch = lower.match(SHORT_ID_NAME_WORKTREE);
   if (worktreeMatch) return `worktree-${worktreeMatch[1]}`;
 
   // Legacy numeric: 0110-slug → builder-spir-110 (assume spir)
@@ -557,9 +563,16 @@ export function worktreeNameToRoleId(dirName: string): string | null {
   const keyMatch = lower.match(WORKTREE_KEY_NAME);
   if (keyMatch) return `builder-${keyMatch[1]}-${keyMatch[2]}`;
 
-  // Generic protocol: experiment-AbCd → builder-experiment-abcd
-  const genericMatch = lower.match(/^([a-z]+)-([a-z0-9]+)/);
-  if (genericMatch) return `builder-${genericMatch[1]}-${genericMatch[2]}`;
+  // Generic protocol: experiment-1560[-slug] → builder-experiment-1560 (a
+  // numbered spawn), else experiment-AbCd → builder-experiment-abcd, where the
+  // whole remainder is the issue-less spawn's short id, '-'/'_' included
+  // (maintain-x_9Q → builder-maintain-x_9q, as buildAgentName produces; #1740).
+  const genericMatch = lower.match(/^([a-z]+)-(.+)$/);
+  if (genericMatch) {
+    const numbered = genericMatch[2].match(/^(\d+)(?:-|$)/);
+    if (numbered) return `builder-${genericMatch[1]}-${numbered[1]}`;
+    return `builder-${genericMatch[1]}-${genericMatch[2]}`;
+  }
 
   return null;
 }

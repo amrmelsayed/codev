@@ -180,6 +180,7 @@ every Gitea read at that repo — set it per invocation instead.
 - **Comments are plain text.** Markdown is posted as written, not converted to Atlassian's rich-text format. Descriptions and comments read from Jira are flattened to plain text.
 - **No created dates in the backlog.** `acli`'s search returns no date fields, so backlog items have no age; they are still ordered newest first.
 - **No smart commits.** Codev does not rely on `Fix ENG-123` commit messages to transition issues. Closing the issue on merge stays a manual step, as on every forge.
+- **PR linking.** Codev's views link a PR to its Jira issue from the protocol's own conventions: the bracketed commit tags (`[PIR #ENG-123]`, `[Bugfix #ENG-123]`, `[Spec ENG-123]`) and a closing keyword on a `#`-prefixed key (`Fixes #ENG-123`, `Fix #ENG-123: …`). On GitHub those keywords are inert for a Jira key: GitHub closes nothing in Jira. A bare `Closes ENG-123` without `#` is not linked.
 
 ### Custom Forge (any platform)
 
