@@ -923,5 +923,8 @@ describe('codev bootstrap-docs: symlinked paths', () => {
     const arch = result.validation?.find(draft => draft.name === 'arch.md');
     expect(arch?.violations.map(violation => violation.kind)).toEqual(['not-regular']);
     expect(result.exitCode).toBe(1);
+    // Nor is the link's target sent to the reviewers.
+    expect(read(REVIEW_PROMPT_FILE)).not.toContain('`codev/resources/arch.md`');
+    expect(read(REVIEW_PROMPT_FILE)).not.toContain(DRAFTS['arch.md'].trim().split('\n').slice(-1)[0]);
   });
 });

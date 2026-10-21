@@ -878,7 +878,10 @@ export async function runBootstrapDocs(
   const hashesAfter = hashGovernanceFiles(root);
   const report = buildChangeReport(eligibleNames, before, after, hashesBefore, hashesAfter);
   const validation = validateDrafts(root, eligible, templatesDir);
-  const written = validation.filter(draft => draft.state === 'written').map(draft => draft.name);
+  // A draft replaced by a symlink is never read, so it is never sent to the reviewers either.
+  const written = validation
+    .filter(draft => draft.state === 'written' && !draft.violations.some(violation => violation.kind === 'not-regular'))
+    .map(draft => draft.name);
   // The summary prints before the review, which can take minutes, so an interrupted review
   // never costs the human the change report.
   printSummary(log, validation, report, agentExit);
