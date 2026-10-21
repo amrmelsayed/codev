@@ -39,9 +39,9 @@ Phases 1 to 5 change no visible behavior: with no reporter installed, every serv
   - **Compatibility invariant.** The directory is shared by every codev install on the machine, so a newer install can rewrite the script under an older install's running sessions. The script is stateless: it reads only stdin and the launch environment and posts one contract event. A newer script talking to an older Tower can only be rejected by strict validation, which fails open to today's rule. It can never produce a wrong state.
 - **Settings form.** `--settings <file>`, never inline JSON.
 - **Tower port.** Tower sets `CODEV_TOWER_PORT` to its own listening port in the environment of every agent session it creates (builders and architects, at session creation). The reporter reads it and defaults to `DEFAULT_TOWER_PORT` when it is absent. The hook command stays byte-identical for every agent and port (the #1796 hash-trust goal). An inherited stale value cannot survive, because Tower always overwrites it with its own port.
-- **One builder key.** The in-memory store, liveness and the overview all key a builder by its **role id**, lowercased: the value `discoverBuilders` computes (the stored `builders.id` where a row exists, else the id derived from the worktree name), and the same key as `entry.builders`. The identity resolver returns exactly that value. Architects are keyed by name.
+- **One builder key.** The in-memory store, liveness and the overview all key a builder by its **role id**, lowercased: the value `discoverBuilders` computes, and the same key as `entry.builders`. That value is `storedRoleId(row)` (the stored `builders.id` only when it has the `builder-`/`worktree-` shape `buildAgentName` produces) or else the id derived from the worktree directory name. Legacy rows (for example `bugfix-42`) take the derived id. The resolver **does not** return `detectCurrentBuilderId`'s raw `row.id`. It finds the row with the shared matcher, then derives the key with the same `storedRoleId`/`worktreeNameToRoleId` pair `discoverBuilders` uses, which is extracted to one shared function so the two cannot diverge. Architects are keyed by name.
 - **Scope of "dropped".** A builder still registered in `entry.builders` whose PTY session is missing or exited is served `dead`. An architect is served `dead` while its session is in restart wait. An agent that Tower has removed from its registry entirely (an architect's permanent exit, `afx cleanup`) leaves the overview as it does today. This matches the spec's iteration-1 disposition: listing unregistered agents is out of scope.
-- **Liveness cadence.** A Tower sweep every 5 s takes **one** `ps -A -o pid=,ppid=` snapshot for all sessions, rather than a `pgrep` per pid. Dead is declared after two consecutive not-alive sweeps, at most about 10 s after exit, inside SC7's 15 s.
+- **Liveness cadence.** A Tower sweep every 5 s takes **one** process snapshot for all sessions through the existing `listProcessCensus()` (#1227), rather than a `pgrep` per pid. Dead is declared after two consecutive not-alive sweeps, at most about 10 s after exit, inside SC7's 15 s.
 
 ## Phases (Machine Readable)
 
@@ -125,7 +125,10 @@ Make the one sdk predicate and `deriveAttention` read the served state, so every
     - A `null` or absent state returns `null`.
   - **`isIdleWaiting(b, now)`** keeps its name and signature. It is true when the classifier returns `needs-input`, `idle` or `dead`. On `null` it applies today's rule unchanged.
   - `WaitingItem.state?`. `WaitingItem.since` becomes `agentState.since` when the item comes from a served state (needs-input, idle, dead), else `lastDataAt` as today. This keeps ages right, including dead agents with no `lastDataAt`.
-  - **Gated builders.** A builder at a pending gate is projected `blocked` (spec precedence), so the existing `!atGate` guard and the #1787 dedupe are unchanged. A permission prompt on a builder that is also at a gate shows under the gate. That is the human's move in both cases, and it is recorded here as intended.
+  - **Gated builders.** `atGate` is `blocked !== null || prReady` (`builder-helpers.ts:140`). Two cases:
+    - **Porch gate.** It projects `blocked` (spec precedence), so a prompt on such a builder shows under the gate: the human's move either way.
+    - **`prReady` alone.** It never projects `blocked`. A served `needs-input` or `dead` on a `prReady` builder is a different ask from the PR review, so it is listed in `waiting` even when `prReady` (SC1, SC7).
+    - `idle`, and today's PTY-silence path, stay suppressed for `prReady` as now: an idle agent with its PR waiting on a reviewer is expected. The #1787 dedupe is unchanged.
   - **Completion.** The complete/verified check uses `b.phase`, the same field `isIdleWaiting` reads today. Phase 1's projection receives that same value.
   - `AttentionSummary.architects`, a list of `{ architect, state: 'needs-input' | 'dead', since }` built from `ArchitectState.agentState` with the same staleness rule over `ArchitectState.lastDataAt`. Architect `idle` is excluded (owner default 1).
   - `isEmpty` and `compareAttention` count architect items in the waiting bucket (Constraint 18): the waiting bucket applies when builders or architects are waiting, and its tiebreak uses the oldest `since` across both.
@@ -173,7 +176,8 @@ Give Tower the one write-only route and the in-memory store, with identity resol
   - It runs `normalizeWorkspacePath` on **both sides** of every comparison: the reported path, and each stored `builders.worktree` and workspace path it is matched against (Constraint 15, main's condition). Normalizing only the incoming path would leave the #1809 case half fixed.
   - Builder: worktree path, then the workspace from the last `/.builders/` segment, then the `builders` row by canonical worktree, with the existing tail-segment fallback. Returns the builder's canonical id.
   - Architect: name plus workspace, matched against the workspace's registered architects.
-  - Returns the store key (the builder's lowercased role id, or the architect's name) or `null`.
+  - Returns the store key (the builder's lowercased role id, derived as above, or the architect's name) or `null`. It never throws: `detectCurrentBuilderId` throws by design (#1094), but the resolver uses only the shared row matcher, and the route maps `null` to a rejection.
+  - **Cost.** Ingestion fires per tool call. Lookups use Tower's own `getGlobalDb()` handle, never a new readonly connection per call, behind a small memo keyed by the normalized path. The memo is invalidated when the builders or architects registry changes and bounded by a short TTL, so a newly spawned agent resolves on its first report.
   - `detectCurrentBuilderId` in `commands/send.ts` is refactored to call the same row-matching helper, so builder identity has one lookup.
 - `packages/codev/src/agent-farm/servers/agent-state/route.ts` (new): `handleAgentLifecycle`.
   - `readBody(req, 8192)`.
@@ -223,7 +227,7 @@ Compute agent liveness in exactly one place, for every harness, with no false `d
 #### Files to Create / Modify
 
 - `packages/codev/src/agent-farm/servers/agent-state/liveness.ts` (new): a 5 s sweep over every registered builder and architect, keeping per-agent `{ alive: boolean | null, since }`.
-  - **Process shapes.** For a shellper-backed session (the production case), `session.pid` is the **shellper**, so the tree is shellper → launch loop → agent for builders and shellper → agent for architects. For a direct PTY session, `session.pid` is the PTY child itself. Liveness walks from `session.pid` by the session's shape, using one `ps -A -o pid=,ppid=` snapshot per sweep.
+  - **Process shapes.** For a shellper-backed session (the production case), `session.pid` is the **shellper**, so the tree is shellper → launch loop → agent for builders and shellper → agent for architects. For a direct PTY session, `session.pid` is the PTY child itself. Liveness walks from `session.pid` by the session's shape, using one snapshot per sweep from the existing `listProcessCensus()` (`process-census.ts`, #1227: one shared `ps` caller, not a new bespoke one). The childless test follows the existing `shellper-husk-sweep.ts` predicate (`parentPids.has(pid)`) and its `census` test seam. Its `[]`-on-failure return (`census.length === 0`) is treated as **unknown** for the whole sweep (`alive: null`, no confirmation counted), never as "every agent childless", so a failed `ps` cannot mark the fleet dead.
   - **Builders.** The agent is alive when the launch loop (the shellper's child, or `session.pid` for a direct PTY) has at least one child process. The relaunch pause's `sleep 2` counts as alive by design. The `read -r` relaunch prompt has no child, so it reads as not alive, even though the loop itself, and so the shellper's child, is still running.
   - **Architects.** Not alive while the session is in restart wait (`awaitingRestart`), or when a shellper-backed session's shellper has no child process.
   - **Any agent.** A registered agent with no session is not alive.
@@ -247,7 +251,8 @@ Compute agent liveness in exactly one place, for every harness, with no false `d
   - a single not-alive sweep (shorter than the confirmation) publishes nothing;
   - `sleep` during the relaunch pause stays alive.
 - [ ] Entries of removed agents are dropped on the next sweep.
-- [ ] Sweep cost: one `ps` call per sweep regardless of fleet size (asserted with the injected runner).
+- [ ] Sweep cost: one census call per sweep regardless of fleet size (asserted with the injected census).
+- [ ] A failed census (`[]`) publishes `alive: null` for every agent and advances no confirmation counter.
 
 #### Test Plan
 
@@ -266,7 +271,7 @@ Serve the projected `agentState` per builder and architect on the overview, so t
 
 - `packages/codev/src/agent-farm/servers/tower-routes.ts`, in `handleOverview` and `liveArchitects`:
   - Project over **every** builder in `data.builders`, not inside the existing `entry.builders` loop, which `continue`s on a missing session (exactly the dropped case). Call `projectAgentState` with the builder's existing `blocked`/`blockedSince` (already computed by `detectBlocked` in `overview.ts`, Constraint 14), its `phase`, liveness, and store activity, matched by the lowercased role id. A builder registered with no session gets `alive: false`.
-  - `liveArchitects` gains the workspace path so it can read the store and liveness by `(workspace, name)`.
+  - `liveArchitects` gains the workspace path so it can read the store and liveness by `(workspace, name)`. Both callers (`/api/state` and `/api/overview`) are updated.
   - For each live architect, the same, plus `lastDataAt` from its PTY session.
   - The overview cache is untouched: agent rows stay per request.
 - `packages/codev/src/agent-farm/servers/__tests__/overview-agent-state.test.ts` (new).
@@ -313,13 +318,11 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
   - The optional capability `buildLifecycleReporterInjection(settingsPath): { args: string[]; scriptFragment: string; env: Record<string, string> }`. It covers both launch shapes in one call (Constraint 17), following `buildResume`'s single-method dual-form precedent (`args` plus `scriptFragment`). The role injection's two-method pair is the other documented form; one method keeps the capability a single optional member whose absence means unsupported.
   - `CLAUDE_HARNESS` implements it as `--settings '<path>'`. Codex and OpenCode do not.
 - `packages/codev/src/agent-farm/commands/spawn-worktree.ts`: both launch scripts (lines ~1164 and ~1255) append the fragment to the **base command**, before `withRole`, `initial` and `resume` are built, and merge its env into the exported block unconditionally (also when there is no role). Every loop form then carries the reporter: initial, resume, pinned fresh, unpinned fresh and crash resume. This covers `afx spawn`, `afx spawn --resume` and `afx workspace recover`, which regenerate or rerun these scripts.
-- `packages/codev/src/agent-farm/servers/tower-utils.ts`: the injection is applied in `resolveArchitectLaunch` to **every** return:
-  - the no-session-support path;
-  - the **resume** branch, which deliberately bypasses `buildArchitectArgs` because role injection is skipped on resume, and today returns `env: {}`;
-  - its `fallback`;
-  - the fresh path.
+- `packages/codev/src/agent-farm/servers/tower-utils.ts`: the injection is applied in exactly two places, so no launch gets it twice:
+  - **inside `buildArchitectArgs`**, on both its role and no-role branches. Every `resolveArchitectLaunch` return except the resume primary already spreads `buildArchitectArgs` (`tower-utils.ts:400`, `:423` fallback, `:438`), as do the crash-loop fallback, fresh launch and reconnect-restart builders;
+  - **on the resume primary return** (`:427-433`), which deliberately bypasses `buildArchitectArgs` and today returns `env: {}`.
 
-  It is also applied in `buildArchitectArgs` for the paths that call it directly (crash-loop fallback, fresh launch, reconnect restart), including the no-role early return. A helper adds it once per launch so no path double-applies it. The no-Tower `afx architect` (`commands/architect.ts`) is excluded: with no Tower there is no registered agent to report for.
+  Because `buildArchitectArgs` is the funnel, the injection also reaches the no-Tower `afx architect` (`commands/architect.ts`). That is harmless: no site sets `CODEV_ARCHITECT_NAME`/`CODEV_ARCHITECT_WORKSPACE` on that path, so the reporter finds no identity and sends nothing.
 - Tests (new): `utils/__tests__/lifecycle-reporter.test.ts` and harness/launch tests.
 
 #### Deliverables
@@ -360,17 +363,17 @@ Show needs-input, idle and dead distinctly on every listed surface through the o
   - `apps/vscode/src/views/builder-row.ts`: icon, label and tooltip per `agentAttentionState`. Needs-input shows "at a permission prompt: <tool> <summary>" or "asking a question". Idle shows "turn ended". Dead shows a distinct icon. The text is set as a plain string, never `MarkdownString`.
   - `apps/vscode/src/views/builders.ts`: sort and group buckets use the classifier.
   - `apps/vscode/src/views/tower-cache.ts` and the Tower view: architect items in the waiting bucket.
-  - `apps/vscode/src/contextual-panel/panel-provider.ts`: architect items and distinct states.
+  - `apps/vscode/src/contextual-panel/panel-provider.ts` and its webview `apps/vscode/src/contextual-panel/webview/main.ts`: architect items and distinct states.
 - Web:
   - `apps/web/src/components/BuilderCard.tsx` shows "Needs input: …", "Idle" and "Agent exited" distinctly, with the summary as a text node.
-  - `apps/web/src/components/NeedsAttentionList.tsx`, the dashboard's "Needs Attention" list, derives today from gates and PRs only. It gains rows for needs-input and dead agents (builders and architects) from `deriveAttention`, so an agent at a prompt appears there as well as on its card.
+  - `apps/web/src/components/NeedsAttentionList.tsx`, the dashboard's "Needs Attention" list, derives today from gates and PRs only. It gains rows for needs-input and dead agents (builders and architects) from `deriveAttention`, so an agent at a prompt appears there as well as on its card. `apps/web/src/components/WorkView.tsx` passes the overview's architects into it.
 - The `[elapsed]` badge on the row uses `agentState.since` when present, else `lastDataAt`.
 - Stream Deck (`apps/streamdeck/src/face.ts`) is unchanged: it does not consume waiting today and is not a listed surface.
 - Tests: `apps/vscode/src/test/builders.test.ts` and siblings, the web component tests, and the Playwright dashboard check.
 
 #### Deliverables
 
-- [ ] All listed surfaces migrated. A grep shows no `lastDataAt` threshold logic outside the sdk.
+- [ ] All listed surfaces migrated. A grep shows no **agent-attention** `lastDataAt` threshold logic outside the sdk. `apps/web/src/components/OpenFilesShellsSection.tsx`'s separate utility-terminal threshold is intentionally out of scope.
 
 #### Acceptance Criteria
 
