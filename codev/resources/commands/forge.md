@@ -166,12 +166,14 @@ every Gitea read at that repo — set it per invocation instead.
 
 **Scope.** Jira **Cloud** only. Jira Data Center is not supported by this preset.
 
-**Configuration keys** (passed to the scripts as environment variables):
+**Configuration keys.** Set these in `.codev/config.json` under `forge`, next to `provider` (see the example above):
 
-| Key | Env var | Purpose |
-|-----|---------|---------|
-| `jira-site` | `CODEV_JIRA_SITE` | Site for browser links (`https://<site>.atlassian.net`). Recommended: when unset, each script asks `acli` which site it is logged into, and `auth-status` cannot check that `acli` is logged into the right site. |
-| `jira-project` | `CODEV_JIRA_PROJECT` | Project key that scopes issue lists, search, and recently closed. When unset, those concepts span every project the account can see. |
+| Key | Purpose |
+|-----|---------|
+| `jira-site` | Site for browser links (`https://<site>.atlassian.net`). Recommended: when unset, each script asks `acli` which site it is logged into, and `auth-status` cannot check that `acli` is logged into the right site. |
+| `jira-project` | Project key that scopes issue lists, search, and recently closed. When unset, those concepts span every project the account can see. |
+
+Codev hands each key to the preset scripts as an environment variable (`jira-site` → `CODEV_JIRA_SITE`, `jira-project` → `CODEV_JIRA_PROJECT`), the same way every concept receives its inputs. The names only matter if you write your own override script for a Jira concept.
 
 **Behavior notes.**
 
