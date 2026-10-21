@@ -55,6 +55,16 @@ Both choices live in a new "Reading Aids..." item in the preview's title-bar `..
 
 The shapes are painted behind the text, never over it, so nothing is dimmed and selecting or copying works exactly as before. Fenced code, comment cards, the composer and the "+" button are never lit and keep the arrow cursor; inline code keeps the band and the cursor you chose, because it reads as part of the sentence. Dark themes get slightly stronger shading than light ones, and the shapes scale with the preview's font size and follow the columns layout.
 
+## A builder worktree is no longer a workspace of its own
+
+A builder's worktree contains the whole repository, so opening one as a folder made Codev activate it as a separate workspace (#1809, PR #1846): it recorded the worktree as a known workspace, started an architect for it, and the rows piled up over time with nothing to clear them. Because such a window reads the parent checkout's data, it also surfaced the parent's lanes: gate notifications for other lanes, each carrying an Approve button that would have approved that lane's gate, along with builder counts, the sidebar badge, the attention list, and spawn notifications that could open another lane's terminal.
+
+A worktree window now attaches to its parent checkout read-only and never activates it. The Agents view is absent, the parent's notifications, counts and badge stay with the parent's own window, the contextual panel is pinned to the worktree's own builder, and the Workspace view keeps only its dev rows. Reviewing files in that window, comments included, is unchanged.
+
+On the operator side, Tower refuses to activate a builder worktree and points at the parent instead, and it clears worktree rows left by earlier windows when it starts. A worktree window that is still running is reported rather than stopped: the message names how to stop it, and for one Tower cannot reach it gives the process id instead. Starting Codev logs one line with the counts.
+
+Known and expected: the Agents view can paint briefly as a worktree window loads, before it disappears.
+
 ## Polish
 
 <!-- Small vscode items as bullets:
