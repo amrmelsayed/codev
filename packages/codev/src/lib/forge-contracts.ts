@@ -76,7 +76,11 @@ export interface IssueListItem {
   title: string;
   url: string;
   labels: Array<{ name: string }>;
-  createdAt: string;
+  /**
+   * ISO 8601 creation time. Optional: Jira's search (#1740) cannot return dates,
+   * so its list items omit it; consumers render no age and sort it last.
+   */
+  createdAt?: string;
   closedAt?: string;
   author?: { login: string };
   assignees?: Array<{ login: string }>;

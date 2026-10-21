@@ -1,4 +1,5 @@
 import type { OverviewBacklogItem, OverviewBuilder, OverviewData, IssueSearchItem } from '@cluesmith/codev-types';
+import { isIssueKey } from '../issue-id.js';
 
 /**
  * Backlog rows the user can act on — exclude issues that already have an
@@ -167,19 +168,29 @@ function matchesAuthor(item: IssueSearchItem, author: string, me: string | undef
  * string. Keys sort after numbers in a mixed list.
  */
 function idSortKey(id: string): number | string {
-  const key = id.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
-  if (key) { return `${key[1].toUpperCase()}-${key[2].padStart(12, '0')}`; }
+  if (isIssueKey(id)) {
+    const dash = id.lastIndexOf('-');
+    return `${id.slice(0, dash).toUpperCase()}-${id.slice(dash + 1).padStart(12, '0')}`;
+  }
   return Number(id) || 0;
 }
 
-/** Numeric/string sort key per column; `age` uses negated time so larger = older. */
-function sortKey(item: IssueSearchItem, column: BacklogSortColumn): number | string {
+/**
+ * Numeric/string sort key per column; `age` uses negated time so larger = older.
+ * `null` means "no value" (an issue without a creation date, #1740): sorted
+ * last in either direction rather than read as the epoch.
+ */
+function sortKey(item: IssueSearchItem, column: BacklogSortColumn): number | string | null {
   switch (column) {
     case 'id': return idSortKey(item.id);
     case 'title': return item.title.toLowerCase();
     case 'area': return item.area.toLowerCase();
     case 'assignee': return (item.assignees?.[0] ?? '').toLowerCase();
-    case 'age': return -(Date.parse(item.createdAt) || 0);
+    case 'age': {
+      const created = Date.parse(item.createdAt ?? '');
+      if (Number.isNaN(created)) { return null; }
+      return -created;
+    }
   }
 }
 
@@ -192,6 +203,11 @@ function sortBacklog(
   return [...items].sort((a, b) => {
     const ka = sortKey(a, column);
     const kb = sortKey(b, column);
+    if (ka === null || kb === null) {
+      if (ka === kb) { return 0; }
+      if (ka === null) { return 1; }
+      return -1;
+    }
     if (typeof ka === 'string' || typeof kb === 'string') {
       return String(ka).localeCompare(String(kb)) * dir;
     }
@@ -254,9 +270,10 @@ export function searchBacklog(
 /**
  * Compact relative age for the panel's Age column: `today`, `3h`, `5d`,
  * `2w`, `7mo`, `1y`. `now` is injectable so tests stay deterministic. Returns
- * `''` for an unparseable timestamp.
+ * `''` for a missing (Jira, #1740) or unparseable timestamp.
  */
-export function formatAge(createdAt: string, now: number = Date.now()): string {
+export function formatAge(createdAt: string | undefined, now: number = Date.now()): string {
+  if (!createdAt) { return ''; }
   const then = Date.parse(createdAt);
   if (Number.isNaN(then)) { return ''; }
   const sec = Math.max(0, (now - then) / 1000);

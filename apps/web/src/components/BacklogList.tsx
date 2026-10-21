@@ -7,8 +7,12 @@ interface BacklogListProps {
   onRefresh?: () => void;
 }
 
-function timeAgo(dateStr: string): string {
-  const ms = Date.now() - new Date(dateStr).getTime();
+/** Compact age, or '' when the forge supplied no (or an unparseable) date (#1740). */
+export function timeAgo(dateStr: string | undefined): string {
+  if (!dateStr) return '';
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return '';
+  const ms = Date.now() - then;
   const mins = Math.floor(ms / 60000);
   if (mins < 60) return `${Math.max(1, mins)}m`;
   const hours = Math.floor(mins / 60);

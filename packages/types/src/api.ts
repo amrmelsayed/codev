@@ -272,7 +272,8 @@ export interface OverviewBacklogItem {
   hasPlan: boolean;
   hasReview: boolean;
   hasBuilder: boolean;
-  createdAt: string;
+  /** ISO 8601 creation time; absent when the forge cannot supply it (Jira, #1740). */
+  createdAt?: string;
   author?: string;
   assignees?: string[];
   specPath?: string;
@@ -539,7 +540,8 @@ export interface IssueSearchItem {
   area: string;
   author?: string;
   assignees?: string[];
-  createdAt: string;
+  /** ISO 8601 creation time; absent when the forge cannot supply it (Jira, #1740). */
+  createdAt?: string;
   /** Issue body for substring matching. `''` when the forge can't supply it. */
   body: string;
 }

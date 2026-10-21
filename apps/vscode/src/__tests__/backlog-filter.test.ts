@@ -324,6 +324,22 @@ describe('clampCriteriaToDataset', () => {
   });
 });
 
+describe('missing createdAt (#1740: Jira search returns no dates)', () => {
+  it('formatAge renders nothing for a missing date', () => {
+    expect(formatAge(undefined)).toBe('');
+  });
+
+  it('sorts items without a date last on the age column, in both directions', () => {
+    const items = [
+      searchItem({ id: 'ENG-1', title: 'no date', area: '', createdAt: undefined }),
+      searchItem({ id: '2', title: 'old', area: '', createdAt: '2026-01-01T00:00:00Z' }),
+      searchItem({ id: '3', title: 'new', area: '', createdAt: '2026-06-01T00:00:00Z' }),
+    ];
+    expect(searchBacklog(items, { sort: 'age', direction: 'asc' }).map(i => i.id)).toEqual(['3', '2', 'ENG-1']);
+    expect(searchBacklog(items, { sort: 'age', direction: 'desc' }).map(i => i.id)).toEqual(['2', '3', 'ENG-1']);
+  });
+});
+
 describe('formatAge', () => {
   const now = Date.parse('2026-05-30T12:00:00Z');
   const ago = (ms: number) => new Date(now - ms).toISOString();
