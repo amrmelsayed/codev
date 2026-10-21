@@ -270,6 +270,11 @@ describe('lifecycle reporter translation', () => {
     expect(parseLifecycleEvent(bodies[0])).not.toBeNull();
   });
 
+  it('treats Unicode line and paragraph separators as line breaks', async () => {
+    const { bodies } = await report(hook('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'one\u2028two \u2029 three' } }));
+    expect((bodies[0] as { needsInput: { summary: string } }).needsInput.summary).toBe('one two three');
+  });
+
   it('never splits a surrogate pair at the summary limit', async () => {
     const command = `${'a'.repeat(199)}\u{1F600}tail`;
     const { bodies } = await report(hook('PermissionRequest', { tool_name: 'Bash', tool_input: { command } }));
@@ -400,6 +405,7 @@ describe('lifecycle hook command', () => {
     expect(settings.hooks.SessionEnd).toBeUndefined();
     expect(settings.hooks.PreToolUse[0].matcher).toBe('AskUserQuestion');
     expect(settings.hooks.PostToolUse[0].matcher).toBe('*');
+    expect(settings.hooks.Notification[0].matcher).toBeUndefined();
     const commands = new Set<string>();
     for (const event of events) {
       for (const group of settings.hooks[event]) {

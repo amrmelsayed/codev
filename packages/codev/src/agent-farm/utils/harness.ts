@@ -19,7 +19,6 @@
 
 import { findLatestSessionId, verifySessionOwnership } from './claude-session-discovery.js';
 import { buildWorktreeGuardFiles } from './worktree-write-guard.js';
-import { shellSingleQuoted, toShellPath } from './lifecycle-reporter.js';
 
 // =============================================================================
 // Types
@@ -269,7 +268,7 @@ export const CLAUDE_HARNESS: HarnessProvider = {
   // elements reach the process without a shell, so only the fragment is quoted.
   buildLifecycleReporterInjection: (settingsPath) => ({
     args: ['--settings', toShellPath(settingsPath)],
-    scriptFragment: `--settings ${shellSingleQuoted(toShellPath(settingsPath))}`,
+    scriptFragment: `--settings '${shellEscapeSingleQuote(toShellPath(settingsPath))}'`,
     env: {},
   }),
   // Install the worktree write-guard PreToolUse hook (Issue #1018) so a builder
@@ -457,6 +456,15 @@ function expandTemplateVars(template: string, roleContent: string, roleFilePath:
   return template
     .replace(/\$\{ROLE_FILE\}/g, () => roleFilePath)
     .replace(/\$\{ROLE_CONTENT\}/g, () => roleContent);
+}
+
+/**
+ * A path as bash must see it: forward slashes, so a Windows path
+ * (`C:\Users\a b\...`) is never eaten by backslash processing under Git Bash
+ * (#1658). Node and Claude accept forward slashes on every platform.
+ */
+export function toShellPath(path: string): string {
+  return path.replace(/\\/g, '/');
 }
 
 /**

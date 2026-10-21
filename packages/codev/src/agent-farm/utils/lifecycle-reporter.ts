@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { AGENT_FARM_DIR } from '@cluesmith/codev-core/constants';
 import { logger } from './logger.js';
-import type { HarnessProvider } from './harness.js';
+import { shellEscapeSingleQuote, toShellPath, type HarnessProvider } from './harness.js';
 
 /** Basename of the installed reporter script. */
 export const LIFECYCLE_REPORTER_SCRIPT_NAME = 'lifecycle-reporter.cjs';
@@ -81,7 +81,7 @@ function done() {
 function plainText(value, maxLength) {
   if (typeof value !== 'string') return '';
   let text = value
-    .replace(/\\s*[\\r\\n]+\\s*/g, ' ')
+    .replace(/\\s*[\\r\\n\\u2028\\u2029]+\\s*/g, ' ')
     .replace(/\\t/g, ' ')
     .replace(/[\\u0000-\\u001f\\u007f-\\u009f]/g, '')
     .trim();
@@ -253,26 +253,12 @@ process.stdin.on('end', () => {
 `;
 
 /**
- * A path as bash must see it: forward slashes, so a Windows path
- * (`C:\Users\a b\...`) is never eaten by backslash processing under Git Bash
- * (#1658). Node and Claude accept forward slashes on every platform.
- */
-export function toShellPath(path: string): string {
-  return path.replace(/\\/g, '/');
-}
-
-/** `value` single-quoted for a POSIX shell. */
-export function shellSingleQuoted(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-/**
  * The hook command, identical for every agent. A shell wrapper rather than a
  * bare `node <path>`, so a deleted script, a missing `node` or a crash
  * produces no output and exit 0.
  */
 export function buildLifecycleHookCommand(scriptPath: string): string {
-  const script = shellSingleQuoted(toShellPath(scriptPath));
+  const script = `'${shellEscapeSingleQuote(toShellPath(scriptPath))}'`;
   return `[ -f ${script} ] && node ${script} >/dev/null 2>&1; exit 0`;
 }
 
@@ -291,7 +277,7 @@ export function buildLifecycleReporterSettings(scriptPath: string): string {
       PostToolUse: [{ matcher: '*', hooks: [hook] }],
       PreToolUse: [{ matcher: 'AskUserQuestion', hooks: [hook] }],
       PermissionRequest: [{ matcher: '*', hooks: [hook] }],
-      Notification: [{ matcher: 'permission_prompt|elicitation_dialog|idle_prompt', hooks: [hook] }],
+      Notification: [{ hooks: [hook] }],
       Stop: [{ hooks: [hook] }],
     },
   };
