@@ -373,6 +373,23 @@ Round 3 APPROVE
 - **Concern** (minor): `activityAt` doc comment still says "latest accepted report" → **Addressed** in the review phase through main's contract seat (wording confirmed by main, folded into the type comment and spec).
 - **Concern** (minor): No operator-facing note for a deleted hooks directory → **Addressed**: `workflow-reference.md` Troubleshooting entry (both trees).
 
+### PR Review (Round 1)
+
+#### Gemini
+CONSULT_ERROR, skipped (agy exit 3).
+
+#### Codex
+REQUEST_CHANGES
+- **Concern**: Context and rebuttal files under `codev/projects/1595-*/` untracked → **Addressed**: committed.
+- **Concern**: Spec and plan lack `approved`/`validated` frontmatter → **Rebutted**: that frontmatter marks artifacts approved before spawn; these were approved through porch's own spec and plan gates.
+
+#### Claude
+APPROVE
+- **Concern** (non-blocking): `/api/agent-lifecycle` not on the tunnel block list → **Addressed**: blocked in `tunnel-client.ts` (bare, workspace-scoped, percent-encoded), test added.
+- **Concern** (non-blocking): hooks-deletion crash loop → **N/A**: documented; bounded-relaunch guard proposed in the PR description.
+- **Concern** (non-blocking): a served `idle` now counts as waiting at once on the status bar and badge → **N/A**: SC4 as approved; an intended behavior change, noisier than the 5-minute rule.
+- **Concern** (nit): some rebuttals untracked → **Addressed** (as Codex).
+
 ## Lessons Learned
 
 ### What Went Well
