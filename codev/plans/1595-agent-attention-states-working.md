@@ -40,6 +40,7 @@ Phases 1 to 5 change no visible behavior: with no reporter installed, every serv
 - **Settings form.** `--settings <file>`, never inline JSON.
 - **Tower port.** Tower sets `CODEV_TOWER_PORT` to its own listening port in the environment of every agent session it creates (builders and architects, at session creation). The reporter reads it and defaults to `DEFAULT_TOWER_PORT` when it is absent. The hook command stays byte-identical for every agent and port (the #1796 hash-trust goal). An inherited stale value cannot survive, because Tower always overwrites it with its own port.
 - **One builder key.** The in-memory store, liveness and the overview all key a builder by its **role id**, lowercased: the value `discoverBuilders` computes, and the same key as `entry.builders`. That value is `storedRoleId(row)` (the stored `builders.id` only when it has the `builder-`/`worktree-` shape `buildAgentName` produces) or else the id derived from the worktree directory name. Legacy rows (for example `bugfix-42`) take the derived id. The resolver **does not** return `detectCurrentBuilderId`'s raw `row.id`. It finds the row with the shared matcher, then derives the key with the same `storedRoleId`/`worktreeNameToRoleId` pair `discoverBuilders` uses, which is extracted to one shared function so the two cannot diverge. Architects are keyed by name.
+- **Null role ids.** A builder whose `roleId` is `null` (no derivable id) is skipped by the store, liveness and projection, never bucketed under a shared key; it keeps today's behavior.
 - **Scope of "dropped".** A builder still registered in `entry.builders` whose PTY session is missing or exited is served `dead`. An architect is served `dead` while its session is in restart wait. An agent that Tower has removed from its registry entirely (an architect's permanent exit, `afx cleanup`) leaves the overview as it does today. This matches the spec's iteration-1 disposition: listing unregistered agents is out of scope.
 - **Liveness cadence.** A Tower sweep every 5 s takes **one** process snapshot for all sessions through the existing `listProcessCensus()` (#1227), rather than a `pgrep` per pid. Dead is declared after two consecutive not-alive sweeps, at most about 10 s after exit, inside SC7's 15 s.
 
@@ -189,7 +190,7 @@ Give Tower the one write-only route and the in-memory store, with identity resol
 - `packages/codev/src/agent-farm/servers/tower-routes.ts`: a `'POST /api/agent-lifecycle'` entry in `ROUTES`.
 - `packages/codev/src/agent-farm/servers/tower-server.ts`: wire the store's change event to `broadcastNotification({ type: 'overview-changed', ... })`.
 - `packages/codev/src/lib/agent-env.ts`: export `ARCHITECT_WORKSPACE_ENV = 'CODEV_ARCHITECT_WORKSPACE'` and strip it in `sanitizeAgentEnv`.
-- Tower session creation (`tower-routes.ts` terminal creation and the architect launch env in `tower-instances.ts`/`tower-terminals.ts`): set `CODEV_TOWER_PORT` to Tower's listening port on every agent session.
+- Tower session creation (`tower-routes.ts` terminal creation and the architect launch env in `tower-instances.ts`/`tower-terminals.ts`): set `CODEV_TOWER_PORT` to Tower's listening port on every agent session. It is set on the **final composed** session env, after `sanitizeAgentEnv` and after any client-supplied env is merged. At `tower-routes.ts:897`, sanitization runs only when the client supplies an env, so the port is added in both branches.
 - `packages/codev/src/agent-farm/servers/tower-instances.ts` (main and add-architect launch) and `tower-terminals.ts` (restart and reconnect): set `CODEV_ARCHITECT_WORKSPACE` beside `CODEV_ARCHITECT_NAME` at all four sites.
 - Tests (new): `agent-state/__tests__/store.test.ts`, `identity.test.ts`, `route.test.ts`, plus the `agent-env` test extension.
 
@@ -246,7 +247,7 @@ Compute agent liveness in exactly one place, for every harness, with no false `d
 #### Acceptance Criteria
 
 - [ ] Test 8:
-  - not alive for: a launch loop with no agent child, in both shellper-backed and direct shapes; an architect in restart wait; a shellper with no child; a registered agent with no session;
+  - not alive for: a launch loop with no agent child, in both shellper-backed and direct shapes; an architect in restart wait; a shellper with no child; a registered builder with no session (architects with no session are not listed by `liveArchitects`, per the dropped-scope note);
   - alive for: shellper → loop → agent; shellper → architect agent;
   - a single not-alive sweep (shorter than the confirmation) publishes nothing;
   - `sleep` during the relaunch pause stays alive.
@@ -313,6 +314,7 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
   - **`buildLifecycleReporterSettings(scriptPath)`**: the settings JSON for the hook set.
     - `SessionStart`, `UserPromptSubmit`, `PostToolUse` (all tools), `PreToolUse` matched to the question tool only, `PermissionRequest`, `Notification`, `Stop`. `SessionEnd` is not wired.
     - Every hook is `async: true` with a short `timeout`, and runs one identical command.
+    - **The command fails silently even when the script is missing** (SC15). It is a shell wrapper, not a bare `node <path>`: `[ -f '<script>' ] && node '<script>' >/dev/null 2>&1; exit 0`. A deleted or never-written script, a missing `node`, or a crash produces no output and exit 0. The wrapper text is the same for every agent.
   - **`ensureLifecycleReporterInstalled()`**: writes both files to `~/.agent-farm/hooks/` atomically, only when the content differs.
 - `packages/codev/src/agent-farm/utils/harness.ts`:
   - The optional capability `buildLifecycleReporterInjection(settingsPath): { args: string[]; scriptFragment: string; env: Record<string, string> }`. It covers both launch shapes in one call (Constraint 17), following `buildResume`'s single-method dual-form precedent (`args` plus `scriptFragment`). The role injection's two-method pair is the other documented form; one method keeps the capability a single optional member whose absence means unsupported.
@@ -334,6 +336,7 @@ Make every Claude agent Codev launches report its lifecycle, through one role-na
 - [ ] Test 5 (translation half):
   - every Claude hook fixture maps to the expected neutral event with limits applied: `Stop` with and without background tasks, every Notification type, `PermissionRequest` for Bash, Write and the question tool, `PreToolUse` for the question tool, and each `SessionStart` source;
   - exit 0 and empty stdout when Tower is down, slow, or erroring, on malformed input, and with no identity;
+  - the **exact generated hook command** (wrapper included), run through a shell after the script file is deleted: no stdout, no stderr, exit 0;
   - no request is made without identity.
 - [ ] Test 7: the injection is present in each of these forms. Codex, OpenCode and custom providers include none.
   - Claude builder: fresh, resume, and every loop branch.
@@ -406,6 +409,7 @@ Verify the spec against real spawned sessions, derived from the operator's actio
 #### Deliverables
 
 - [ ] A run log in the review covering scenarios 9 to 20 against a real local Tower and real `afx spawn` builders and architects, on the current Claude Code release.
+- [ ] **Launch command for the permission scenarios.** The workspace's default builder and architect commands carry `--dangerously-skip-permissions`, under which `PermissionRequest` never fires, so scenarios 9 and 20 would pass falsely. Those runs use a launch command without that flag (set in `.codev/config.json` for the test spawn, or with `--builder-cmd`/`--architect-cmd`). The log records the exact command used.
 - [ ] Docs updated.
 
 #### Acceptance Criteria
