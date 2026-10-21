@@ -337,6 +337,15 @@ describe('jira recently-closed', () => {
     expect(jqlSent().map((q) => q.match(/>= "([^"]+)"/)?.[1])).toEqual(['2026-02-28', '2026-02-28']);
   });
 
+  it('rejects a since value that is not a date, before calling acli', () => {
+    for (const since of ['2026" OR 1=1', 'yesterday', '20261-01-01x']) {
+      const r = run('recently-closed', { CODEV_JIRA_SITE: 'example.atlassian.net', CODEV_SINCE_DATE: since });
+      expect(r.status, since).not.toBe(0);
+      expect(r.stderr, since).toContain('invalid CODEV_SINCE_DATE');
+    }
+    expect(jqlSent()).toEqual([]);
+  });
+
   it('omits the date clause when no since is given', () => {
     run('recently-closed', { CODEV_JIRA_SITE: 'example.atlassian.net' });
     expect(jqlSent()).toEqual(['statusCategory = Done ORDER BY statusCategoryChangedDate DESC']);

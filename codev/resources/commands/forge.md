@@ -181,6 +181,7 @@ Codev hands each key to the preset scripts as an environment variable (`jira-sit
 - **Open and closed follow the status *category*,** never status names, which differ per site: open is any category but Done, and closed is Done.
 - **Comments are plain text.** Markdown is posted as written, not converted to Atlassian's rich-text format. Descriptions and comments read from Jira are flattened to plain text.
 - **No created dates in the backlog.** `acli`'s search returns no date fields, so backlog items have no age; they are still ordered newest first.
+- **Lists are capped at 100 items** (`issue-list`, `issue-search`; GitHub's cap is 200), because `acli` search takes about 5s per 100 items and forge commands time out at 30s. Set `jira-project` to keep the newest open items of one project within the cap.
 - **No smart commits.** Codev does not rely on `Fix ENG-123` commit messages to transition issues. Closing the issue on merge stays a manual step, as on every forge.
 - **PR linking.** Codev's views link a PR to its Jira issue from the protocol's own conventions: the bracketed commit tags (`[PIR #ENG-123]`, `[Bugfix #ENG-123]`, `[Spec ENG-123]`) and a closing keyword on a `#`-prefixed key (`Fixes #ENG-123`, `Fix #ENG-123: …`). On GitHub those keywords are inert for a Jira key: GitHub closes nothing in Jira. A bare `Closes ENG-123` without `#` is not linked.
 
