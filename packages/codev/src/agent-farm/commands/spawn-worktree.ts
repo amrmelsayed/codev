@@ -35,6 +35,7 @@ import { fetchIssueOrThrow, type ForgeIssue } from '../../lib/github.js';
 import { executeForgeCommand, type ForgeConfig } from '../../lib/forge.js';
 import { getTowerClient, DEFAULT_TOWER_PORT } from '../lib/tower-client.js';
 import { BUILDER_WORKTREE_ENV } from '../../lib/agent-env.js';
+import { isIssueKey } from '../../lib/issue-id.js';
 
 // =============================================================================
 // Dependency Checks
@@ -494,6 +495,17 @@ export function slugify(title: string): string {
 }
 
 /**
+ * A worktree directory name in comparable form. Tracker keys compare
+ * case-insensitively (#1740): a builder spawned as `pir-eng-123` before ids
+ * were canonicalized to `ENG-123` is still found on a case-sensitive
+ * filesystem. Numeric ids compare exactly, as before.
+ */
+export function issueDirName(name: string, issueNumber: number | string): string {
+  if (isIssueKey(String(issueNumber))) return name.toLowerCase();
+  return name;
+}
+
+/**
  * Find an existing issue-driven worktree directory for a given protocol prefix
  * and issue number. Scans the builders directory for directories matching
  * `<protocolPrefix>-<issueNumber>-*`. Returns the directory name if found, or
@@ -510,7 +522,7 @@ export function findExistingIssueWorktree(
   const dirPrefix = `${protocolPrefix}-${issueNumber}-`;
   try {
     const entries = readdirSync(buildersDir, { withFileTypes: true });
-    const match = entries.find(e => e.isDirectory() && e.name.startsWith(dirPrefix));
+    const match = entries.find(e => e.isDirectory() && issueDirName(e.name, issueNumber).startsWith(issueDirName(dirPrefix, issueNumber)));
     return match ? match.name : null;
   } catch {
     return null;

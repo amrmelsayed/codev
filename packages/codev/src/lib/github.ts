@@ -15,6 +15,7 @@ import { executeForgeCommand, executeForgeCommandDetailed, resolveForgeBackend, 
 import type { RateLimitProbeResult } from './forge-rate-limit.js';
 import { getRepoInfo } from './team-github.js';
 import type { IssueViewResult, PrListItem, PrViewResult, IssueListItem } from './forge-contracts.js';
+import { ISSUE_KEY_SOURCE, canonicalIssueId } from './issue-id.js';
 
 // =============================================================================
 // Types — re-export forge-contracts types under generic names
@@ -511,8 +512,22 @@ export function parseLinkedIssue(prBody: string, prTitle: string): string | null
     return String(Number(bodyBugfixMatch[1]));
   }
 
+  // Tracker keys (#1740), only inside codev's bracketed tags, checked after
+  // every numeric form so a numeric PR links exactly as before.
+  const keyMatch = prTitle.match(TAGGED_KEY) ?? prBody.match(TAGGED_KEY);
+  if (keyMatch) {
+    return canonicalIssueId(keyMatch[1]);
+  }
+
   return null;
 }
+
+/**
+ * A tracker key in a codev commit/PR tag: `[Spec ENG-1]`, `[Bugfix #ENG-1]`,
+ * `[PIR #ENG-1]`. Bare `ABC-123` tokens in free text are never matched: they
+ * are as often `UTF-8` or `ISO-8601` as an issue.
+ */
+const TAGGED_KEY = new RegExp(`\\[(?:Spec|Bugfix|PIR)\\s+#?(${ISSUE_KEY_SOURCE})\\]`, 'i');
 
 /**
  * Parse ALL linked issue numbers from a PR body and title.
@@ -543,6 +558,11 @@ export function parseAllLinkedIssues(prBody: string, prTitle: string): string[] 
   const bugfixPattern = /\[Bugfix\s+#?(\d+)\]/gi;
   for (const m of combined.matchAll(bugfixPattern)) {
     issues.add(String(Number(m[1])));
+  }
+
+  // Tracker keys in codev tags (#1740)
+  for (const m of combined.matchAll(new RegExp(TAGGED_KEY.source, 'gi'))) {
+    issues.add(canonicalIssueId(m[1]));
   }
 
   return [...issues];

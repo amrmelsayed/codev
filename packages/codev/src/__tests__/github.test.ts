@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   parseLinkedIssue,
+  parseAllLinkedIssues,
   parseLabelDefaults,
   parseArea,
 } from '../lib/github.js';
@@ -18,6 +19,20 @@ vi.mock('../lib/forge.js', () => ({
 }));
 
 describe('parseLinkedIssue', () => {
+  it('links a tracker key inside a codev tag (#1740)', () => {
+    expect(parseLinkedIssue('', '[Bugfix #ENG-123] Fix login')).toBe('ENG-123');
+    expect(parseLinkedIssue('', '[PIR #eng-7] Add thing')).toBe('ENG-7');
+    expect(parseLinkedIssue('Implements [Spec AB2-4]', 'Title')).toBe('AB2-4');
+  });
+
+  it('never links a bare key-shaped token in free text (#1740)', () => {
+    expect(parseLinkedIssue('Switches encoding to UTF-8 per ISO-8601', 'Fix COVID-19 banner')).toBeNull();
+  });
+
+  it('prefers numeric links exactly as before (#1740)', () => {
+    expect(parseLinkedIssue('Fixes #42', '[PIR #ENG-1] x')).toBe('42');
+  });
+
   it('parses "Fixes #N" from PR body', () => {
     expect(parseLinkedIssue('This PR fixes #315', 'Some title')).toBe('315');
   });
@@ -504,5 +519,16 @@ describe('forge concept routing', () => {
         expect.objectContaining({ forgeConfig: config }),
       );
     });
+  });
+});
+
+describe('parseAllLinkedIssues tracker keys (#1740)', () => {
+  it('collects tagged keys alongside numeric links, deduplicated and canonical', () => {
+    const ids = parseAllLinkedIssues('Fixes #42\n[Bugfix #ENG-1] and [Bugfix #eng-1]', '[PIR #ENG-2] x');
+    expect(ids.sort()).toEqual(['42', 'ENG-1', 'ENG-2']);
+  });
+
+  it('ignores bare key-shaped tokens', () => {
+    expect(parseAllLinkedIssues('UTF-8 everywhere', 'Title')).toEqual([]);
   });
 });

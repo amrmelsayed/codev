@@ -60,6 +60,7 @@ import {
   executePreSpawnHooks,
   slugify,
   findExistingIssueWorktree,
+  issueDirName,
   validateResumeWorktree,
   createPtySession,
   startBuilderSession,
@@ -68,6 +69,7 @@ import {
 } from './spawn-worktree.js';
 import { getTowerClient } from '../lib/tower-client.js';
 import { executeForgeCommand, loadForgeConfig } from '../../lib/forge.js';
+import { ISSUE_KEY_SOURCE } from '../../lib/issue-id.js';
 
 // =============================================================================
 // ID and Session Management
@@ -291,18 +293,27 @@ async function resolveIssueProtocol(
  */
 function inferProtocolFromWorktree(config: Config, issueNumber: number | string): string | null {
   if (!existsSync(config.buildersDir)) return null;
+  return inferProtocolFromDirs(readdirSync(config.buildersDir), issueNumber);
+}
+
+/**
+ * The protocol prefix of the worktree directory spawned for `issueNumber`, or
+ * null. Matches spir-315-feature-name, bugfix-315-slug, spir-0076-feature,
+ * and tracker keys: pir-ENG-123, bugfix-ENG-123-slug (#1740). The id is the
+ * whole segment after the protocol, so a key's own dash isn't split.
+ */
+export function inferProtocolFromDirs(dirs: string[], issueNumber: number | string): string | null {
   const strippedId = stripLeadingZeros(String(issueNumber));
-  const dirs = readdirSync(config.buildersDir);
-  // Match patterns like: spir-315-feature-name, bugfix-315-slug, spir-0076-feature
-  const match = dirs.find(d => {
-    const parts = d.split('-');
-    return parts.length >= 2 && stripLeadingZeros(parts[1]) === strippedId;
-  });
-  if (match) {
-    return match.split('-')[0];
+  for (const d of dirs) {
+    const m = d.match(WORKTREE_ISSUE_SEGMENT);
+    if (m && issueDirName(stripLeadingZeros(m[2]), strippedId) === issueDirName(strippedId, strippedId)) {
+      return m[1];
+    }
   }
   return null;
 }
+
+const WORKTREE_ISSUE_SEGMENT = new RegExp(`^([a-z]+)-(\\d+|${ISSUE_KEY_SOURCE})(?:-|$)`, 'i');
 
 // =============================================================================
 // Mode-specific spawn implementations
@@ -387,12 +398,14 @@ async function spawnSpec(options: SpawnOptions, config: Config): Promise<void> {
     if (existsSync(idOnlyPath)) {
       worktreeName = idOnlyName;
     } else {
-      // Search for old-format worktree: <protocol>-<id>-<title-slug>
+      // Search for the ID-only name in another case (a tracker key spawned
+      // before canonicalization), then the old-format <protocol>-<id>-<title-slug>.
       const prefix = `${protocol}-${strippedId}-`;
       try {
-        const entries = readdirSync(config.buildersDir, { withFileTypes: true });
-        const match = entries.find(e => e.isDirectory() && e.name.startsWith(prefix));
-        worktreeName = match ? match.name : idOnlyName;
+        const entries = readdirSync(config.buildersDir, { withFileTypes: true }).filter(e => e.isDirectory());
+        const sameId = entries.find(e => issueDirName(e.name, strippedId) === issueDirName(idOnlyName, strippedId));
+        const withSlug = entries.find(e => issueDirName(e.name, strippedId).startsWith(issueDirName(prefix, strippedId)));
+        worktreeName = (sameId ?? withSlug)?.name ?? idOnlyName;
       } catch {
         worktreeName = idOnlyName;
       }

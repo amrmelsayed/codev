@@ -882,6 +882,13 @@ describe('post-merge codex findings (Spec 1273)', () => {
     expect(issueNumberFromPorchId(undefined)).toBeUndefined();
   });
 
+  it('recovers a tracker key whole, not its trailing digits (#1740)', () => {
+    expect(issueNumberFromPorchId('ENG-123')).toBe('ENG-123');
+    expect(issueNumberFromPorchId('bugfix-ENG-123')).toBe('ENG-123');
+    expect(issueNumberFromPorchId('eng-123')).toBe('ENG-123');
+    expect(issueNumberFromPorchId('AB2_X-7')).toBe('AB2_X-7');
+  });
+
   it('does not treat a --task --protocol builder as bare when porch init failed', () => {
     // initPorchInWorktree is deliberately non-fatal, so that lane can have task
     // text AND no porch. Inferring "bare" from that stripped its real protocol
