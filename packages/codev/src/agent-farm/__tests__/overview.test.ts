@@ -2586,6 +2586,21 @@ describe('overview', () => {
       expect(data.builders[0].issueId).toBe('42');
     });
 
+    it('canonicalizes a lower-case stored tracker key (#1740)', async () => {
+      // A row written before spawn canonicalized keys holds `eng-123`.
+      const worktreePath = createBuilderWorktree(tmpDir, 'pir-eng-123', [
+        "id: 'eng-123'", 'title: old', 'protocol: pir', 'phase: implement',
+      ].join('\n'), 'eng-123-old');
+      createStateDb(tmpDir, [{ worktree: worktreePath, issue_number: 'eng-123' }]);
+      mockFetchIssueList.mockResolvedValue([{ number: 'ENG-123', title: 'Old', url: 'https://x/browse/ENG-123', labels: [] }]);
+
+      const data = await new OverviewCache().getOverview(tmpDir);
+
+      expect(data.builders[0].issueId).toBe('ENG-123');
+      // The forge's ENG-123 matches the builder, so it is not offered again as spawnable.
+      expect(data.backlog.find(b => b.id === 'ENG-123')?.hasBuilder).toBe(true);
+    });
+
     it('falls back to regex-parsed issueId when DB has no issue_number (#664)', async () => {
       createBuilderWorktree(tmpDir, 'spir-42-feature', [
         "id: '0042'",

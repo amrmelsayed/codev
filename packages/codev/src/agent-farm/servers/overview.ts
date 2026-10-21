@@ -34,7 +34,7 @@ import Database from 'better-sqlite3';
 import { getGlobalDbPath } from '../db/index.js';
 import { heldSummaryForWorkspace } from '../db/mailbox.js';
 import { normalizeWorkspacePath } from './tower-utils.js';
-import { ISSUE_KEY_SOURCE, canonicalIssueId, isIssueKey } from '../../lib/issue-id.js';
+import { CANONICAL_KEY_SOURCE, ISSUE_KEY_SOURCE, canonicalIssueId, isIssueKey } from '../../lib/issue-id.js';
 import { resolveIssueIdKind, loadForgeConfig } from '../../lib/forge.js';
 
 // =============================================================================
@@ -866,7 +866,7 @@ export function discoverBuilders(
 
 // Upper case only: artifacts are named from the canonical (upper-case) id, and
 // a case-insensitive match would read `bugfix-1436-slug.md` as key BUGFIX-1436.
-const ARTIFACT_KEY_PREFIX = /^([A-Z][A-Z0-9_]*-\d+)(?:-|\.md$)/;
+const ARTIFACT_KEY_PREFIX = new RegExp(`^(${CANONICAL_KEY_SOURCE})(?:-|\\.md$)`);
 
 /**
  * Scan a codev artifact directory and return a map of issue id → filename.
@@ -1100,7 +1100,9 @@ export class OverviewCache {
           for (const row of rows) {
             const builder = builders.find(b => b.worktreePath === row.worktree);
             if (!builder) continue;
-            if (row.issue_number != null) builder.issueId = String(row.issue_number);
+            // Canonical spelling (#1740): a row written before spawn canonicalized keys
+            // holds `eng-123`, which would fail to match the forge's `ENG-123`.
+            if (row.issue_number != null) builder.issueId = canonicalIssueId(String(row.issue_number));
             if (row.spawned_by_architect != null) builder.spawnedByArchitect = row.spawned_by_architect;
           }
           // Counts + escalation flag only — never bodies (redaction rule). Per-agent
