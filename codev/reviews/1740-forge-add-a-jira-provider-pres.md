@@ -98,6 +98,15 @@ Docs and artifacts:
 
 ## Commits
 
+Integration review round 1:
+- `e2ced0414` [PIR #1740] jira recently-closed: validate the since date; document the 100-item cap
+- `db9d92fa0` [PIR #1740] Pin the issue-key grammar's homes with a parity test
+- `179c45542` [PIR #1740] Link numeric [PIR #N] tags like Spec and Bugfix tags
+- `90e954290` [PIR #1740] VS Code: search rows and recently closed label keys via issueRef
+- `03862e60f` [PIR #1740] Canonicalize a stored lower-case issue key in the overview
+- `3cbdc6b8f` [PIR #1740] Make issue createdAt optional end to end; no NaN age, undated items sort last
+
+Implementation:
 - `c3315f406` [PIR #1740] Web dashboard: open builder terminals by roleId; key labels without #
 - `c7281ad0f` [PIR #1740] VS Code: key-aware id sort, key labels without #, key-safe terminal titles
 - `9b7eef618` [PIR #1740] forge.md: Jira keys are configured in .codev/config.json; env vars are script inputs
@@ -116,10 +125,10 @@ Plus porch chore commits and one merge of `main`.
 
 - `pnpm build`: pass
 - `tsc --noEmit`: pass in `packages/codev`, `apps/vscode` and `apps/web`.
-- Tests after the final merge of `main`:
-  - `packages/codev`: 6839 passed, 49 skipped;
-  - `apps/vscode`: 1240 passed;
-  - `apps/web`: 507 passed, 1 skipped.
+- Tests at the round-1 head:
+  - `packages/codev`: 6846 passed, 49 skipped;
+  - `apps/vscode`: 1243 passed;
+  - `apps/web`: 509 passed, 1 skipped.
 - New tests:
   - the jira scripts against a fake `acli` serving synthetic REST-v3-shaped fixtures (contract shapes, the JQL sent, injection guards, ADF flattening, comment-body fidelity);
   - provider resolution and fall-through;
@@ -135,6 +144,11 @@ Plus porch chore commits and one merge of `main`.
   - a real `codev doctor` lists the 7 issue concepts as `preset acli` and the PR concepts as `default gh`, with `jira auth` and `gh auth` both authenticated;
   - a wrong `jira-site` reports not authenticated, with the login hint.
 - Dev gate: approved by the owner. `issue-comment` was left for a human to exercise live, because it writes to a real site.
+- **Browser (Playwright, headless Chromium)**, run against this branch's built dashboard (`apps/web/dist`):
+  - **Setup:** every request is answered by the test. `api/state` and `api/overview` come from fixtures holding one Jira-key builder (`ENG-123`) and two numeric builders (`12`, `123`), with neutral tab names; anything else is aborted. Only the fake origin was ever contacted (asserted), and there were no page errors.
+  - **Branch build:** all three builder cards' **Open** buttons activate their own terminal tab. Labels read `ENG-123`, `#12`, `#123`, `ENG-7`, `#42`. The undated Jira backlog item shows no age, and the page contains no `NaN`.
+  - **Negative control:** the same check against main's `WorkView` (built separately) fails all three. The Jira card opens nothing (a case-sensitive miss), and **builders 12 and 123 both open the Jira builder's tab**, because `builder-pir-eng-123` contains both `12` and `123`.
+  - The script lives outside the repo, since the e2e suite drives a real Tower. The unit test `apps/web/__tests__/issueIds.test.ts` pins the same matching logic.
 
 ## Architecture Updates
 
@@ -193,10 +207,26 @@ The umask-077 test failure hit again here; it is already a lesson (from #1809), 
 - VS Code label, sort and terminal-title fixes;
 - the web dashboard fix.
 
+**Integration review round 1 (architect)**, all addressed:
+1. **`createdAt` (must-fix):** now optional on `IssueListItem`, `OverviewBacklogItem` and `IssueSearchItem`. The dashboard's age cell and VS Code's `formatAge` render nothing when it is missing (no `NaN`), and undated items sort last on the age column in both directions. Tests cover each.
+2. **Browser verification (must-fix):** done, see Test Results.
+3. **Stored `issue_number`:** a value written before canonicalization (`eng-123`) is now canonicalized, so the forge's `ENG-123` matches the builder; tested with a lowercase stored row.
+4. **Labels:** VS Code's backlog-search static rows and the Recently Closed view label keys via `issueRef`, and so do the dynamic rows (the inline key decision is gone).
+5. **`[PIR #N]`:** now a numeric tag pattern, matched like `[Spec N]` and `[Bugfix #N]`, after them, so nothing that links today changes.
+6. **Parity test:** `issue-id-parity.test.ts` extracts the grammar from the VS Code and dashboard homes and the Jira scripts, compares it with the codev constants, and fails if any extension or dashboard file hand-writes the grammar. Every other pattern now derives from the exported constants.
+7. **`recently-closed.sh`:** the since-date fallback is validated against `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` before it reaches JQL; tested with hostile values.
+
+The architect's "noted" list: the 100-item cap is now documented in `forge.md`.
+
+**3-way consultation (single pass): Gemini APPROVE, Claude APPROVE, Codex REQUEST_CHANGES.** Codex's four points and their dispositions:
+- **`createdAt` contracts:** fixed (round 1, item 1).
+- **No browser verification:** fixed (round 1, item 2).
+- **Backlog search exits when the backlog is empty, so the plan's empty-backlog row cases never apply: rebutted.** That early return is pre-existing and applies equally to numeric workspaces (the "No backlog issues to search" message); this PR does not change it. The plan's table describes which rows are offered *once the picker is open*. A Jira user's empty-backlog path is Open Issue by ID (`Cmd+K I`), which accepts keys when the kind is unknown. Changing the empty-backlog UX is a separate decision.
+- **PR linking by branch name, which the plan listed: acknowledged, not done.** `parseLinkedIssue` receives only the title and body, and the `pr-list` contract carries no branch, so this needs a contract change. The protocols' PRs link through their tags and closing keywords instead. Tracked as a follow-up (the architect classed it as "no change required" in round 1).
+
 **Not done:**
-- PR linking by branch name: `parseLinkedIssue` never receives the branch.
-- Numeric `[PIR #N]` tag linking was already missing, and is unchanged.
-- The `apps/web` change was not checked in a browser via Playwright; it needs a Tower serving this build.
+- Branch-name PR linking (above).
+- `issue-comment` against a live site: the owner's call at the pr gate.
 
 ## How to Test Locally
 
