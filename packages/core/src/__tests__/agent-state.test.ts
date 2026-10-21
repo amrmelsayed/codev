@@ -126,11 +126,19 @@ describe('projectAgentState', () => {
     });
   });
 
-  it('attaches needs-input detail only when serving needs-input', () => {
+  it('carries needs-input detail with the raw activity, whatever state wins', () => {
     const detail = { kind: 'permission' as const, tool: 'Bash', summary: 'pnpm test' };
-    expect(projectAgentState(facts({ reported: reported('needs-input', { needsInput: detail }) }))?.needsInput).toEqual(detail);
-    const blocked = projectAgentState(facts({ blocked: true, reported: reported('needs-input', { needsInput: detail }) }));
-    expect(blocked?.needsInput).toBeUndefined();
+    const needsInput = reported('needs-input', { needsInput: detail });
+    expect(projectAgentState(facts({ reported: needsInput }))?.needsInput).toEqual(detail);
+    const blocked = projectAgentState(facts({ blocked: true, reported: needsInput }));
+    expect(blocked).toMatchObject({ state: 'blocked', activity: 'needs-input', needsInput: detail });
+    const dead = projectAgentState(facts({ liveness: { alive: false, since: LIVENESS_SINCE }, reported: needsInput }));
+    expect(dead).toMatchObject({ state: 'dead', activity: 'needs-input', needsInput: detail });
+  });
+
+  it('never carries needs-input detail for another activity', () => {
+    const stray = reported('working', { needsInput: { kind: 'other' } });
+    expect(projectAgentState(facts({ reported: stray }))?.needsInput).toBeUndefined();
   });
 
   it('unknown liveness never yields dead', () => {

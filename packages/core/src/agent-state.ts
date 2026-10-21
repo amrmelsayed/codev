@@ -63,12 +63,18 @@ export function projectAgentState(facts: AgentStateFacts): ServedAgentState | nu
   const alive = facts.liveness?.alive ?? null;
   const reported = facts.reported;
 
-  const raw = {
+  // The raw inputs ride on every served row, whatever wins precedence, so a consumer
+  // (#1672) can build its own chain from the same facts. The needs-input detail is part
+  // of them: it follows the raw `activity`, not the served `state`.
+  const raw: Omit<ServedAgentState, 'state' | 'since' | 'source'> = {
     alive,
     activity: reported?.activity ?? null,
     activityAt: reported?.at ?? null,
     backgroundWork: reported?.backgroundWork ?? false,
   };
+  if (reported?.activity === 'needs-input' && reported.needsInput) {
+    raw.needsInput = reported.needsInput;
+  }
 
   if (facts.blocked) {
     return { state: 'blocked', since: facts.blockedSince ?? facts.now, source: 'tower', ...raw };
@@ -79,11 +85,7 @@ export function projectAgentState(facts: AgentStateFacts): ServedAgentState | nu
   }
 
   if (reported) {
-    const served: ServedAgentState = { state: reported.activity, since: reported.since, source: 'harness', ...raw };
-    if (reported.activity === 'needs-input' && reported.needsInput) {
-      served.needsInput = reported.needsInput;
-    }
-    return served;
+    return { state: reported.activity, since: reported.since, source: 'harness', ...raw };
   }
 
   return null;

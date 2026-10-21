@@ -27,10 +27,12 @@
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {
-    "@cluesmith/codev-types": "workspace:*",
     "@types/node": "22.x",
     "typescript": "catalog:",
     "vitest": "^4.0.15"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@cluesmith/codev-types": "workspace:*"
+  }
 }
