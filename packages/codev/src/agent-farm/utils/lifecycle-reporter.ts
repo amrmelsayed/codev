@@ -7,8 +7,8 @@
  * truth for the Claude provider's reporter, in the shape of the write-guard
  * (`worktree-write-guard.ts`): two generated files, installed into a
  * codev-owned directory no agent session writes to:
- *   - `lifecycle-reporter.cjs`: a dependency-free Node hook script
- *   - `lifecycle-reporter-settings.json`: the hook set, handed to the harness
+ *   - `claude-lifecycle-reporter.cjs`: a dependency-free Node hook script
+ *   - `claude-lifecycle-reporter-settings.json`: the hook set, handed to the harness
  *     with `--settings <path>` through `CLAUDE_HARNESS.buildLifecycleReporterInjection`
  *
  * The script translates Claude hook names to the harness-neutral
@@ -34,11 +34,15 @@ import { DEFAULT_TOWER_PORT } from '@cluesmith/codev-sdk/constants';
 import { logger } from './logger.js';
 import { shellEscapeSingleQuote, toShellPath, type HarnessProvider } from './harness.js';
 
-/** Basename of the installed reporter script. */
-export const LIFECYCLE_REPORTER_SCRIPT_NAME = 'lifecycle-reporter.cjs';
+/**
+ * Basename of the installed reporter script. Both files read Claude's hook payloads and settings
+ * format, so their names carry the harness: another harness's reporter installs beside them under
+ * its own names, never over them.
+ */
+export const LIFECYCLE_REPORTER_SCRIPT_NAME = 'claude-lifecycle-reporter.cjs';
 
 /** Basename of the installed settings file carrying the hook set. */
-export const LIFECYCLE_REPORTER_SETTINGS_NAME = 'lifecycle-reporter-settings.json';
+export const LIFECYCLE_REPORTER_SETTINGS_NAME = 'claude-lifecycle-reporter-settings.json';
 
 /** Seconds the harness allows each hook before abandoning it. The script itself finishes well inside it. */
 export const LIFECYCLE_HOOK_TIMEOUT_SECONDS = 3;
@@ -335,6 +339,10 @@ export type LifecycleReporterInjection = ReturnType<NonNullable<HarnessProvider[
  * missing, so the flag is only ever injected right after a successful install.
  * A failure is logged and the agent launches without a reporter, which falls
  * back to today's PTY-silence behavior.
+ *
+ * The installed files are Claude's (only `CLAUDE_HARNESS` carries the
+ * capability). A harness that gains a reporter (#1796) installs its own
+ * harness-named files rather than reusing these.
  */
 export function resolveLifecycleReporterInjection(
   harness: HarnessProvider,
