@@ -61,8 +61,8 @@ const HOP_BY_HOP_HEADERS = new Set([
 const BLOCKED_PATH_PREFIX = '/api/tunnel/';
 
 /**
- * Matches an `api/tunnel/` or `api/ide` management segment anywhere in a
- * normalized path, not just at the root (#1370, #1668).
+ * Matches an `api/tunnel/`, `api/ide` or `api/agent-lifecycle` management
+ * segment anywhere in a normalized path, not just at the root (#1370, #1668).
  *
  * A root-anchored prefix check misses the workspace-scoped form the dashboard
  * actually uses — `/workspace/<base64url>/api/tunnel/disconnect` — which
@@ -75,8 +75,12 @@ const BLOCKED_PATH_PREFIX = '/api/tunnel/';
  * matched with a `(\/|$)` boundary (`/api/ide` and `/api/ide/…`, but not
  * `/api/ideas`). The `/ide/` *forward* prefix carries no `api/` segment and is
  * deliberately NOT blocked — it must reach Tower through the tunnel.
+ *
+ * `api/agent-lifecycle` (Spec 1595) is the lifecycle-reporter ingestion route.
+ * Its only legitimate caller is the reporter hook, which always posts to
+ * 127.0.0.1, so a tunnel-proxied call could only spoof an agent's state.
  */
-const BLOCKED_PATH_SEGMENT = /(^|\/)api\/(tunnel\/|ide(\/|$))/;
+const BLOCKED_PATH_SEGMENT = /(^|\/)api\/(tunnel\/|ide(\/|$)|agent-lifecycle(\/|$))/;
 
 /**
  * Header stamped on every request this client proxies in from the cloud (#1370).

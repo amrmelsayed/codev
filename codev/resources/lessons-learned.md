@@ -305,6 +305,8 @@ Generalizable wisdom extracted from review documents, ordered by impact. Updated
 
 ## Testing
 
+- [From #1595] Harness hook semantics are claims to measure in a real session, not to read from docs. Two spikes and full unit coverage still missed that Claude's `Notification(idle_prompt)` fires 60 s after `Stop` even while the turn's background task runs (it flipped a working agent to idle), and that an approved permission fires no hook at all (#1851). Both surfaced only in Phase 8's scripted real-session run with permissions in `default` mode: the operator's `auto` mode never raises a prompt, so a verification run must set the mode it means to test.
+
 - [From #1740] A feature's acceptance check must follow the id through the whole lifecycle, not stop at the entry point. "`afx spawn ENG-123` parses" was true and nearly worthless; the breakage was in the overview, porch's cwd detection, `--resume`, PR linking and two editors. The real-path run (`codev doctor` against a live site) also caught a false "unknown concept" warning that no unit test exercised. Derive the check list from what a user does with the thing after creating it.
 
 - [From #1809] A shell with `umask 077` makes `cloud-config.test.ts` ("enforces 0600 on pre-existing files") fail deterministically: its setup cannot create the 0644 starting file. It is environmental, not a code defect: run the suite (and porch's `npm test` check) under `umask 022` rather than skipping or editing the test. (Spec 1797 has since set that precondition with `chmodSync`, so the test no longer depends on the umask; the lesson holds for any test that sets a file mode on write.)
