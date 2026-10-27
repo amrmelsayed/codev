@@ -27,3 +27,10 @@
   Storage global shadows jsdom's. CI is Node 20. With `NODE_OPTIONS=--no-experimental-webstorage`
   all 40 web files pass. Unrelated to this change; not touched.
 - Checks: `npm run build` ok; `npm test` 341 files / 7141 tests pass.
+
+## PR (2026-10-27)
+- PR #1862 opened. CMAP: gemini=APPROVE, codex=APPROVE, claude=APPROVE (all HIGH, no key issues).
+- `consult --type pr` from this worktree first failed with "Multiple projects found" (auto-detect
+  doesn't narrow across the many `codev/projects/` dirs); passing `--issue 1861` fixed it.
+- Claude's non-blocking note: the Spec 1819 plan and the spir-1819 thread still say "after Team".
+  Left as-is: they're point-in-time records, and live docs never stated a position.
