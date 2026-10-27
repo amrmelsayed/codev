@@ -1,7 +1,7 @@
 id: bugfix-1861
 title: dashboard-move-the-decisions-t
 protocol: bugfix
-phase: fix
+phase: pr
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -11,4 +11,4 @@ iteration: 1
 build_complete: false
 history: []
 started_at: '2026-10-27T17:38:32.403Z'
-updated_at: '2026-10-27T17:39:28.324Z'
+updated_at: '2026-10-27T17:43:31.845Z'
