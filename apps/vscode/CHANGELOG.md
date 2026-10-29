@@ -13,7 +13,6 @@
 - **Codev now activates in Restricted Mode.** An untrusted folder gets the sidebar and status-bar item immediately. The `codev.towerHost`, `codev.towerPort`, `codev.workspacePath` and `codev.autoStartTower` settings ignore workspace-scope values until the folder is trusted.
 - **Choose whether a builder-row click expands the row.** With `codev.buildersClickExpands` off, a click on a builder only opens its terminal; the chevron opens the file list. Default on, so nothing changes until you flip it.
 - **The agent-cycle keys open the first agent when nothing is open.** `ctrl+alt+n` / `ctrl+alt+p` now open the first or last agent when no agent terminal has focus, instead of saying there is nothing to cycle to.
-- **Cycle through agent terminals from the keyboard.** `ctrl+alt+n` / `ctrl+alt+p` move focus through the Agents view order, skipping any agent whose terminal cannot open.
 - **Tracker-key issue ids on Jira and Linear workspaces.** Keys like `ENG-123` work in Open Issue by ID and the backlog search, sort by project then number, and read as `ENG-123` rather than `#ENG-123` in rows, labels and terminal titles. GitHub, GitLab and Gitea workspaces are unchanged.
 
 ### Fixes
@@ -26,7 +25,6 @@
 - **Queued review comments are no longer lost on submit.** Submitted comments move to a sent list instead of being deleted, and the next submit for that builder asks whether to mark them delivered, re-send them, or cancel. Tracking which sent feedback the builder acted on is next (#1771).
 - **Next and previous hunk continue from where you scrolled.** In a builder diff the step starts from the visible viewport when the cursor is off screen, for alt+F5 / shift+alt+F5, the new `Codev: Next Hunk` and `Codev: Previous Hunk` commands, and the Stream Deck changes dial.
 - **Status-bar text is readable in light themes.** The dev chip, "Reconnecting..." and "Offline" now use the theme's normal status-bar foreground instead of a near-white colour.
-- **Terminals come back after a laptop sleep.** Refocusing the window re-arms every tab's reconnect, and when the budget is truly exhausted the banner says whether Tower is unreachable or a click will retry.
 
 ## [3.3.4] - 2026-09-17
 
